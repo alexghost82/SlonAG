@@ -1,0 +1,34 @@
+{
+  "privacy_profile": "hybrid",
+  "provider_id": "gemini",
+  "language": "ru",
+  "network_mode": "hybrid",
+  "routing_mode": "manual",
+  "model_roles": {
+    "chat": "",
+    "planning": "",
+    "code": "",
+    "vision": "",
+    "embeddings": "",
+    "stt": "",
+    "tts": ""
+  },
+  "local_models": {
+    "default_provider": "ollama",
+    "ollama": {
+      "enabled": true,
+      "base_url": "http://127.0.0.1:11434"
+    },
+    "llama_cpp": {
+      "enabled": true,
+      "base_url": "http://127.0.0.1:8080"
+    },
+    "preferred": {
+      "chat": "",
+      "planning": "",
+      "code": "",
+      "utility": ""
+    },
+    "overrides": {}
+  }
+}

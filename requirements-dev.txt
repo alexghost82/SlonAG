@@ -1,0 +1,5 @@
+# Developer tools only. Runtime deps belong to requirements-*.txt (W01-T02).
+pytest>=8.4,<10
+pytest-asyncio>=1.0,<2
+ruff>=0.8,<1
+mypy>=1.13,<3

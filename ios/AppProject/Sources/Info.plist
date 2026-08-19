@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>APPWRITE_ENDPOINT</key>
+	<string></string>
+	<key>APPWRITE_PROJECT_ID</key>
+	<string></string>
+	<key>APPWRITE_DATABASE_ID</key>
+	<string></string>
+	<key>APPWRITE_SETTINGS_TABLE_ID</key>
+	<string></string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ru</string>
+	<key>CFBundleDisplayName</key>
+	<string>Mark Remote</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Подключение к вашему Mac с Slon в той же локальной сети.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_mark-control._tcp</string>
+	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Подтверждение потенциально опасных действий на сопряжённом Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Передача голосовой команды ассистенту на сопряжённом Mac.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Преобразование голосовой команды в текст перед отправкой на сопряжённый Mac.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Добавление изображения к команде ассистенту.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Добавление изображения или документа к команде ассистенту.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,40 @@
+{
+  "data": [
+    {
+      "id": "meta-llama/llama-3.3-70b-instruct",
+      "name": "Meta: Llama 3.3 70B Instruct",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": ["text"],
+        "output_modalities": ["text"]
+      },
+      "pricing": {
+        "prompt": "0.0000001",
+        "completion": "0.0000003"
+      },
+      "supported_parameters": ["temperature", "max_tokens"]
+    },
+    {
+      "id": "google/gemma-3-12b-it",
+      "name": "Google: Gemma 3 12B",
+      "context_length": 8192,
+      "architecture": {
+        "modality": "text+image->text",
+        "input_modalities": ["text", "image"],
+        "output_modalities": ["text"]
+      },
+      "supported_parameters": ["temperature", "tools", "tool_choice"]
+    },
+    {
+      "id": "openai/text-embedding-3-small",
+      "name": "OpenAI: Text Embedding 3 Small",
+      "context_length": 8191,
+      "architecture": {
+        "modality": "text->embeddings",
+        "input_modalities": ["text"],
+        "output_modalities": ["embeddings"]
+      }
+    }
+  ]
+}

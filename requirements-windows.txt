@@ -1,0 +1,10 @@
+# Windows runtime dependencies for Slon.
+# Pulls the cross-platform base, then adds Windows-only packages.
+
+-r requirements-base.txt
+
+pygetwindow>=0.0.9,<1
+comtypes>=1.4.16,<2
+pycaw>=20251023
+win10toast>=0.9,<1
+pywinauto>=0.6.9,<1

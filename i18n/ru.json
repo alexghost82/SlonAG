@@ -1,0 +1,38 @@
+{
+  "status": {
+    "ready": "Готов",
+    "listening": "Слушаю",
+    "thinking": "Думаю",
+    "speaking": "Говорю",
+    "processing": "Обрабатываю",
+    "muted": "Микрофон выключен"
+  },
+  "setup": {
+    "title": "Требуется инициализация",
+    "subtitle": "Настройте J.A.R.V.I.S. перед первым запуском.",
+    "gemini_key": "Ключ Gemini API",
+    "openrouter_key": "Ключ OpenRouter API",
+    "os": "Операционная система",
+    "initialise": "Инициализировать системы"
+  },
+  "window": {
+    "title": "J.A.R.V.I.S — Slon"
+  },
+  "input": {
+    "placeholder": "Введите команду или вопрос…"
+  },
+  "file": {
+    "drop_hint": "Перетащите файл сюда или нажмите, чтобы загрузить",
+    "none_loaded": "Файл не загружен — перетащите или нажмите выше, чтобы загрузить"
+  },
+  "mic": {
+    "active": "Микрофон активен",
+    "muted": "Микрофон выключен"
+  },
+  "dialog": {
+    "confirm_delete": "Удалить {name}?"
+  },
+  "error": {
+    "unknown_tool": "Неизвестный инструмент"
+  }
+}

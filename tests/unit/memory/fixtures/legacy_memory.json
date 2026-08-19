@@ -1,0 +1,25 @@
+{
+  "identity": {
+    "name": {"value": "Alex", "updated": "2024-01-15"},
+    "city": {"value": "Helsinki", "updated": "2024-01-16"},
+    "card": {"value": "4111111111111111", "updated": "2024-01-17"}
+  },
+  "preferences": {
+    "food": {"value": "sourdough", "updated": "2024-02-01"},
+    "api_key": {"value": "sk-abcdefghijklmnopqrstuvwxyz012345", "updated": "2024-02-02"}
+  },
+  "projects": {
+    "mark": {"value": "desktop client", "updated": "2024-03-01"}
+  },
+  "relationships": {
+    "coworker": {"value": "Sam is a teammate", "updated": "2024-03-02"}
+  },
+  "wishes": {
+    "travel": {"value": "visit Kyoto", "updated": "2024-03-03"}
+  },
+  "notes": {
+    "meeting": {"value": "weekly sync on Mondays", "updated": "2024-03-04"},
+    "password": {"value": "not-a-real-password", "updated": "2024-03-05"},
+    "session": {"value": "Bearer tok_live_not_a_real_secret_value", "updated": "2024-03-06"}
+  }
+}

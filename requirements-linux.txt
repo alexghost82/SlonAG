@@ -1,0 +1,4 @@
+# Linux runtime dependencies for Slon.
+# No extra Linux-only runtime packages are required beyond the base set.
+
+-r requirements-base.txt

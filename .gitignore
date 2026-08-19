@@ -1,0 +1,52 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Secrets and local settings
+.env
+config/api_keys.json
+config/settings.json
+config/settings.local.json
+
+# User memory and local data
+memory/*.json
+memory/*.db
+
+# Local LLM weight directories at repo root only (not ios/MarkRemote/.../Models)
+/models/
+
+# Local models, logs, and temp files
+logs/
+tmp/
+crash-*.log
+
+# Swift package build
+ios/.build/
+ios/.swiftpm/
+
+# Xcode app project artifacts
+ios/AppProject/.build-xcode/
+xcuserdata/
+*.xcresult
+
+# Local app bundles
+*.app/
+
+# Editor and OS debris
+.idea/
+.vscode/
+.DS_Store
+old_prototipe/

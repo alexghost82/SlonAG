@@ -1,0 +1,4 @@
+# macOS runtime dependencies for Slon.
+# No extra macOS-only runtime packages are required beyond the base set.
+
+-r requirements-base.txt

@@ -1,0 +1,27 @@
+# Cross-platform runtime dependencies for Slon.
+# OS-specific extras live in:
+#   requirements-macos.txt
+#   requirements-windows.txt
+#   requirements-linux.txt
+# Do not add Windows-only packages (pygetwindow, comtypes, pycaw,
+# win10toast, pywinauto) to this file.
+
+sounddevice>=0.5.5,<1
+google-genai>=1.0.0,<3
+Pillow>=10.0.0,<13
+requests>=2.31.0,<3
+beautifulsoup4>=4.12.0,<5
+duckduckgo-search>=6.0.0,<9
+playwright>=1.40.0,<2
+pyautogui>=0.9.54,<1
+pyperclip>=1.8.2,<2
+opencv-python>=4.8.0,<6
+numpy>=1.26.0,<3
+mss>=9.0.1,<11
+psutil>=5.9.8,<8
+send2trash>=1.8.3,<3
+youtube-transcript-api>=0.6.2,<2
+pyaudio>=0.2.14,<1
+PyQt6>=6.4.0,<7
+qrcode>=7.4,<9
+zeroconf>=0.131,<1

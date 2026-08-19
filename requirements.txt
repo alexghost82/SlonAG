@@ -1,0 +1,11 @@
+# Compatibility shim for Slon.
+# Installs cross-platform runtime deps only (requirements-base.txt).
+# This file must not pull Windows-only packages onto macOS or Linux.
+#
+# Prefer the OS-specific file when setting up a machine:
+#   macOS:   pip install -r requirements-macos.txt
+#   Windows: pip install -r requirements-windows.txt
+#   Linux:   pip install -r requirements-linux.txt
+# Or run: python setup.py
+
+-r requirements-base.txt
