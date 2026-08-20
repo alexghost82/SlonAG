@@ -5,6 +5,7 @@ from pathlib import Path
 
 from google import genai
 from google.genai import types
+from providers.contracts import ModelInfo
 from ui import SlonUI, JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
@@ -26,7 +27,19 @@ def get_base_dir():
 
 BASE_DIR        = get_base_dir()
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
-LIVE_MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+LIVE_MODEL_INFO = ModelInfo(
+    provider_id="gemini",
+    model_id="models/gemini-2.5-flash-native-audio-preview-12-2025",
+    display_name="Gemini 2.5 Flash Native Audio Preview",
+    text=True,
+    streaming=True,
+    tool_calling=True,
+    audio_input=True,
+    audio_output=True,
+    source="Google",
+    license="Proprietary",
+)
+LIVE_MODEL = LIVE_MODEL_INFO.model_id  # compatibility alias
 
 
 def _get_api_key() -> str:
@@ -103,7 +116,12 @@ from runtime.tool_bridge import LiveToolBridge, build_live_registry
 
 class SlonLive:
 
-    def __init__(self, ui: SlonUI, runtime_stack=None):
+    def __init__(
+        self,
+        ui: SlonUI,
+        runtime_stack=None,
+        selected_model: ModelInfo = LIVE_MODEL_INFO,
+    ):
         self.ui             = ui
         self.session        = None
         self.audio_in_queue = None
@@ -112,6 +130,11 @@ class SlonLive:
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
         self.runtime_stack  = runtime_stack
+        if selected_model.provider_id != "gemini" or not (
+            selected_model.audio_input and selected_model.audio_output
+        ):
+            raise ValueError("Gemini Live requires an audio-capable Gemini ModelInfo")
+        self.selected_model = selected_model
         base_registry = getattr(runtime_stack, "tool_registry", None)
         policy = getattr(runtime_stack, "safety", None)
         live_registry = build_live_registry(
@@ -140,7 +163,7 @@ class SlonLive:
         control_plane = getattr(self.ui, "control_plane", None)
         if control_plane is not None:
             control_plane.bind_text_handler(self._on_text_command)
-            control_plane.update_state(model_id=LIVE_MODEL)
+            control_plane.update_state(model_id=self.selected_model.model_id)
         if runtime_stack is not None:
             for line in runtime_stack.summary_lines():
                 try:
@@ -302,7 +325,7 @@ class SlonLive:
         )
         await run_live_lifecycle(
             client=client,
-            model_id=LIVE_MODEL,
+            model_id=self.selected_model.model_id,
             build_config=self._build_config,
             on_connected=self._on_connected,
             on_disconnected=self._on_disconnected,

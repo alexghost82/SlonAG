@@ -65,3 +65,22 @@ def test_live_config_exports_the_injected_registry() -> None:
 
     declarations = config.tools[0].function_declarations
     assert [item.name for item in declarations] == list(live.tool_registry.names())
+
+
+def test_live_uses_explicit_audio_model_metadata() -> None:
+    mod = _load_main_module()
+    ui = type(
+        "UI",
+        (),
+        {
+            "on_text_command": None,
+            "control_plane": None,
+            "muted": False,
+            "set_state": lambda *_args: None,
+            "write_log": lambda *_args: None,
+        },
+    )()
+    live = mod.SlonLive(ui, selected_model=mod.LIVE_MODEL_INFO)
+    assert live.selected_model is mod.LIVE_MODEL_INFO
+    assert live.selected_model.audio_input is True
+    assert live.selected_model.audio_output is True
