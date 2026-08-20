@@ -7,6 +7,8 @@ import traceback
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from runtime.events import RuntimeEventKind
+
 
 class _SessionTaskEnded(Exception):
     """Internal signal used to cancel sibling tasks when a session task ends."""
@@ -26,19 +28,27 @@ async def run_live_lifecycle(
     on_disconnected: Callable[[], None],
     tasks: Callable[[], tuple[Awaitable[None], ...]],
     ui: Any,
+    emit_event: Callable[..., object] | None = None,
     reconnect_delay: float = 3.0,
+    connect_timeout: float = 15.0,
 ) -> None:
     """Reconnect forever while giving each connection fresh owned tasks."""
     while True:
         try:
             print("[SLON] 🔌 Connecting...")
-            ui.set_state("THINKING")
-            async with client.aio.live.connect(
-                model=model_id, config=build_config()
-            ) as session:
+            if emit_event is None:
+                ui.set_state("THINKING")
+            else:
+                emit_event(RuntimeEventKind.THINKING)
+            connection = client.aio.live.connect(model=model_id, config=build_config())
+            session = await asyncio.wait_for(connection.__aenter__(), connect_timeout)
+            try:
                 on_connected(session, asyncio.get_running_loop())
                 print("[SLON] ✅ Connected.")
-                ui.set_state("LISTENING")
+                if emit_event is None:
+                    ui.set_state("LISTENING")
+                else:
+                    emit_event(RuntimeEventKind.LISTENING)
                 ui.write_log("SYS: Slon online.")
                 try:
                     async with asyncio.TaskGroup() as task_group:
@@ -46,6 +56,8 @@ async def run_live_lifecycle(
                             task_group.create_task(_run_owned_task(operation))
                 except* _SessionTaskEnded:
                     pass
+            finally:
+                await connection.__aexit__(None, None, None)
         except asyncio.CancelledError:
             on_disconnected()
             raise
@@ -56,7 +68,10 @@ async def run_live_lifecycle(
         else:
             on_disconnected()
 
-        ui.set_state("THINKING")
+        if emit_event is None:
+            ui.set_state("THINKING")
+        else:
+            emit_event(RuntimeEventKind.THINKING)
         print(f"[SLON] 🔄 Reconnecting in {reconnect_delay:g}s...")
         await asyncio.sleep(reconnect_delay)
 

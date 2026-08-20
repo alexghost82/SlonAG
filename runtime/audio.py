@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from enum import StrEnum
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,12 @@ MIC_QUEUE_CHUNKS = 10
 # Gemini can deliver generated audio faster than the device consumes it. Keep
 # enough bounded burst capacity for coherent speech; reconnect still discards it.
 PLAYBACK_QUEUE_CHUNKS = 256
+
+
+class EchoSuppressionMode(StrEnum):
+    """Document the active full-duplex echo/interruption policy."""
+
+    SERVER_ACTIVITY_DETECTION = "server_activity_detection"
 
 
 class FreshAudioQueue(asyncio.Queue):
@@ -58,6 +65,10 @@ class AudioPipeline:
         self.dropped_microphone_chunks = 0
         self.dropped_playback_chunks = 0
         self.playback_generation = 0
+        self.echo_suppression_mode = EchoSuppressionMode.SERVER_ACTIVITY_DETECTION
+        self._ingress_lock = threading.Lock()
+        self._pending_microphone: dict[str, object] | None = None
+        self._ingress_scheduled = False
 
     def bind(self, session: Any) -> None:
         """Bind fresh queues to one newly connected session."""
@@ -105,7 +116,9 @@ class AudioPipeline:
                 self.latency_trace.start_turn()
                 self.latency_trace.mark("user_input_activity_start")
                 self.latency_trace.mark("provider_request_start")
-            await self.session.send_realtime_input(media=message)
+            await asyncio.wait_for(
+                self.session.send_realtime_input(media=message), timeout=30.0
+            )
 
     async def listen(self) -> None:
         if self.out_queue is None:
@@ -115,16 +128,27 @@ class AudioPipeline:
 
         loop = asyncio.get_running_loop()
 
+        def drain_pending() -> None:
+            with self._ingress_lock:
+                message = self._pending_microphone
+                self._pending_microphone = None
+                self._ingress_scheduled = False
+            if message is not None and self.out_queue is not None:
+                self.out_queue.put_nowait(message)
+
         def callback(indata, frames, time_info, status) -> None:
             del frames, time_info, status
             # Gemini's server-side activity detection needs microphone audio in
             # order to signal an interruption. Muting remains the only local
             # capture gate; playback generations prevent stale assistant audio.
             if not self.ui.muted:
-                loop.call_soon_threadsafe(
-                    self.out_queue.put_nowait,
-                    {"data": indata.tobytes(), "mime_type": "audio/pcm"},
-                )
+                message = {"data": indata.tobytes(), "mime_type": "audio/pcm"}
+                with self._ingress_lock:
+                    self._pending_microphone = message
+                    if self._ingress_scheduled:
+                        return
+                    self._ingress_scheduled = True
+                loop.call_soon_threadsafe(drain_pending)
 
         with sd.InputStream(
             samplerate=SEND_SAMPLE_RATE,
@@ -164,4 +188,4 @@ class AudioPipeline:
             stream.close()
 
 
-__all__ = ["AudioPipeline", "FreshAudioQueue"]
+__all__ = ["AudioPipeline", "EchoSuppressionMode", "FreshAudioQueue"]

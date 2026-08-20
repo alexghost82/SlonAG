@@ -112,6 +112,7 @@ from runtime.audio import AudioPipeline
 from runtime.lifecycle import run_live_lifecycle
 from runtime.live_session import receive_live_session
 from runtime.tool_bridge import LiveToolBridge, build_live_registry
+from runtime.events import RuntimeEventBus, RuntimeEventKind, UIRuntimeEventSink
 
 
 class SlonLive:
@@ -152,6 +153,8 @@ class SlonLive:
         self.tool_executor = self.tool_bridge.executor
         self.tool_declarations = export_gemini_tools(self.tool_registry.list())
         self.latency_trace = TurnLatencyTracker()
+        self.runtime_events = RuntimeEventBus()
+        self.runtime_events.subscribe(UIRuntimeEventSink(ui))
         self.audio = AudioPipeline(
             ui=ui,
             set_speaking=self.set_speaking,
@@ -189,9 +192,9 @@ class SlonLive:
         with self._speaking_lock:
             self._is_speaking = value
         if value:
-            self.ui.set_state("SPEAKING")
+            self.runtime_events.emit(RuntimeEventKind.SPEAKING)
         elif not self.ui.muted:
-            self.ui.set_state("LISTENING")
+            self.runtime_events.emit(RuntimeEventKind.LISTENING)
 
     def speak(self, text: str):
         if not self._loop or not self.session:
@@ -247,7 +250,11 @@ class SlonLive:
         name = fc.name
         args = dict(fc.args or {})
         print(f"[SLON] 🔧 {name}")
-        self.ui.set_state("THINKING")
+        self.runtime_events.emit(
+            RuntimeEventKind.TOOL_STARTED,
+            tool_call_id=fc.id,
+            tool_name=name,
+        )
         self.latency_trace.mark("tool_execution_start")
 
         result = await self.tool_bridge.execute(
@@ -256,9 +263,12 @@ class SlonLive:
             intent="Gemini Live function call",
             call_id=fc.id,
         )
+        self.latency_trace.mark_at("approval_start", result.approval_started_at)
+        self.latency_trace.mark_at("approval_finish", result.approval_finished_at)
+        self.latency_trace.mark_at("tool_handler_start", result.handler_started_at)
         self.latency_trace.mark("tool_execution_finish")
         if not self.ui.muted:
-            self.ui.set_state("LISTENING")
+            self.runtime_events.emit(RuntimeEventKind.LISTENING)
         if result.ok:
             value = result.data if result.data is not None else result.message or "Done."
             response = {"result": value}
@@ -269,6 +279,12 @@ class SlonLive:
             )
         print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
+        self.runtime_events.emit(
+            RuntimeEventKind.TOOL_FINISHED,
+            tool_call_id=fc.id,
+            tool_name=name,
+            code=result.code,
+        )
         return types.FunctionResponse(id=fc.id, name=name, response=response)
 
     async def _send_realtime(self):
@@ -290,6 +306,7 @@ class SlonLive:
             execute_tool=self._execute_tool,
             update_memory=_update_memory_async,
             latency_trace=self.latency_trace,
+            emit_event=self.runtime_events.emit,
         )
 
     async def _play_audio(self):
@@ -331,6 +348,7 @@ class SlonLive:
             on_disconnected=self._on_disconnected,
             tasks=self._session_tasks,
             ui=self.ui,
+            emit_event=self.runtime_events.emit,
         )
 
 JarvisLive = SlonLive

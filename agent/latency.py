@@ -7,6 +7,21 @@ import threading
 import math
 import statistics
 from dataclasses import dataclass, field
+from enum import StrEnum
+
+
+class LatencyEvent(StrEnum):
+    INPUT_ACTIVITY_START = "user_input_activity_start"
+    INPUT_ACTIVITY_END = "user_input_activity_end"
+    PROVIDER_DISPATCH = "provider_request_start"
+    PROVIDER_FIRST_EVENT = "provider_first_response"
+    TOOL_CALL_RECEIVED = "tool_call_received"
+    TOOL_EXECUTION_START = "tool_execution_start"
+    TOOL_EXECUTION_FINISH = "tool_execution_finish"
+    OBSERVATION_RETURNED = "observation_returned"
+    POST_TOOL_PROVIDER_FIRST_EVENT = "provider_after_tool_first_response"
+    FIRST_AUDIO_FRAME = "first_audio_output"
+    TURN_COMPLETE = "turn_complete"
 
 
 @dataclass
@@ -16,8 +31,12 @@ class LatencyTrace:
     started_at: float = field(default_factory=time.monotonic)
     marks: dict[str, float] = field(default_factory=dict)
 
-    def mark(self, event: str) -> None:
-        self.marks.setdefault(event, time.monotonic())
+    def mark(self, event: str | LatencyEvent) -> None:
+        self.marks.setdefault(str(event), time.monotonic())
+
+    def mark_at(self, event: str | LatencyEvent, monotonic_at: float | None) -> None:
+        if monotonic_at is not None:
+            self.marks.setdefault(str(event), monotonic_at)
 
     def elapsed_ms(self, start: str | None = None, end: str | None = None) -> float | None:
         left = self.started_at if start is None else self.marks.get(start)
@@ -33,7 +52,10 @@ class LatencyTrace:
                 "provider_first_response",
             ),
             "provider": ("provider_request_start", "provider_first_response"),
+            "input_activity": ("user_input_activity_start", "user_input_activity_end"),
             "tool": ("tool_execution_start", "tool_execution_finish"),
+            "approval": ("approval_start", "approval_finish"),
+            "tool_handler": ("tool_handler_start", "tool_execution_finish"),
             "post_tool_provider": (
                 "observation_returned",
                 "provider_after_tool_first_response",
@@ -77,6 +99,12 @@ class TurnLatencyTracker:
             if self._current is None:
                 self._current = LatencyTrace()
             self._current.mark(event)
+
+    def mark_at(self, event: str | LatencyEvent, monotonic_at: float | None) -> None:
+        with self._lock:
+            if self._current is None:
+                self._current = LatencyTrace()
+            self._current.mark_at(event, monotonic_at)
 
     def finish_turn(self) -> dict[str, float]:
         with self._lock:
@@ -125,4 +153,4 @@ class TurnLatencyTracker:
         return result
 
 
-__all__ = ["LatencyTrace", "TurnLatencyTracker"]
+__all__ = ["LatencyEvent", "LatencyTrace", "TurnLatencyTracker"]

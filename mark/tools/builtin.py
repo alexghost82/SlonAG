@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from mark.safety.registry import SafetyRule, tool_spec as safety_rule
-from mark.tools.contracts import ToolSpec
+from mark.tools.contracts import SideEffectClass, ToolSpec
 from mark.tools.legacy import LEGACY_HANDLERS
 from mark.tools.registry import ToolRegistry
 
@@ -75,6 +75,11 @@ def build_builtin_registry() -> ToolRegistry:
                 read_only=rule.risk.value == 0,
                 idempotent=rule.risk.value == 0,
                 side_effects=rule.risk.value != 0,
+                side_effect_class=(
+                    SideEffectClass.NONE
+                    if rule.risk.value == 0
+                    else SideEffectClass.REVERSIBLE
+                ),
                 parallel_safe=rule.risk.value == 0,
             )
         )

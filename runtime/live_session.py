@@ -7,6 +7,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from runtime.events import RuntimeEventKind
+
 
 async def receive_live_session(
     *,
@@ -19,6 +21,8 @@ async def receive_live_session(
     execute_tool: Callable[[Any], Any],
     update_memory: Callable[[str, str], None],
     latency_trace: Any,
+    emit_event: Callable[..., object] | None = None,
+    operation_timeout: float = 30.0,
 ) -> None:
     """Consume one Live session until it closes or raises."""
     print("[SLON] 👂 Recv started")
@@ -50,6 +54,15 @@ async def receive_live_session(
             cancel_turn = getattr(latency_trace, "cancel_turn", None)
             if cancel_turn is not None:
                 cancel_turn()
+            if emit_event is not None:
+                emit_event(RuntimeEventKind.CANCELLED)
+
+        voice_activity = getattr(response, "voice_activity", None)
+        activity_type = str(getattr(voice_activity, "voice_activity_type", ""))
+        if activity_type.endswith("ACTIVITY_START"):
+            latency_trace.mark("user_input_activity_start")
+        elif activity_type.endswith("ACTIVITY_END"):
+            latency_trace.mark("user_input_activity_end")
 
         # Transcription is the first unambiguous evidence that a later server
         # message belongs to the new turn rather than the interrupted response.
@@ -126,7 +139,10 @@ async def receive_live_session(
             for function_call in response.tool_call.function_calls:
                 print(f"[SLON] 📞 {function_call.name}")
                 function_responses.append(await execute_tool(function_call))
-            await session.send_tool_response(function_responses=function_responses)
+            await asyncio.wait_for(
+                session.send_tool_response(function_responses=function_responses),
+                timeout=operation_timeout,
+            )
             awaiting_post_tool_response = True
 
 

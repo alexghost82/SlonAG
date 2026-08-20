@@ -5,6 +5,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from dataclasses import replace
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
@@ -47,6 +48,8 @@ class ToolExecutor:
     ) -> ToolResult:
         """Execute one tool call and return a non-throwing structured outcome."""
         started_at = time.monotonic()
+        approval_started_at: float | None = None
+        approval_finished_at: float | None = None
 
         if cancel_event is not None and cancel_event.is_set():
             return self._error("cancelled", "Tool execution was cancelled.", started_at)
@@ -81,21 +84,33 @@ class ToolExecutor:
                     "confirmation_required", "Confirmation is required.", started_at
                 )
             try:
+                approval_started_at = time.monotonic()
                 confirmed = bool(self._confirmer(decision))
+                approval_finished_at = time.monotonic()
             except Exception:
-                return self._error(
-                    "confirmation_error",
-                    "Confirmation could not be obtained.",
-                    started_at,
+                approval_finished_at = time.monotonic()
+                return replace(
+                    self._error(
+                        "confirmation_error",
+                        "Confirmation could not be obtained.",
+                        started_at,
+                    ),
+                    approval_started_at=approval_started_at,
+                    approval_finished_at=approval_finished_at,
                 )
             if not confirmed:
-                return self._error(
-                    "confirmation_declined", "Confirmation was declined.", started_at
+                return replace(
+                    self._error(
+                        "confirmation_declined", "Confirmation was declined.", started_at
+                    ),
+                    approval_started_at=approval_started_at,
+                    approval_finished_at=approval_finished_at,
                 )
 
         if cancel_event is not None and cancel_event.is_set():
             return self._error("cancelled", "Tool execution was cancelled.", started_at)
 
+        handler_started_at = time.monotonic()
         outcome = self._invoke(spec.handler, checked, spec.timeout_seconds)
         if outcome is _TIMED_OUT:
             warning = (
@@ -109,6 +124,9 @@ class ToolExecutor:
                 warnings=(warning,),
                 started_at=started_at,
                 finished_at=time.monotonic(),
+                approval_started_at=approval_started_at,
+                approval_finished_at=approval_finished_at,
+                handler_started_at=handler_started_at,
                 retryable=spec.idempotent,
             )
 
@@ -119,10 +137,18 @@ class ToolExecutor:
                 message="Tool handler failed.",
                 started_at=started_at,
                 finished_at=time.monotonic(),
+                approval_started_at=approval_started_at,
+                approval_finished_at=approval_finished_at,
+                handler_started_at=handler_started_at,
                 retryable=outcome.retryable and spec.idempotent,
             )
 
-        return self._normalize(outcome, started_at)
+        return replace(
+            self._normalize(outcome, started_at),
+            approval_started_at=approval_started_at,
+            approval_finished_at=approval_finished_at,
+            handler_started_at=handler_started_at,
+        )
 
     def execute_many(
         self,
@@ -140,7 +166,21 @@ class ToolExecutor:
                 specs.append(self._registry.get(name))
             except Exception:
                 specs.append(None)
-        if not all(spec is not None and spec.parallel_safe for spec in specs):
+        safely_parallel = all(
+            spec is not None
+            and spec.parallel_safe
+            and spec.read_only
+            and spec.idempotent
+            and not spec.side_effects
+            for spec in specs
+        )
+        # Duplicate calls are conservatively serialized: they may contend for
+        # the same remote or local resource even when the operation is a read.
+        identities = [
+            (name, repr(sorted(arguments.items()))) for name, arguments in calls
+        ]
+        independent = len(set(identities)) == len(identities)
+        if not safely_parallel or not independent:
             return tuple(
                 self.execute(name, arguments, source=source, intent=intent)
                 for name, arguments in calls

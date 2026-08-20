@@ -13,7 +13,7 @@ from mark.safety import (
     SafetyPolicy,
     UntrustedSource,
 )
-from mark.tools import ToolExecutor, ToolRegistry, ToolResult, ToolSpec
+from mark.tools import SideEffectClass, ToolExecutor, ToolRegistry, ToolResult, ToolSpec
 
 
 class RecordingPolicy:
@@ -289,6 +289,51 @@ def test_execute_many_side_effects_are_sequential() -> None:
         source=UntrustedSource.USER,
     )
 
+    assert max_active == 1
+
+
+def test_tool_spec_rejects_parallel_side_effect_metadata() -> None:
+    with pytest.raises(ValueError, match="parallel_safe"):
+        ToolSpec(
+            name="unsafe", description="unsafe", input_schema={"type": "object"},
+            output_schema=None, handler=lambda _arguments: None,
+            risk=RiskLevel.CONFIRM, parallel_safe=True,
+        )
+
+
+def test_tool_spec_rejects_inconsistent_side_effect_class() -> None:
+    with pytest.raises(ValueError, match="disagree"):
+        ToolSpec(
+            name="inconsistent", description="inconsistent",
+            input_schema={"type": "object"}, output_schema=None,
+            handler=lambda _arguments: None, risk=RiskLevel.READ,
+            side_effects=False, side_effect_class=SideEffectClass.IRREVERSIBLE,
+        )
+
+
+def test_duplicate_parallel_safe_calls_are_serialized() -> None:
+    registry = ToolRegistry()
+    active = 0
+    max_active = 0
+
+    def handler(arguments):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        time.sleep(0.01)
+        active -= 1
+        return arguments
+
+    registry.register(ToolSpec(
+        name="read", description="read", input_schema={"type": "object"},
+        output_schema=None, handler=handler, risk=RiskLevel.READ,
+        read_only=True, idempotent=True, side_effects=False, parallel_safe=True,
+    ))
+    executor = ToolExecutor(registry, RecordingPolicy())  # type: ignore[arg-type]
+    executor.execute_many(
+        (("read", {"value": 1}), ("read", {"value": 1})),
+        source=UntrustedSource.USER,
+    )
     assert max_active == 1
 
 
