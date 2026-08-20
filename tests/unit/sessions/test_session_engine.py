@@ -168,6 +168,41 @@ def test_orphan_or_duplicate_tool_results_are_rejected(tmp_path: Path) -> None:
         messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
 
 
+def test_tool_result_name_must_match_correlated_call(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    manager.append_event(
+        session.id, workspace_id="a", turn_id="bad-name",
+        kind=TranscriptKind.TOOL_CALL, role="assistant",
+        tool_call_id="call", tool_name="read", data={},
+    )
+    manager.append_event(
+        session.id, workspace_id="a", turn_id="bad-name",
+        kind=TranscriptKind.TOOL_RESULT, role="tool",
+        tool_call_id="call", tool_name="write", data={"result": "x"},
+    )
+    with pytest.raises(ValueError, match="name does not match"):
+        messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
+
+
+def test_live_tool_transcript_append_is_idempotent_by_call_id(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    for _ in range(2):
+        manager.append_event(
+            session.id, workspace_id="a", turn_id="turn",
+            kind=TranscriptKind.TOOL_CALL, role="assistant",
+            tool_call_id="same", tool_name="read", data={},
+        )
+        manager.append_event(
+            session.id, workspace_id="a", turn_id="turn",
+            kind=TranscriptKind.TOOL_RESULT, role="tool",
+            tool_call_id="same", tool_name="read", data={"result": "ok"},
+        )
+    transcript = manager.get(session.id, workspace_id="a").transcript
+    assert len(transcript) == 2
+
+
 def test_store_rejects_stale_append_and_run_after_close(tmp_path: Path) -> None:
     manager = _manager(tmp_path)
     session = _create(manager)
@@ -252,6 +287,21 @@ def test_online_backup_reopens_with_integrity(tmp_path: Path) -> None:
     target = manager.store.backup(tmp_path / "backup.sqlite3")
     backup = SessionManager(SessionStore(target))
     assert backup.get(session.id, workspace_id="a").id == session.id
+
+
+def test_failed_backup_validation_preserves_target_and_removes_temporary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = _manager(tmp_path)
+    target = tmp_path / "backup.sqlite3"
+    target.write_bytes(b"last-known-good")
+    monkeypatch.setattr("sessions.store._backup_is_valid", lambda _connection: False)
+
+    with pytest.raises(Exception, match="integrity check failed"):
+        manager.store.backup(target)
+
+    assert target.read_bytes() == b"last-known-good"
+    assert not target.with_suffix(".sqlite3.tmp").exists()
 
 
 @pytest.mark.asyncio

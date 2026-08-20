@@ -154,7 +154,7 @@ class SlonLive:
                 )
                 session_id = logical_session.id
             else:
-                logical_session = session_manager.resume(
+                logical_session = session_manager.get(
                     session_id, workspace_id=workspace_id
                 )
                 if (
@@ -162,6 +162,9 @@ class SlonLive:
                     logical_session.model_policy.model_id,
                 ) != (selected_model.provider_id, selected_model.model_id):
                     raise ValueError("selected model does not match session model policy")
+                logical_session = session_manager.resume(
+                    session_id, workspace_id=workspace_id
+                )
         self.session_id = session_id or str(uuid.uuid4())
         self.connection_generation = 0
         self._active_turn_id: str | None = None
@@ -303,7 +306,54 @@ class SlonLive:
             ),
         )
 
-    async def _execute_tool(self, fc) -> types.FunctionResponse:
+    async def _persist_tool_call(self, fc) -> None:
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        if manager is None or self._active_turn_id is None:
+            return
+        await asyncio.to_thread(
+            manager.append_event,
+            self.session_id,
+            workspace_id=self.workspace_id,
+            turn_id=self._active_turn_id,
+            kind=TranscriptKind.TOOL_CALL,
+            role="assistant",
+            tool_call_id=fc.id,
+            tool_name=fc.name,
+            data=dict(fc.args or {}),
+        )
+
+    async def _persist_tool_result(self, fc, result, value) -> None:
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        if manager is None or self._active_turn_id is None:
+            return
+        artifact_metadata = tuple(
+            {
+                "kind": item.kind,
+                "path": item.path,
+                "uri": item.uri,
+                "mime_type": item.mime_type,
+            }
+            for item in result.artifacts
+        )
+        await asyncio.to_thread(
+            manager.append_event,
+            self.session_id,
+            workspace_id=self.workspace_id,
+            turn_id=self._active_turn_id,
+            kind=TranscriptKind.TOOL_RESULT,
+            role="tool",
+            tool_call_id=fc.id,
+            tool_name=fc.name,
+            data={
+                "result": value if result.ok else None,
+                "error": None if result.ok else result.message or result.code,
+            },
+            artifacts=artifact_metadata,
+        )
+
+    async def _execute_tool(
+        self, fc, *, persist: bool = True, result_sink: dict | None = None
+    ) -> types.FunctionResponse:
         await self._start_live_turn()
         name = fc.name
         args = dict(fc.args or {})
@@ -320,21 +370,8 @@ class SlonLive:
             progress=0.0,
         )
         self.latency_trace.mark("tool_execution_start")
-        manager = getattr(self.runtime_stack, "session_manager", None)
-        if manager is not None and self._active_turn_id is not None:
-            from sessions import TranscriptKind
-
-            await asyncio.to_thread(
-                manager.append_event,
-                self.session_id,
-                workspace_id=self.workspace_id,
-                turn_id=self._active_turn_id,
-                kind=TranscriptKind.TOOL_CALL,
-                role="assistant",
-                tool_call_id=fc.id,
-                tool_name=name,
-                data=args,
-            )
+        if persist:
+            await self._persist_tool_call(fc)
 
         result = await self.tool_bridge.execute(
             name,
@@ -358,33 +395,20 @@ class SlonLive:
             )
         print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
-        if manager is not None and self._active_turn_id is not None:
-            from sessions import TranscriptKind
-
-            artifact_metadata = tuple(
-                {
-                    "kind": item.kind,
-                    "path": item.path,
-                    "uri": item.uri,
-                    "mime_type": item.mime_type,
-                }
-                for item in result.artifacts
-            )
-            await asyncio.to_thread(
-                manager.append_event,
-                self.session_id,
-                workspace_id=self.workspace_id,
-                turn_id=self._active_turn_id,
-                kind=TranscriptKind.TOOL_RESULT,
-                role="tool",
-                tool_call_id=fc.id,
-                tool_name=name,
-                data={
-                    "result": result.data if result.ok else None,
-                    "error": None if result.ok else result.message or result.code,
-                },
-                artifacts=artifact_metadata,
-            )
+        if result_sink is not None:
+            result_sink[fc.id] = (result, value if result.ok else None)
+        if persist:
+            try:
+                await self._persist_tool_result(
+                    fc, result, value if result.ok else None
+                )
+            except Exception as exc:
+                # The handler may already have produced a side effect. Never
+                # suppress its native response or invite a provider retry just
+                # because durable recording failed afterward.
+                self.ui.write_log(
+                    f"ERR: durable tool result unavailable ({type(exc).__name__})"
+                )
         self._emit_event(
             RuntimeEventKind.TOOL_FINISHED,
             tool_call_id=fc.id,
@@ -421,7 +445,23 @@ class SlonLive:
         )
         independent = len(set(identities)) == len(identities)
         if safe and independent:
-            return list(await asyncio.gather(*(self._execute_tool(call) for call in calls)))
+            await self._start_live_turn()
+            for call in calls:
+                await self._persist_tool_call(call)
+            captured = {}
+            responses = list(await asyncio.gather(*(
+                self._execute_tool(call, persist=False, result_sink=captured)
+                for call in calls
+            )))
+            for call in calls:
+                result, value = captured[call.id]
+                try:
+                    await self._persist_tool_result(call, result, value)
+                except Exception as exc:
+                    self.ui.write_log(
+                        f"ERR: durable tool result unavailable ({type(exc).__name__})"
+                    )
+            return responses
         results = []
         for call in calls:
             results.append(await self._execute_tool(call))

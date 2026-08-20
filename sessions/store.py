@@ -97,8 +97,7 @@ class SessionStore:
                 destination = sqlite3.connect(temporary)
                 try:
                     self._connection.backup(destination)
-                    checks = destination.execute("PRAGMA integrity_check").fetchall()
-                    if not checks or any(str(row[0]).lower() != "ok" for row in checks):
+                    if not _backup_is_valid(destination):
                         raise SessionStoreError("session backup integrity check failed")
                 finally:
                     destination.close()
@@ -128,6 +127,26 @@ class SessionStore:
                 (session_id, workspace_id),
             ).fetchone()
         return None if row is None else self._session_from_row(row)
+
+    def get_session_unhydrated(self, session_id: str) -> Session | None:
+        """Read lifecycle metadata without recursively loading transcript/runs."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return Session(
+            id=str(row["id"]), created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]), title=str(row["title"]),
+            agent_id=str(row["agent_id"]),
+            model_policy=ModelPolicy(str(row["provider_id"]), str(row["model_id"])),
+            workspace_id=str(row["workspace_id"]),
+            status=SessionStatus(str(row["status"])),
+            context_state=json.loads(str(row["context_state"])),
+            memory_scope=str(row["memory_scope"]),
+            permissions_profile=str(row["permissions_profile"]),
+        )
 
     def list_sessions(
         self, *, workspace_id: str, query: str | None = None
@@ -233,6 +252,18 @@ class SessionStore:
                 raise KeyError(entry.session_id)
             if str(owner["status"]) != SessionStatus.ACTIVE.value:
                 raise SessionInactiveError("session is not active")
+            if (
+                entry.tool_call_id
+                and entry.kind in (TranscriptKind.TOOL_CALL, TranscriptKind.TOOL_RESULT)
+            ):
+                existing = self._connection.execute(
+                    """SELECT * FROM transcript_entries
+                    WHERE session_id = ? AND kind = ? AND tool_call_id = ?
+                    LIMIT 1""",
+                    (entry.session_id, entry.kind.value, entry.tool_call_id),
+                ).fetchone()
+                if existing is not None:
+                    return _entry_from_row(existing)
             sequence = int(self._connection.execute(
                 "SELECT COALESCE(MAX(sequence), 0) + 1 FROM transcript_entries WHERE session_id = ?",
                 (entry.session_id,),
@@ -369,6 +400,11 @@ class SessionStore:
 
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _backup_is_valid(connection: sqlite3.Connection) -> bool:
+    checks = connection.execute("PRAGMA integrity_check").fetchall()
+    return bool(checks) and all(str(row[0]).lower() == "ok" for row in checks)
 
 
 def _entry_from_row(row: sqlite3.Row) -> TranscriptEntry:

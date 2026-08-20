@@ -38,6 +38,7 @@ class SessionManager:
         self.store = store
         self._runtime_lock = threading.Lock()
         self._cancellers: dict[str, set[Callable[[], None]]] = {}
+        self._closing: set[str] = set()
 
     def create(
         self,
@@ -84,6 +85,8 @@ class SessionManager:
                 session_id, workspace_id=workspace_id, updated_at=_now()
             ):
                 raise SessionStateError("session could not be resumed")
+            with self._runtime_lock:
+                self._closing.discard(session_id)
         return self.get(session_id, workspace_id=workspace_id)
 
     def close(self, session_id: str, *, workspace_id: str) -> Session:
@@ -92,6 +95,7 @@ class SessionManager:
             raise SessionStateError("archived session cannot be closed")
         if session.status is not SessionStatus.CLOSED:
             with self._runtime_lock:
+                self._closing.add(session_id)
                 cancellers = tuple(self._cancellers.pop(session_id, ()))
             for cancel in cancellers:
                 cancel()
@@ -201,8 +205,21 @@ class SessionManager:
     def register_canceller(
         self, session_id: str, cancel: Callable[[], None]
     ) -> Callable[[], None]:
+        reject = False
         with self._runtime_lock:
-            self._cancellers.setdefault(session_id, set()).add(cancel)
+            session = self.store.get_session_unhydrated(session_id)
+            if (
+                session_id in self._closing
+                or session is None
+                or session.status is not SessionStatus.ACTIVE
+            ):
+                reject = True
+            else:
+                self._cancellers.setdefault(session_id, set()).add(cancel)
+
+        if reject:
+            cancel()
+            return lambda: None
 
         def unregister() -> None:
             with self._runtime_lock:

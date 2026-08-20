@@ -114,12 +114,16 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
         protocol_safe.append(message)
         if isinstance(message, AssistantToolCallMessage):
             expected = {call.id: call.name for call in message.tool_calls}
+            if len(expected) != len(message.tool_calls):
+                raise ValueError("duplicate tool call id in transcript")
             cursor = index + 1
             while cursor < len(result) and isinstance(result[cursor], ToolResultMessage):
                 tool_result = result[cursor]
                 assert isinstance(tool_result, ToolResultMessage)
                 if tool_result.tool_call_id not in expected:
                     raise ValueError("unexpected or duplicate tool result in transcript")
+                if tool_result.tool_name != expected[tool_result.tool_call_id]:
+                    raise ValueError("tool result name does not match tool call")
                 expected.pop(tool_result.tool_call_id)
                 protocol_safe.append(tool_result)
                 cursor += 1
