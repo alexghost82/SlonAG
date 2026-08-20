@@ -23,7 +23,7 @@ select = ["E", "F"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["tests", "mark", "providers", "speech", "server", "policies", "localization", "config"]
+files = ["tests", "mark", "providers", "speech", "server", "policies", "localization", "config", "sessions"]
 explicit_package_bases = true
 mypy_path = "."
 pretty = true

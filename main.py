@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import uuid
 import sys
 from pathlib import Path
 
@@ -113,6 +114,7 @@ from runtime.lifecycle import run_live_lifecycle
 from runtime.live_session import receive_live_session
 from runtime.tool_bridge import LiveToolBridge, build_live_registry
 from runtime.events import RuntimeEventBus, RuntimeEventKind, UIRuntimeEventSink
+from sessions import ModelPolicy
 
 
 class SlonLive:
@@ -122,6 +124,8 @@ class SlonLive:
         ui: SlonUI,
         runtime_stack=None,
         selected_model: ModelInfo = LIVE_MODEL_INFO,
+        session_id: str | None = None,
+        workspace_id: str = "desktop",
     ):
         self.ui             = ui
         self.session        = None
@@ -136,6 +140,23 @@ class SlonLive:
         ):
             raise ValueError("Gemini Live requires an audio-capable Gemini ModelInfo")
         self.selected_model = selected_model
+        self.workspace_id = workspace_id
+        session_manager = getattr(runtime_stack, "session_manager", None)
+        if session_id is None and session_manager is not None:
+            logical_session = session_manager.create(
+                title="Live conversation",
+                agent_id="slon",
+                model_policy=ModelPolicy(
+                    selected_model.provider_id, selected_model.model_id
+                ),
+                workspace_id=workspace_id,
+            )
+            session_id = logical_session.id
+        self.session_id = session_id or str(uuid.uuid4())
+        self.connection_generation = 0
+        self._active_turn_id: str | None = None
+        self._active_session_run = None
+        self._closed = False
         base_registry = getattr(runtime_stack, "tool_registry", None)
         policy = getattr(runtime_stack, "safety", None)
         live_registry = build_live_registry(
@@ -175,9 +196,19 @@ class SlonLive:
                     print(f"[Bridge] {line}")
 
     def _on_text_command(self, text: str):
-        if not self._loop or not self.session:
+        if self._closed or not self._loop or not self.session:
             return
         self.latency_trace.start_turn()
+        self._active_turn_id = str(uuid.uuid4())
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        if manager is not None:
+            self._active_session_run = manager.start_run(
+                self.session_id,
+                workspace_id=self.workspace_id,
+                effective_provider_id=self.selected_model.provider_id,
+                effective_model_id=self.selected_model.model_id,
+                turn_id=self._active_turn_id,
+            )
         self.latency_trace.mark("user_speech_end")
         self.latency_trace.mark("provider_request_start")
         asyncio.run_coroutine_threadsafe(
@@ -192,12 +223,18 @@ class SlonLive:
         with self._speaking_lock:
             self._is_speaking = value
         if value:
-            self.runtime_events.emit(RuntimeEventKind.SPEAKING)
+            self._emit_event(RuntimeEventKind.SPEAKING)
         elif not self.ui.muted:
-            self.runtime_events.emit(RuntimeEventKind.LISTENING)
+            self._emit_event(RuntimeEventKind.LISTENING)
+
+    def _emit_event(self, kind: RuntimeEventKind, **metadata):
+        metadata.setdefault("session_id", self.session_id)
+        metadata.setdefault("turn_id", self._active_turn_id)
+        metadata.setdefault("connection_generation", self.connection_generation)
+        return self.runtime_events.emit(kind, **metadata)
 
     def speak(self, text: str):
-        if not self._loop or not self.session:
+        if self._closed or not self._loop or not self.session:
             return
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
@@ -250,12 +287,12 @@ class SlonLive:
         name = fc.name
         args = dict(fc.args or {})
         print(f"[SLON] 🔧 {name}")
-        self.runtime_events.emit(
+        self._emit_event(
             RuntimeEventKind.TOOL_STARTED,
             tool_call_id=fc.id,
             tool_name=name,
         )
-        self.runtime_events.emit(
+        self._emit_event(
             RuntimeEventKind.TOOL_PROGRESS,
             tool_call_id=fc.id,
             tool_name=name,
@@ -274,7 +311,7 @@ class SlonLive:
         self.latency_trace.mark_at("tool_handler_start", result.handler_started_at)
         self.latency_trace.mark("tool_execution_finish")
         if not self.ui.muted:
-            self.runtime_events.emit(RuntimeEventKind.LISTENING)
+            self._emit_event(RuntimeEventKind.LISTENING)
         if result.ok:
             value = result.data if result.data is not None else result.message or "Done."
             response = {"result": value}
@@ -285,13 +322,13 @@ class SlonLive:
             )
         print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
-        self.runtime_events.emit(
+        self._emit_event(
             RuntimeEventKind.TOOL_FINISHED,
             tool_call_id=fc.id,
             tool_name=name,
             code=result.code,
         )
-        self.runtime_events.emit(
+        self._emit_event(
             RuntimeEventKind.TOOL_PROGRESS,
             tool_call_id=fc.id,
             tool_name=name,
@@ -347,13 +384,68 @@ class SlonLive:
             execute_tools=self._execute_tools,
             update_memory=_update_memory_async,
             latency_trace=self.latency_trace,
-            emit_event=self.runtime_events.emit,
+            emit_event=self._emit_event,
+            on_turn_started=self._start_live_turn,
+            on_turn_finished=self._finish_live_turn,
         )
+
+    async def _start_live_turn(self) -> None:
+        if self._active_turn_id is not None:
+            return
+        self._active_turn_id = str(uuid.uuid4())
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        if manager is not None:
+            self._active_session_run = await asyncio.to_thread(
+                manager.start_run,
+                self.session_id,
+                workspace_id=self.workspace_id,
+                effective_provider_id=self.selected_model.provider_id,
+                effective_model_id=self.selected_model.model_id,
+                turn_id=self._active_turn_id,
+            )
+
+    async def _finish_live_turn(
+        self, user_text: str, assistant_text: str, interrupted: bool
+    ) -> None:
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        turn_id = self._active_turn_id
+        run = self._active_session_run
+        if manager is not None and turn_id is not None:
+            from sessions import RunStatus, TranscriptKind, TranscriptState
+
+            state = (
+                TranscriptState.INTERRUPTED
+                if interrupted else TranscriptState.COMPLETED
+            )
+
+            def persist() -> None:
+                if user_text:
+                    manager.append_event(
+                        self.session_id, workspace_id=self.workspace_id,
+                        turn_id=turn_id, kind=TranscriptKind.TEXT,
+                        state=state, role="user", text=user_text,
+                    )
+                if assistant_text:
+                    manager.append_event(
+                        self.session_id, workspace_id=self.workspace_id,
+                        turn_id=turn_id, kind=TranscriptKind.TEXT,
+                        state=state, role="assistant", text=assistant_text,
+                    )
+                if run is not None:
+                    manager.finish_run(
+                        run,
+                        RunStatus.INTERRUPTED if interrupted else RunStatus.COMPLETED,
+                    )
+
+            await asyncio.to_thread(persist)
+        self._active_turn_id = None
+        self._active_session_run = None
 
     async def _play_audio(self):
         await self.audio.play()
 
     def _on_connected(self, session, loop):
+        self.connection_generation += 1
         self.session = session
         self._loop = loop
         self.audio.bind(session)
@@ -361,6 +453,14 @@ class SlonLive:
         self.out_queue = self.audio.out_queue
 
     def _on_disconnected(self):
+        if self._active_session_run is not None:
+            from sessions import RunStatus
+
+            manager = getattr(self.runtime_stack, "session_manager", None)
+            if manager is not None:
+                manager.finish_run(self._active_session_run, RunStatus.INTERRUPTED)
+        self._active_session_run = None
+        self._active_turn_id = None
         self.set_speaking(False)
         self.session = None
         self._loop = None
@@ -377,6 +477,8 @@ class SlonLive:
         )
 
     async def run(self):
+        if self._closed:
+            raise RuntimeError("logical session is closed")
         client = genai.Client(
             api_key=_get_api_key(),
             http_options={"api_version": "v1beta"},
@@ -389,8 +491,23 @@ class SlonLive:
             on_disconnected=self._on_disconnected,
             tasks=self._session_tasks,
             ui=self.ui,
-            emit_event=self.runtime_events.emit,
+            emit_event=self._emit_event,
+            should_stop=lambda: self._closed,
         )
+
+    async def close(self) -> None:
+        """Idempotently stop the transport and close the logical session."""
+        if self._closed:
+            return
+        self._closed = True
+        session = self.session
+        if session is not None:
+            await session.close()
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        if manager is not None:
+            await asyncio.to_thread(
+                manager.close, self.session_id, workspace_id=self.workspace_id
+            )
 
 JarvisLive = SlonLive
 

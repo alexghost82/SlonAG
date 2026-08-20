@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -168,6 +169,7 @@ class AgentLoop:
         tool_executor: Any = None,
         budget: LoopBudget | None = None,
         loop_detector: LoopDetector | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> None:
         self.provider = provider
         self.tool_executor = tool_executor
@@ -178,16 +180,27 @@ class AgentLoop:
         self.loop_detector = (
             loop_detector if loop_detector is not None else LoopDetector()
         )
+        self.cancel_event = cancel_event
 
     async def run(
         self,
         user_goal: str,
         steering_queue: SteeringQueue | None = None,
+        *,
+        history: Sequence[ConversationMessage] = (),
+        on_message: Callable[[ConversationMessage], None] | None = None,
     ) -> AgentLoopResult:
         """Executes the multi-turn agent loop until a final answer or termination condition is reached."""
         steps: list[AgentLoopStepResult] = []
         trace = LatencyTrace()
-        messages: list[ConversationMessage] = [UserMessage(user_goal)]
+        messages: list[ConversationMessage] = list(history)
+
+        def append_message(message: ConversationMessage) -> None:
+            messages.append(message)
+            if on_message is not None:
+                on_message(message)
+
+        append_message(UserMessage(user_goal))
 
         while True:
             exceeded, reason = self.budget.is_exceeded()
@@ -224,7 +237,7 @@ class AgentLoop:
                         SteeringKind.VOICE_INTERRUPTION,
                     ):
                         text = signal.text or "User guidance injected"
-                        messages.append(UserMessage(text))
+                        append_message(UserMessage(text))
 
             if self.budget.turn_count >= self.budget.max_turns:
                 return AgentLoopResult(False, steps=steps, reason=f"Max turns ({self.budget.max_turns}) reached")
@@ -255,14 +268,14 @@ class AgentLoop:
                     reason=f"Duplicate tool_call_id: {duplicate_ids[0]}",
                 )
             if tool_calls:
-                messages.append(
+                append_message(
                     AssistantToolCallMessage(
                         content=response_text,
                         tool_calls=tool_calls,
                     )
                 )
             else:
-                messages.append(AssistantMessage(response_text))
+                append_message(AssistantMessage(response_text))
 
             if not tool_calls:
                 trace.mark("turn_complete")
@@ -286,12 +299,17 @@ class AgentLoop:
                 try:
                     trace.mark("tool_call_received")
                     trace.mark("tool_execution_start")
+                    execution_kwargs = {
+                        "source": UntrustedSource.USER,
+                        "intent": user_goal,
+                    }
+                    if self.cancel_event is not None:
+                        execution_kwargs["cancel_event"] = self.cancel_event
                     batch_results = await asyncio.wait_for(
                         asyncio.to_thread(
                             self.tool_executor.execute_many,
                             [(name, args) for _id, name, args in selected],
-                            source=UntrustedSource.USER,
-                            intent=user_goal,
+                            **execution_kwargs,
                         ),
                         timeout=self.budget.remaining_seconds(),
                     )
@@ -379,7 +397,7 @@ class AgentLoop:
                         reason=loop_reason or "Loop detected",
                     )
 
-                messages.append(
+                append_message(
                     ToolResultMessage(
                         tool_call_id=tool_id,
                         tool_name=tool_name,
@@ -423,7 +441,7 @@ class AgentLoop:
                         SteeringKind.VOICE_INTERRUPTION,
                     ):
                         text = signal.text or "User guidance injected"
-                        messages.append(UserMessage(text))
+                        append_message(UserMessage(text))
 
     async def _call_provider(self, messages: list[ConversationMessage]) -> ChatResponse:
         if self.provider is None:
@@ -468,6 +486,7 @@ class AgentLoop:
                 args,
                 source=UntrustedSource.USER,
                 intent=goal,
+                cancel_event=self.cancel_event,
             )
         elif callable(executor):
             res = executor(tool_name, args)

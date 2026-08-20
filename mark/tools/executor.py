@@ -156,6 +156,7 @@ class ToolExecutor:
         *,
         source: UntrustedSource,
         intent: str = "",
+        cancel_event: threading.Event | None = None,
     ) -> tuple[ToolResult, ...]:
         """Execute a batch in input order, parallelizing only explicitly safe tools."""
         if not calls:
@@ -182,7 +183,10 @@ class ToolExecutor:
         independent = len(set(identities)) == len(identities)
         if not safely_parallel or not independent:
             return tuple(
-                self.execute(name, arguments, source=source, intent=intent)
+                self.execute(
+                    name, arguments, source=source, intent=intent,
+                    cancel_event=cancel_event,
+                )
                 for name, arguments in calls
             )
         with ThreadPoolExecutor(
@@ -190,7 +194,8 @@ class ToolExecutor:
         ) as pool:
             futures = [
                 pool.submit(
-                    self.execute, name, arguments, source=source, intent=intent
+                    self.execute, name, arguments, source=source, intent=intent,
+                    cancel_event=cancel_event,
                 )
                 for name, arguments in calls
             ]

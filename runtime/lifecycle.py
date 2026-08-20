@@ -31,9 +31,10 @@ async def run_live_lifecycle(
     emit_event: Callable[..., object] | None = None,
     reconnect_delay: float = 3.0,
     connect_timeout: float = 15.0,
+    should_stop: Callable[[], bool] | None = None,
 ) -> None:
     """Reconnect forever while giving each connection fresh owned tasks."""
-    while True:
+    while not (should_stop is not None and should_stop()):
         try:
             print("[SLON] 🔌 Connecting...")
             if emit_event is None:
@@ -68,6 +69,8 @@ async def run_live_lifecycle(
         else:
             on_disconnected()
 
+        if should_stop is not None and should_stop():
+            return
         if emit_event is None:
             ui.set_state("THINKING")
         else:

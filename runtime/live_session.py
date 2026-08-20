@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -24,6 +25,8 @@ async def receive_live_session(
     latency_trace: Any,
     emit_event: Callable[..., object] | None = None,
     operation_timeout: float = 30.0,
+    on_turn_started: Callable[[], Any] | None = None,
+    on_turn_finished: Callable[[str, str, bool], Any] | None = None,
 ) -> None:
     """Consume one Live session until it closes or raises."""
     print("[SLON] 👂 Recv started")
@@ -48,6 +51,8 @@ async def receive_live_session(
         content = response.server_content
         interrupted = bool(content and getattr(content, "interrupted", False))
         if interrupted:
+            interrupted_user = " ".join(input_transcript).strip()
+            interrupted_assistant = " ".join(output_transcript).strip()
             accept_playback = False
             invalidated = interrupt_playback()
             ui.write_log(f"SYS: playback interrupted cleared={invalidated}")
@@ -57,10 +62,20 @@ async def receive_live_session(
                 cancel_turn()
             if emit_event is not None:
                 emit_event(RuntimeEventKind.CANCELLED)
+            if on_turn_finished is not None:
+                outcome = on_turn_finished(
+                    interrupted_user, interrupted_assistant, True
+                )
+                if inspect.isawaitable(outcome):
+                    await outcome
 
         voice_activity = getattr(response, "voice_activity", None)
         activity_type = str(getattr(voice_activity, "voice_activity_type", ""))
         if activity_type.endswith("ACTIVITY_START"):
+            if on_turn_started is not None:
+                outcome = on_turn_started()
+                if inspect.isawaitable(outcome):
+                    await outcome
             latency_trace.mark("user_input_activity_start")
         elif activity_type.endswith("ACTIVITY_END"):
             latency_trace.mark("user_input_activity_end")
@@ -106,6 +121,10 @@ async def receive_live_session(
             if content.input_transcription and content.input_transcription.text:
                 if not latency_trace.active:
                     latency_trace.start_turn()
+                if on_turn_started is not None and not input_transcript:
+                    outcome = on_turn_started()
+                    if inspect.isawaitable(outcome):
+                        await outcome
                 text = content.input_transcription.text.strip()
                 if text:
                     input_transcript.append(text)
@@ -117,6 +136,10 @@ async def receive_live_session(
                 assistant_text = " ".join(output_transcript).strip()
                 input_transcript.clear()
                 output_transcript.clear()
+                if on_turn_finished is not None:
+                    outcome = on_turn_finished(user_text, assistant_text, False)
+                    if inspect.isawaitable(outcome):
+                        await outcome
                 if user_text:
                     ui.write_log(f"You: {user_text}")
                 if assistant_text:

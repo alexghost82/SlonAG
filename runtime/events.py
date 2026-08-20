@@ -25,6 +25,8 @@ class RuntimeEvent:
     kind: RuntimeEventKind
     sequence: int
     monotonic_at: float
+    session_id: str | None = None
+    connection_generation: int | None = None
     turn_id: str | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
@@ -61,13 +63,13 @@ class RuntimeEventBus:
         return unsubscribe
 
     def emit(self, kind: RuntimeEventKind, **metadata: object) -> RuntimeEvent:
-        event = RuntimeEvent(
-            kind=kind,
-            sequence=next(self._sequence),
-            monotonic_at=time.monotonic(),
-            **metadata,
-        )
         with self._lock:
+            event = RuntimeEvent(
+                kind=kind,
+                sequence=next(self._sequence),
+                monotonic_at=time.monotonic(),
+                **metadata,
+            )
             sinks = tuple(self._sinks)
         for sink in sinks:
             try:
@@ -102,6 +104,8 @@ class UIRuntimeEventSink:
                     "kind": event.kind.value,
                     "sequence": event.sequence,
                     "monotonic_at": event.monotonic_at,
+                    "session_id": event.session_id,
+                    "connection_generation": event.connection_generation,
                     "turn_id": event.turn_id,
                     "tool_call_id": event.tool_call_id,
                     "tool_name": event.tool_name,

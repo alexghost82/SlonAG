@@ -28,6 +28,7 @@ class RuntimeStack:
     safety: Any | None = None
     tool_registry: Any | None = None
     tool_executor: Any | None = None
+    session_manager: Any | None = None
     network: Any | None = None
     tts_ready: bool = False
     tts_message: str = ""
@@ -38,7 +39,9 @@ class RuntimeStack:
     def summary_lines(self) -> list[str]:
         return list(self.status_lines)
 
-    def create_agent_loop(self, *, model: Any, budget: Any | None = None) -> Any:
+    def create_agent_loop(
+        self, *, model: Any, budget: Any | None = None, cancel_event: Any = None
+    ) -> Any:
         """Create the canonical AgentLoop from composition-owned dependencies."""
         if self.router is None or self.tool_executor is None:
             raise RuntimeError("runtime stack is missing provider or tool runtime")
@@ -49,7 +52,15 @@ class RuntimeStack:
             provider=self.router,
             tool_executor=self.tool_executor,
             budget=budget,
+            cancel_event=cancel_event,
         )
+
+    def create_session_binding(self) -> Any:
+        if self.session_manager is None:
+            raise RuntimeError("runtime stack is missing SessionManager")
+        from sessions.binding import SessionAgentBinding
+
+        return SessionAgentBinding(self.session_manager, self)
 
 
 def _try(label: str, fn: Callable[[], Any], status: list[str]) -> Any | None:
@@ -70,6 +81,7 @@ def build_runtime_stack(
     privacy_profile: str | None = None,
     key_provider: KeyProvider | None = None,
     memory_db_path: str | Path | None = None,
+    session_db_path: str | Path | None = None,
 ) -> RuntimeStack:
     """Best-effort assembly of router / memory / safety / network / speech."""
     root = Path(repo_root) if repo_root is not None else Path.cwd()
@@ -129,6 +141,21 @@ def build_runtime_stack(
     tool_executor = _try("executor", _executor, status)
     network = _try("network", _network, status)
 
+    def _sessions() -> Any:
+        from sessions import SessionManager, SessionStore
+
+        path = (
+            Path(session_db_path)
+            if session_db_path is not None
+            else root / "memory" / "slon_sessions.sqlite3"
+        )
+        manager = SessionManager(SessionStore(path))
+        recovered = manager.recover()
+        status.append(f"sessions: recovered_runs={recovered}")
+        return manager
+
+    session_manager = _try("sessions", _sessions, status)
+
     tts_ready = False
     tts_message = "tts: not probed"
     try:
@@ -168,6 +195,7 @@ def build_runtime_stack(
         safety=safety,
         tool_registry=tool_registry,
         tool_executor=tool_executor,
+        session_manager=session_manager,
         network=network,
         tts_ready=tts_ready,
         tts_message=tts_message,

@@ -224,6 +224,40 @@ async def test_live_session_delegates_same_response_tool_batch_once() -> None:
 
 
 @pytest.mark.asyncio
+async def test_live_turn_callbacks_distinguish_interrupted_and_completed() -> None:
+    interrupted = SimpleNamespace(
+        interrupted=True, input_transcription=None,
+        output_transcription=None, turn_complete=False,
+    )
+    completed = SimpleNamespace(
+        interrupted=False,
+        input_transcription=SimpleNamespace(text="new question"),
+        output_transcription=SimpleNamespace(text="new answer"),
+        turn_complete=True,
+    )
+    session = FakeSession([
+        SimpleNamespace(data=None, server_content=interrupted, tool_call=None),
+        SimpleNamespace(data=None, server_content=completed, tool_call=None),
+    ])
+    starts = []
+    finishes = []
+
+    await receive_live_session(
+        session=session, audio_in_queue=asyncio.Queue(),
+        ui=SimpleNamespace(write_log=lambda _message: None),
+        set_speaking=lambda _value: None, execute_tool=AsyncMock(),
+        update_memory=lambda *_args: None, latency_trace=TurnLatencyTracker(),
+        on_turn_started=lambda: starts.append("start"),
+        on_turn_finished=lambda user, assistant, interrupted: finishes.append(
+            (user, assistant, interrupted)
+        ),
+    )
+
+    assert starts == ["start"]
+    assert finishes == [("", "", True), ("new question", "new answer", False)]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("approved", [False, True])
 async def test_live_tool_bridge_requires_real_confirmation_for_side_effects(
     approved: bool,
