@@ -89,6 +89,28 @@ async def test_microphone_audio_is_captured_while_assistant_is_speaking(
             await task
 
 
+@pytest.mark.asyncio
+async def test_realtime_send_timeout_is_bounded() -> None:
+    class HungSession:
+        async def send_realtime_input(self, **_kwargs) -> None:
+            await asyncio.Event().wait()
+
+    pipeline = AudioPipeline(
+        ui=SimpleNamespace(muted=False),
+        set_speaking=lambda _value: None,
+        latency_trace=TurnLatencyTracker(),
+        speaking_lock=threading.Lock(),
+        is_speaking=lambda: False,
+        operation_timeout=0.01,
+    )
+    pipeline.bind(HungSession())
+    assert pipeline.out_queue is not None
+    pipeline.out_queue.put_nowait({"data": b"x", "mime_type": "audio/pcm"})
+
+    with pytest.raises(TimeoutError):
+        await pipeline.send_realtime()
+
+
 def test_playback_interruption_invalidates_queued_audio() -> None:
     speaking: list[bool] = []
     pipeline = AudioPipeline(
@@ -167,6 +189,38 @@ async def test_live_interruption_discards_same_response_and_late_old_audio() -> 
     assert all("old" not in message for message in logs)
     assert len(pipeline.latency_trace.history()) == 1
     assert speaking[-1] is False
+
+
+@pytest.mark.asyncio
+async def test_live_session_delegates_same_response_tool_batch_once() -> None:
+    calls = [
+        SimpleNamespace(id="a", name="read_a", args={"value": 1}),
+        SimpleNamespace(id="b", name="read_b", args={"value": 2}),
+    ]
+    session = FakeSession([
+        SimpleNamespace(
+            data=None,
+            server_content=None,
+            tool_call=SimpleNamespace(function_calls=calls),
+        )
+    ])
+    execute_tools = AsyncMock(return_value=["result-a", "result-b"])
+
+    await receive_live_session(
+        session=session,
+        audio_in_queue=asyncio.Queue(),
+        ui=SimpleNamespace(write_log=lambda _message: None),
+        set_speaking=lambda _value: None,
+        execute_tool=AsyncMock(),
+        execute_tools=execute_tools,
+        update_memory=lambda *_args: None,
+        latency_trace=TurnLatencyTracker(),
+    )
+
+    execute_tools.assert_awaited_once_with(calls)
+    session.send_tool_response.assert_awaited_once_with(
+        function_responses=["result-a", "result-b"]
+    )
 
 
 @pytest.mark.asyncio

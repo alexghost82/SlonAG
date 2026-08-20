@@ -337,6 +337,22 @@ def test_duplicate_parallel_safe_calls_are_serialized() -> None:
     assert max_active == 1
 
 
+def test_approval_and_handler_timing_are_reported_separately() -> None:
+    executor = build_executor(
+        lambda arguments: arguments,
+        RecordingPolicy(DecisionKind.CONFIRM),
+        confirmer=lambda _decision: True,
+    )
+    result = executor.execute(
+        "web_search", {"value": "x"}, source=UntrustedSource.USER
+    )
+    assert result.approval_started_at is not None
+    assert result.approval_finished_at is not None
+    assert result.handler_started_at is not None
+    assert result.approval_started_at <= result.approval_finished_at
+    assert result.approval_finished_at <= result.handler_started_at
+
+
 @pytest.mark.parametrize(
     ("legacy", "message", "data"),
     [(None, "", None), ("done", "done", None), ({"x": 1}, "", {"x": 1})],

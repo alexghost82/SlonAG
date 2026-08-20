@@ -53,12 +53,14 @@ class AudioPipeline:
         latency_trace: Any,
         speaking_lock: threading.Lock,
         is_speaking: Callable[[], bool],
+        operation_timeout: float = 30.0,
     ) -> None:
         self.ui = ui
         self.set_speaking = set_speaking
         self.latency_trace = latency_trace
         self.speaking_lock = speaking_lock
         self.is_speaking = is_speaking
+        self.operation_timeout = operation_timeout
         self.session: Any = None
         self.audio_in_queue: FreshAudioQueue | None = None
         self.out_queue: FreshAudioQueue | None = None
@@ -117,7 +119,8 @@ class AudioPipeline:
                 self.latency_trace.mark("user_input_activity_start")
                 self.latency_trace.mark("provider_request_start")
             await asyncio.wait_for(
-                self.session.send_realtime_input(media=message), timeout=30.0
+                self.session.send_realtime_input(media=message),
+                timeout=self.operation_timeout,
             )
 
     async def listen(self) -> None:

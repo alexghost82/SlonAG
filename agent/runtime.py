@@ -326,6 +326,9 @@ class AgentLoop:
                     if isinstance(raw_res, Observation):
                         obs = raw_res
                     elif isinstance(raw_res, ToolResult):
+                        trace.mark_at("approval_start", raw_res.approval_started_at)
+                        trace.mark_at("approval_finish", raw_res.approval_finished_at)
+                        trace.mark_at("tool_handler_start", raw_res.handler_started_at)
                         obs = Observation.from_tool_result(tool_id, tool_name, raw_res)
                     else:
                         obs = Observation(

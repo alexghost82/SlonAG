@@ -287,6 +287,33 @@ class SlonLive:
         )
         return types.FunctionResponse(id=fc.id, name=name, response=response)
 
+    async def _execute_tools(self, calls) -> list[types.FunctionResponse]:
+        """Run only an explicitly safe, independent Live batch concurrently."""
+        specs = []
+        identities = []
+        for call in calls:
+            try:
+                spec = self.tool_registry.get(call.name)
+            except Exception:
+                spec = None
+            specs.append(spec)
+            identities.append((call.name, repr(sorted(dict(call.args or {}).items()))))
+        safe = all(
+            spec is not None
+            and spec.parallel_safe
+            and spec.read_only
+            and spec.idempotent
+            and not spec.side_effects
+            for spec in specs
+        )
+        independent = len(set(identities)) == len(identities)
+        if safe and independent:
+            return list(await asyncio.gather(*(self._execute_tool(call) for call in calls)))
+        results = []
+        for call in calls:
+            results.append(await self._execute_tool(call))
+        return results
+
     async def _send_realtime(self):
         await self.audio.send_realtime()
 
@@ -304,6 +331,7 @@ class SlonLive:
             ui=self.ui,
             set_speaking=self.set_speaking,
             execute_tool=self._execute_tool,
+            execute_tools=self._execute_tools,
             update_memory=_update_memory_async,
             latency_trace=self.latency_trace,
             emit_event=self.runtime_events.emit,

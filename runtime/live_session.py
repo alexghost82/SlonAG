@@ -19,6 +19,7 @@ async def receive_live_session(
     ui: Any,
     set_speaking: Callable[[bool], None],
     execute_tool: Callable[[Any], Any],
+    execute_tools: Callable[[list[Any]], Any] | None = None,
     update_memory: Callable[[str, str], None],
     latency_trace: Any,
     emit_event: Callable[..., object] | None = None,
@@ -135,10 +136,15 @@ async def receive_live_session(
 
         if response.tool_call:
             latency_trace.mark("tool_call_received")
-            function_responses = []
-            for function_call in response.tool_call.function_calls:
+            function_calls = list(response.tool_call.function_calls)
+            for function_call in function_calls:
                 print(f"[SLON] 📞 {function_call.name}")
-                function_responses.append(await execute_tool(function_call))
+            if execute_tools is not None:
+                function_responses = list(await execute_tools(function_calls))
+            else:
+                function_responses = []
+                for function_call in function_calls:
+                    function_responses.append(await execute_tool(function_call))
             await asyncio.wait_for(
                 session.send_tool_response(function_responses=function_responses),
                 timeout=operation_timeout,
