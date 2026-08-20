@@ -224,6 +224,18 @@ class SessionStore:
             )
         return cursor.rowcount > 0
 
+    def update_run_effective_model(
+        self, run_id: str, provider_id: str, model_id: str, updated_at: str
+    ) -> bool:
+        with self.transaction():
+            cursor = self._connection.execute(
+                """UPDATE session_runs
+                SET effective_provider_id = ?, effective_model_id = ?, updated_at = ?
+                WHERE id = ?""",
+                (provider_id, model_id, updated_at, run_id),
+            )
+        return cursor.rowcount > 0
+
     def active_runs(self, session_id: str, *, workspace_id: str) -> list[SessionRun]:
         with self._lock:
             rows = self._connection.execute(

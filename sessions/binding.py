@@ -71,6 +71,12 @@ class SessionAgentBinding:
             raise
         finally:
             unregister()
+        if result.effective_provider_id and result.effective_model_id:
+            run = self.manager.record_effective_model(
+                run,
+                provider_id=result.effective_provider_id,
+                model_id=result.effective_model_id,
+            )
         self.manager.finish_run(
             run, RunStatus.COMPLETED if result.ok else RunStatus.FAILED
         )

@@ -156,6 +156,8 @@ class AgentLoopResult:
     steps: list[AgentLoopStepResult] = field(default_factory=list)
     reason: str = ""
     latency_ms: dict[str, float] = field(default_factory=dict)
+    effective_provider_id: str | None = None
+    effective_model_id: str | None = None
 
 
 class AgentLoop:
@@ -285,6 +287,8 @@ class AgentLoop:
                     steps=steps,
                     reason="Completed successfully",
                     latency_ms=trace.breakdown(),
+                    effective_provider_id=response.provider_id,
+                    effective_model_id=response.model_id,
                 )
 
             parsed_calls = [self._parse_tool_call(call) for call in tool_calls]

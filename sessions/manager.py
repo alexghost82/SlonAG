@@ -177,6 +177,16 @@ class SessionManager:
         self.store.update_run_status(run.id, status, now)
         return replace(run, status=status, updated_at=now)
 
+    def record_effective_model(
+        self, run: SessionRun, *, provider_id: str, model_id: str
+    ) -> SessionRun:
+        now = _now()
+        self.store.update_run_effective_model(run.id, provider_id, model_id, now)
+        return replace(
+            run, effective_provider_id=provider_id,
+            effective_model_id=model_id, updated_at=now,
+        )
+
     def recover(self) -> int:
         """Mark uncertain work interrupted; never replay provider/tools."""
         return self.store.recover_interrupted(_now())
