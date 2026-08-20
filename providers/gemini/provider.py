@@ -7,6 +7,7 @@ read ``config/api_keys.json`` and does not call ``get_secret``.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any
 
@@ -257,7 +258,7 @@ class GeminiChatProvider:
                 }
             ]
         generate = models.generate_content
-        if asyncio.iscoroutinefunction(generate):
+        if inspect.iscoroutinefunction(generate):
             return await generate(**kwargs)
         return await asyncio.to_thread(generate, **kwargs)
 

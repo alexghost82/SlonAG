@@ -31,7 +31,6 @@ def test_build_stack_best_effort(
 ) -> None:
     mod = _load_main_module()
     monkeypatch.setattr(mod, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(mod, "API_CONFIG_PATH", tmp_path / "missing.json")
     stack = mod._build_stack()
     # Bridge may be None only if mark.bridge import failed entirely.
     if stack is None:
@@ -41,14 +40,7 @@ def test_build_stack_best_effort(
         assert stack.summary_lines()
 
 
-def test_authorize_tool_available_when_bridge_loaded() -> None:
+def test_main_no_longer_exposes_legacy_authorize_tool_dispatch() -> None:
     mod = _load_main_module()
-    if mod.authorize_tool is None or mod.build_runtime_stack is None:
-        pytest.skip("bridge unavailable")
-    stack = mod.build_runtime_stack(
-        repo_root=ROOT,
-        key_provider=lambda _n: None,
-        memory_db_path=ROOT / "tmp" / "test_main_glue_mem.sqlite3",
-    )
-    allowed, _reason = mod.authorize_tool(stack, "open_app", {"app_name": "x"})
-    assert allowed is True
+    assert not hasattr(mod, "authorize_tool")
+    assert mod.LiveToolBridge is not None
