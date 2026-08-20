@@ -6,6 +6,7 @@ import os
 import socket
 import sqlite3
 import time
+import threading
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from gateway.artifacts import ArtifactTransferError, ArtifactTransferService
+from gateway.approvals import DurableApprovalCoordinator
 from gateway.auth import GatewayAuthError, GatewayAuthService
 from gateway.contracts import (
     GatewayEnvelope,
@@ -28,6 +30,7 @@ from gateway.router import (
     response_envelope,
 )
 from gateway.service import SlonGateway
+from gateway.status import read_gateway_status
 from gateway.store import GatewayStore, GatewayStoreError
 from gateway.websocket import GatewayWebSocketRuntime
 from sessions import ModelPolicy, SessionManager, SessionStore
@@ -166,6 +169,39 @@ def test_refresh_rotation_and_access_replay_survive_restart(tmp_path: Path) -> N
         restarted.refresh(tokens.refresh_token)
 
 
+@pytest.mark.asyncio
+async def test_long_lived_websocket_loses_authority_when_access_expires(
+    tmp_path: Path,
+) -> None:
+    now = [100.0]
+    store = _store(tmp_path)
+    auth = GatewayAuthService(
+        store=store, signing_key=b"expiry-key", clock=lambda: now[0],
+        access_ttl_seconds=2,
+    )
+    private = Ed25519PrivateKey.generate()
+    device_id = _pair(auth, private)
+    challenge = auth.challenge(device_id)
+    tokens = auth.exchange_proof(
+        device_id=device_id, nonce=challenge.nonce,
+        signature=base64.b64encode(private.sign(challenge.nonce.encode())).decode(),
+    )
+    headers = {"Authorization": f"Bearer {tokens.access_token}"}
+    auth.authenticate_connection(headers)
+    runtime = GatewayWebSocketRuntime(
+        store=store, router=GatewayRouter(),
+        is_active=lambda device: bool(store.device(device)["active"]),
+        workspace_for=auth.workspace_for,
+    )
+    connection = await runtime.connect(
+        device_id=device_id, validate_auth=lambda: auth.validate_connection(headers)
+    )
+    now[0] = 103.0
+    with pytest.raises(GatewayProtocolError, match="authorization expired"):
+        connection.drain()
+    assert connection.closed
+
+
 def test_gateway_lan_cli_is_explicit_and_tls_only() -> None:
     assert server_main(["--gateway-lan"]) == 2
     assert server_main([
@@ -238,6 +274,8 @@ async def test_websocket_replay_cursor_ping_and_workspace_isolation(
     connection_id = a.context.connection_id
     a.close()
     assert connection_id not in runtime._connections
+    with pytest.raises(GatewayProtocolError, match="cursor"):
+        await runtime.connect(device_id="a", after_sequence=sequence + 100)
 
 
 @pytest.mark.asyncio
@@ -506,6 +544,99 @@ def test_restart_marks_pending_gateway_work_uncertain(tmp_path: Path) -> None:
     assert store.operations(workspace_id="wa", kind="job")[0]["status"] == "interrupted"
     with pytest.raises(GatewayStoreError, match="uncertain"):
         store.cached_response(device_id="a", workspace_id="wa", request_id="r")
+
+
+def test_durable_approval_is_scoped_terminal_and_not_resumed_after_restart(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "approval.sqlite3"
+    store = GatewayStore(path)
+    coordinator = DurableApprovalCoordinator(store)
+    request = coordinator.request(
+        workspace_id="a", tool_name="open_app", reason="confirm",
+        timeout=30, session_id="session", run_id="run", tool_call_id="call",
+    )
+    assert not coordinator.decide(
+        approval_id=request.approval_id, workspace_id="b", allow=True,
+        device_id="foreign",
+    )
+    assert coordinator.decide(
+        approval_id=request.approval_id, workspace_id="a", allow=False,
+        device_id="device",
+    )
+    assert not coordinator.decide(
+        approval_id=request.approval_id, workspace_id="a", allow=True,
+        device_id="device",
+    )
+    assert not coordinator.wait(request, timeout=0)
+    pending = coordinator.request(
+        workspace_id="a", tool_name="open_app", reason="confirm", timeout=30,
+    )
+    store.close()
+    reopened = GatewayStore(path)
+    reopened.recover_uncertain(time.time())
+    row = next(item for item in reopened.approvals(workspace_id="a")
+               if item["approval_id"] == pending.approval_id)
+    assert row["status"] == "interrupted"
+    assert not DurableApprovalCoordinator(reopened).decide(
+        approval_id=pending.approval_id, workspace_id="a", allow=True,
+        device_id="device",
+    )
+
+
+def test_legacy_desktop_waiter_delegates_to_durable_gateway_approval(
+    tmp_path: Path,
+) -> None:
+    gateway = SlonGateway(
+        database_path=tmp_path / "shared-approval.sqlite3",
+        artifact_root=tmp_path / "artifacts", signing_key=b"approval-key",
+    )
+    gateway.store.trust_device(
+        device_id="device", device_name="phone",
+        public_key=base64.b64encode(b"x" * 32).decode(),
+        key_fingerprint="device", workspace_id="desktop", created_at=time.time(),
+    )
+    listener = DesktopControlListener(gateway=gateway)
+    outcome: list[bool] = []
+    worker = threading.Thread(target=lambda: outcome.append(
+        listener._request_tool_approval("open_app", {}, "user", "confirm")
+    ))
+    worker.start()
+    deadline = time.time() + 2
+    approvals = []
+    while time.time() < deadline and not approvals:
+        approvals = gateway.store.approvals(workspace_id="desktop")
+        time.sleep(0.01)
+    approval_id = str(approvals[0]["approval_id"])
+    response = asyncio.run(gateway.router.dispatch(
+        GatewayContext("device", "desktop", "connection"),
+        GatewayEnvelope(
+            "decision", "approval.decide", utc_timestamp(), None, "decision-1",
+            {"approval_id": approval_id, "decision": "allow"},
+        ),
+    ))
+    worker.join(timeout=2)
+    assert response.type == "approval.decided"
+    assert outcome == [True]
+    with pytest.raises(GatewayProtocolError, match="unavailable"):
+        asyncio.run(gateway.router.dispatch(
+            GatewayContext("device", "desktop", "connection"),
+            GatewayEnvelope(
+                "duplicate", "approval.decide", utc_timestamp(), None, "decision-2",
+                {"approval_id": approval_id, "decision": "allow"},
+            ),
+        ))
+    gateway.close()
+
+
+def test_gateway_runtime_status_detects_stale_process(tmp_path: Path) -> None:
+    path = tmp_path / "status.sqlite3"
+    store = GatewayStore(path)
+    store.update_runtime_status(
+        instance_id="instance", state="running", heartbeat_at=time.time() - 30,
+        bind_host="192.168.1.20", tls_active=True,
+    )
+    assert read_gateway_status(path, stale_after_seconds=5)["state"] == "unavailable"
 
 
 def test_gateway_schema_rejects_future_version(tmp_path: Path) -> None:

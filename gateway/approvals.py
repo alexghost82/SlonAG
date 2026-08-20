@@ -1,0 +1,97 @@
+"""One durable, fail-closed approval lifecycle for Gateway and compatibility UI."""
+
+from __future__ import annotations
+
+import threading
+import time
+from dataclasses import dataclass
+from uuid import uuid4
+
+from gateway.store import GatewayStore
+
+
+@dataclass(frozen=True)
+class ApprovalRequest:
+    approval_id: str
+    workspace_id: str
+    tool_name: str
+    expires_at: float
+
+
+class DurableApprovalCoordinator:
+    def __init__(self, store: GatewayStore) -> None:
+        self.store = store
+        self._lock = threading.RLock()
+        self._waiters: dict[str, tuple[threading.Event, list[bool]]] = {}
+
+    def request(
+        self, *, workspace_id: str, tool_name: str, reason: str,
+        timeout: float, session_id: str | None = None, run_id: str | None = None,
+        tool_call_id: str | None = None,
+    ) -> ApprovalRequest:
+        now = time.time()
+        approval_id = str(uuid4())
+        self.store.create_approval(
+            approval_id=approval_id, workspace_id=workspace_id,
+            session_id=session_id, run_id=run_id, tool_call_id=tool_call_id,
+            tool_name=tool_name, reason=reason[:1000], created_at=now,
+            expires_at=now + max(0.01, timeout),
+        )
+        with self._lock:
+            self._waiters[approval_id] = (threading.Event(), [])
+        return ApprovalRequest(approval_id, workspace_id, tool_name, now + timeout)
+
+    def wait(self, request: ApprovalRequest, *, timeout: float) -> bool:
+        with self._lock:
+            waiter = self._waiters.get(request.approval_id)
+        if waiter is None:
+            return False
+        event, result = waiter
+        if not event.wait(max(0.0, timeout)):
+            self.store.decide_approval(
+                approval_id=request.approval_id, workspace_id=request.workspace_id,
+                decision="expired", device_id=None, now=time.time(),
+            )
+        with self._lock:
+            self._waiters.pop(request.approval_id, None)
+        return bool(result and result[0])
+
+    def decide(
+        self, *, approval_id: str, workspace_id: str, allow: bool,
+        device_id: str,
+    ) -> bool:
+        accepted = self.store.decide_approval(
+            approval_id=approval_id, workspace_id=workspace_id,
+            decision="allowed" if allow else "denied", device_id=device_id,
+            now=time.time(),
+        )
+        if not accepted:
+            return False
+        with self._lock:
+            waiter = self._waiters.get(approval_id)
+        if waiter is not None:
+            event, result = waiter
+            result.append(bool(allow))
+            event.set()
+        return True
+
+    def cancel(self, approval_id: str, *, workspace_id: str) -> None:
+        self.store.decide_approval(
+            approval_id=approval_id, workspace_id=workspace_id,
+            decision="cancelled", device_id=None, now=time.time(),
+        )
+        with self._lock:
+            waiter = self._waiters.pop(approval_id, None)
+        if waiter is not None:
+            waiter[0].set()
+
+    def close(self) -> None:
+        with self._lock:
+            approval_ids = tuple(self._waiters)
+        for approval_id in approval_ids:
+            row = self.store.approval(approval_id)
+            if row is not None:
+                self.cancel(approval_id, workspace_id=str(row["workspace_id"]))
+
+
+__all__ = ["ApprovalRequest", "DurableApprovalCoordinator"]

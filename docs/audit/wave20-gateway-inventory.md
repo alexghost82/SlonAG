@@ -61,5 +61,11 @@ codes are created and displayed only on the trusted local process with
 `--gateway-pair`; no unauthenticated endpoint can mint/read a code.
 
 Human TLS/LAN/iOS validation remains pending. Approval persistence currently
-backs Gateway-native approval operations; the legacy Desktop Control approval
-waiter remains a compatibility adapter and is not replayed after restart.
+backs one canonical `DurableApprovalCoordinator`. The legacy Desktop Control
+waiter is now a compatibility adapter over that coordinator: pending state is
+durable, decisions are workspace-scoped terminal transitions, restart marks
+uncertain requests interrupted, and no approval/tool operation is replayed.
+
+The separate LAN process publishes a sanitized heartbeat lease into the same
+Gateway database. Desktop UI reads it through a read-only connection and marks
+stale heartbeats unavailable; it never infers health from saved configuration.

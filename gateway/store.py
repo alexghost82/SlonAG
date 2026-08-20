@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Mapping
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class GatewayStoreError(RuntimeError):
@@ -107,6 +107,18 @@ class GatewayStore:
             CREATE TABLE used_access_jtis(
               jti TEXT PRIMARY KEY, used_at REAL NOT NULL
             );
+            CREATE TABLE gateway_approvals(
+              approval_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL,
+              session_id TEXT, run_id TEXT, tool_call_id TEXT, tool_name TEXT NOT NULL,
+              status TEXT NOT NULL, reason TEXT NOT NULL, created_at REAL NOT NULL,
+              expires_at REAL NOT NULL, decided_at REAL, decision_device_id TEXT
+            );
+            CREATE TABLE gateway_runtime_status(
+              singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+              instance_id TEXT NOT NULL, state TEXT NOT NULL, heartbeat_at REAL NOT NULL,
+              bind_host TEXT NOT NULL, tls_active INTEGER NOT NULL,
+              connected_devices INTEGER NOT NULL, error_code TEXT
+            );
             """
             for statement in schema.split(";"):
                 if statement.strip():
@@ -138,6 +150,24 @@ class GatewayStore:
                 )
             """)
             self._db.execute("UPDATE gateway_schema SET version=?", (SCHEMA_VERSION,))
+        if version in {1, 2, 3}:
+            self._db.execute("""
+                CREATE TABLE IF NOT EXISTS gateway_approvals(
+                  approval_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL,
+                  session_id TEXT, run_id TEXT, tool_call_id TEXT, tool_name TEXT NOT NULL,
+                  status TEXT NOT NULL, reason TEXT NOT NULL, created_at REAL NOT NULL,
+                  expires_at REAL NOT NULL, decided_at REAL, decision_device_id TEXT
+                )
+            """)
+            self._db.execute("UPDATE gateway_schema SET version=?", (SCHEMA_VERSION,))
+        self._db.execute("""
+            CREATE TABLE IF NOT EXISTS gateway_runtime_status(
+              singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+              instance_id TEXT NOT NULL, state TEXT NOT NULL, heartbeat_at REAL NOT NULL,
+              bind_host TEXT NOT NULL, tls_active INTEGER NOT NULL,
+              connected_devices INTEGER NOT NULL, error_code TEXT
+            )
+        """)
 
     def close(self) -> None:
         with self._lock:
@@ -230,6 +260,12 @@ class GatewayStore:
         if limit <= 0 or limit > 1000:
             raise ValueError("replay limit must be between 1 and 1000")
         with self._lock:
+            newest = self._db.execute(
+                "SELECT MAX(sequence) FROM gateway_events WHERE workspace_id=?",
+                (workspace_id,),
+            ).fetchone()[0]
+            if sequence > int(newest or 0):
+                raise GatewayStoreError("replay cursor is ahead of available history")
             oldest = self._db.execute(
                 "SELECT MIN(sequence) FROM gateway_events WHERE workspace_id=?",
                 (workspace_id,),
@@ -316,6 +352,10 @@ class GatewayStore:
                 "UPDATE device_sessions SET disconnected_at=? WHERE disconnected_at IS NULL",
                 (now,),
             )
+            self._db.execute(
+                "UPDATE gateway_approvals SET status='interrupted',decided_at=? WHERE status='pending'",
+                (now,),
+            )
         return changed
 
     def put_artifact(
@@ -362,10 +402,79 @@ class GatewayStore:
     def consume_access_jti(self, jti: str, now: float) -> bool:
         try:
             with self.transaction():
+                self._db.execute(
+                    "DELETE FROM used_access_jtis WHERE used_at<?", (now - 86_400.0,)
+                )
                 self._db.execute("INSERT INTO used_access_jtis VALUES (?,?)", (jti, now))
             return True
         except sqlite3.IntegrityError:
             return False
+
+    def create_approval(
+        self, *, approval_id: str, workspace_id: str, session_id: str | None,
+        run_id: str | None, tool_call_id: str | None, tool_name: str,
+        reason: str, created_at: float, expires_at: float,
+    ) -> None:
+        with self.transaction():
+            self._db.execute(
+                "INSERT INTO gateway_approvals VALUES (?,?,?,?,?,?,'pending',?,?,?,?,NULL)",
+                (approval_id, workspace_id, session_id, run_id, tool_call_id,
+                 tool_name, reason, created_at, expires_at, None),
+            )
+
+    def decide_approval(
+        self, *, approval_id: str, workspace_id: str, decision: str,
+        device_id: str | None, now: float,
+    ) -> bool:
+        if decision not in {"allowed", "denied", "expired", "cancelled"}:
+            raise ValueError("invalid approval decision")
+        with self.transaction():
+            changed = self._db.execute(
+                """UPDATE gateway_approvals SET status=?,decided_at=?,decision_device_id=?
+                WHERE approval_id=? AND workspace_id=? AND status='pending'
+                  AND expires_at>?""",
+                (decision, now, device_id, approval_id, workspace_id, now),
+            ).rowcount
+        return changed == 1
+
+    def approvals(self, *, workspace_id: str) -> list[Mapping[str, object]]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM gateway_approvals WHERE workspace_id=? ORDER BY created_at,approval_id",
+                (workspace_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def approval(self, approval_id: str) -> Mapping[str, object] | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM gateway_approvals WHERE approval_id=?", (approval_id,)
+            ).fetchone()
+        return None if row is None else dict(row)
+
+    def update_runtime_status(
+        self, *, instance_id: str, state: str, heartbeat_at: float,
+        bind_host: str, tls_active: bool, error_code: str | None = None,
+    ) -> None:
+        if state not in {"starting", "running", "degraded", "stopped", "error"}:
+            raise ValueError("invalid Gateway runtime state")
+        with self.transaction():
+            connected = int(self._db.execute(
+                "SELECT COUNT(*) FROM device_sessions WHERE disconnected_at IS NULL"
+            ).fetchone()[0])
+            self._db.execute(
+                """INSERT OR REPLACE INTO gateway_runtime_status
+                VALUES (1,?,?,?,?,?,?,?)""",
+                (instance_id, state, heartbeat_at, bind_host, int(tls_active),
+                 connected, error_code),
+            )
+
+    def runtime_status(self) -> Mapping[str, object] | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM gateway_runtime_status WHERE singleton=1"
+            ).fetchone()
+        return None if row is None else dict(row)
 
     def cached_response(
         self, *, device_id: str, workspace_id: str, request_id: str,

@@ -21,8 +21,8 @@ import signal
 import sys
 import time
 from pathlib import Path
+from uuid import uuid4
 
-from server.bind_policy import BindHostError
 from server.listener import DEFAULT_BIND_HOST, DEFAULT_BIND_PORT, DesktopControlListener
 from server.tls import TlsConfigError, ensure_tls_material
 
@@ -116,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
                 keyfile=args.tls_key,
                 repo_root=args.repo_root,
                 generate=bool(args.tls_generate),
+                common_name=args.host,
             )
         except TlsConfigError as exc:
             print(f"tls rejected: {exc}", file=sys.stderr)
@@ -125,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         print(material.message)
 
     gateway = None
+    gateway_instance_id = str(uuid4())
     try:
         if args.gateway_lan:
             from config.secrets import get_secret
@@ -136,6 +138,10 @@ def main(argv: list[str] | None = None) -> int:
             gateway = build_gateway(
                 repo_root=root, runtime_stack=stack, key_provider=get_secret
             )
+            gateway.store.update_runtime_status(
+                instance_id=gateway_instance_id, state="starting",
+                heartbeat_at=time.time(), bind_host=args.host, tls_active=True,
+            )
         listener = DesktopControlListener(
             bind_host=args.host,
             bind_port=args.port,
@@ -146,13 +152,24 @@ def main(argv: list[str] | None = None) -> int:
             advertise_bonjour=bool(args.bonjour),
             gateway=gateway,
         )
-    except (BindHostError, TlsConfigError, Exception) as exc:
+    except Exception as exc:  # composition boundary fails closed
         print(f"bind rejected: {exc}", file=sys.stderr)
         if gateway is not None:
+            gateway.store.update_runtime_status(
+                instance_id=gateway_instance_id, state="error",
+                heartbeat_at=time.time(), bind_host=args.host,
+                tls_active=bool(tls_cert and tls_key),
+                error_code=type(exc).__name__,
+            )
             gateway.close()
         return 2
 
     host, port = listener.start()
+    if gateway is not None:
+        gateway.store.update_runtime_status(
+            instance_id=gateway_instance_id, state="running",
+            heartbeat_at=time.time(), bind_host=host, tls_active=listener.tls_enabled,
+        )
     print(
         f"Desktop Control API listening on {listener.scheme}://{host}:{port}/v1 "
         f"(allow_non_loopback={listener.allow_non_loopback}, "
@@ -175,10 +192,21 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, _stop)
     try:
         while not stop and listener.listening:
+            if gateway is not None:
+                gateway.store.update_runtime_status(
+                    instance_id=gateway_instance_id, state="running",
+                    heartbeat_at=time.time(), bind_host=host,
+                    tls_active=listener.tls_enabled,
+                )
             time.sleep(0.25)
     finally:
         listener.stop()
         if gateway is not None:
+            gateway.store.update_runtime_status(
+                instance_id=gateway_instance_id, state="stopped",
+                heartbeat_at=time.time(), bind_host=host,
+                tls_active=listener.tls_enabled,
+            )
             gateway.close()
         print("Desktop Control API stopped.")
     return 0

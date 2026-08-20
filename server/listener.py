@@ -877,6 +877,18 @@ class DesktopControlListener:
             return response
         tool_waiter = self._pending_tool_approvals.pop(approval_id, None)
         decision = str(response.body.get("decision", "")).lower()
+        if self._gateway is not None:
+            try:
+                workspace = self._gateway.auth.workspace_for(principal.device_id)
+                durable = self._gateway.approvals.decide(
+                    approval_id=approval_id, workspace_id=workspace,
+                    allow=decision in {"approve", "allow"},
+                    device_id=principal.device_id,
+                )
+                if durable:
+                    return response
+            except Exception:
+                return _error(403, CODE_UNAUTHORIZED, "Approval decision rejected.")
         if tool_waiter is not None:
             event, result = tool_waiter
             result.append(decision in {"approve", "allow"})
@@ -904,13 +916,24 @@ class DesktopControlListener:
         source: str,
         reason: str,
     ) -> bool:
-        approval_id = f"tool:{secrets.token_urlsafe(12)}"
+        durable_request = None
+        if self._gateway is not None:
+            durable_request = self._gateway.approvals.request(
+                workspace_id=self._gateway_workspace_id, tool_name=tool_name,
+                reason=reason, timeout=120.0,
+            )
+        approval_id = (
+            durable_request.approval_id
+            if durable_request is not None
+            else f"tool:{secrets.token_urlsafe(12)}"
+        )
         event = threading.Event()
         result: list[bool] = []
         safe_details = strip_secret_fields(
             {"reason": reason, "arguments": dict(arguments)}
         )
-        self._pending_tool_approvals[approval_id] = (event, result)
+        if durable_request is None:
+            self._pending_tool_approvals[approval_id] = (event, result)
         self._approvals.seed(
             ApprovalInfo(
                 id=approval_id,
@@ -929,6 +952,10 @@ class DesktopControlListener:
                 "risk": "high",
             }
         )
+        if durable_request is not None:
+            approved = self._gateway.approvals.wait(durable_request, timeout=120.0)
+            self._approvals.decide(approval_id, "approve" if approved else "deny")
+            return approved
         if not event.wait(timeout=120.0):
             self._pending_tool_approvals.pop(approval_id, None)
             self._approvals.decide(approval_id, "deny")
@@ -1245,15 +1272,23 @@ def _make_handler(
                     (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
                 ).digest()
             ).decode("ascii")
+            try:
+                connection = asyncio.run(listener._gateway.websocket.connect(
+                    device_id=principal.device_id, after_sequence=cursor,
+                    validate_auth=lambda: listener._gateway.auth.validate_connection(
+                        auth_headers
+                    ),
+                ))
+            except GatewayProtocolError:
+                self._write_response(
+                    _error(409, CODE_INVALID_REQUEST, "Replay rejected.")
+                )
+                return
             self.send_response(101, "Switching Protocols")
             self.send_header("Upgrade", "websocket")
             self.send_header("Connection", "Upgrade")
             self.send_header("Sec-WebSocket-Accept", accept)
             self.end_headers()
-            connection = asyncio.run(listener._gateway.websocket.connect(
-                device_id=principal.device_id, after_sequence=cursor,
-                validate_auth=lambda: listener._gateway.auth.validate_connection(auth_headers),
-            ))
             try:
                 while listener.listening and not connection.closed:
                     if connection.heartbeat():

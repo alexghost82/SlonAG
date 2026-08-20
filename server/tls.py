@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import ssl
 import subprocess
+import ipaddress
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -89,6 +91,12 @@ def generate_self_signed_cert(
         str(int(days)),
         "-subj",
         f"/CN={common_name}",
+        "-addext",
+        (
+            f"subjectAltName=IP:{common_name}"
+            if _is_ip_address(common_name)
+            else f"subjectAltName=DNS:{common_name}"
+        ),
     ]
     try:
         completed = subprocess.run(
@@ -107,12 +115,21 @@ def generate_self_signed_cert(
         raise TlsConfigError(f"openssl failed: {err or completed.returncode}")
     if not cert_path.is_file() or not key_path.is_file():
         raise TlsConfigError("openssl reported success but cert/key missing")
+    os.chmod(key_path, 0o600)
     return TlsMaterial(
         certfile=cert_path,
         keyfile=key_path,
         generated=True,
         message=f"Generated self-signed TLS material for CN={common_name}",
     )
+
+
+def _is_ip_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
 
 
 def ensure_tls_material(

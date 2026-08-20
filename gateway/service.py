@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import time
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 from gateway.artifacts import ArtifactTransferService
+from gateway.approvals import DurableApprovalCoordinator
 from gateway.auth import GatewayAuthService
 from gateway.contracts import GatewayEnvelope, utc_timestamp
 from gateway.router import (
@@ -32,6 +36,7 @@ class SlonGateway:
         self.store = GatewayStore(database_path)
         self.store.recover_uncertain(time.time())
         self.auth = GatewayAuthService(store=self.store, signing_key=signing_key)
+        self.approvals = DurableApprovalCoordinator(self.store)
         self.router = GatewayRouter(idempotency_store=self.store)
         if session_manager is not None:
             bind_session_routes(self.router, session_manager)
@@ -42,6 +47,9 @@ class SlonGateway:
         self.router.register("system.health", self._health)
         self.router.register("node.list", self._node_list)
         self.router.register("automation.list", self._automation_list)
+        self.router.register("approval.list", self._approval_list)
+        if approval_handler is None:
+            self.router.register("approval.decide", self._approval_decide)
         self.artifacts = ArtifactTransferService(
             store=self.store, root=artifact_root, signing_key=signing_key
         )
@@ -56,12 +64,10 @@ class SlonGateway:
         )
         self.runtime_stack = runtime_stack
         self.session_manager = session_manager
+        self._jobs = ThreadPoolExecutor(max_workers=4, thread_name_prefix="slon-gateway-job")
         if session_manager is not None and runtime_stack is not None:
             if agent_runner is None:
                 self.router.register("agent.run", self._agent_run)
-            self.router.register("approval.list", self._approval_list)
-            if approval_handler is None:
-                self.router.register("approval.decide", self._approval_decide)
 
     def _health(
         self, context: GatewayContext, request: GatewayEnvelope
@@ -110,30 +116,69 @@ class SlonGateway:
             workspace_id=context.workspace_id, session_id=request.session_id,
             status="running", payload={"type": "agent.run"}, now=time.time(),
         )
-        try:
-            result = await self.runtime_stack.create_session_binding().run(
-                request.session_id, goal.strip(), workspace_id=context.workspace_id,
-                model=model,
-            )
-        except BaseException:
-            self.store.update_operation(operation_id, "interrupted", time.time())
-            raise
-        self.store.update_operation(
-            operation_id, "completed" if result.ok else "failed", time.time()
+        self._jobs.submit(
+            self._run_agent_job, context, request, goal.strip(), model, operation_id
         )
-        return response_envelope(request, "agent.completed", {
-            "ok": bool(result.ok), "answer": result.final_answer,
-            "stop_reason": result.stop_reason,
+        return response_envelope(request, "agent.accepted", {
+            "job_id": operation_id, "status": "running",
         })
+
+    def _run_agent_job(
+        self, context: GatewayContext, request: GatewayEnvelope, goal: str,
+        model, operation_id: str,
+    ) -> None:
+        from mark.tools import ToolExecutor
+
+        def confirm(decision) -> bool:
+            pending = self.approvals.request(
+                workspace_id=context.workspace_id, session_id=request.session_id,
+                run_id=operation_id, tool_call_id=None, tool_name=decision.tool_name,
+                reason=decision.reason or "Safety confirmation required", timeout=120,
+            )
+            event = GatewayEnvelope(
+                id=str(uuid4()), type="approval.requested", timestamp=utc_timestamp(),
+                session_id=request.session_id, request_id=request.request_id,
+                payload={
+                    "approval_id": pending.approval_id,
+                    "job_id": operation_id,
+                    "tool_name": decision.tool_name,
+                    "expires_at": pending.expires_at,
+                },
+            )
+            self.websocket.publish_now(context.workspace_id, event)
+            return self.approvals.wait(pending, timeout=120)
+
+        executor = ToolExecutor(
+            self.runtime_stack.tool_registry, self.runtime_stack.safety,
+            confirmer=confirm,
+        )
+        scoped_stack = replace(self.runtime_stack, tool_executor=executor)
+        try:
+            result = asyncio.run(scoped_stack.create_session_binding().run(
+                request.session_id, goal, workspace_id=context.workspace_id,
+                model=model,
+            ))
+            status = "completed" if result.ok else "failed"
+            payload = {
+                "job_id": operation_id, "ok": bool(result.ok),
+                "answer": result.final_answer, "stop_reason": result.stop_reason,
+            }
+        except BaseException:
+            status = "interrupted"
+            payload = {"job_id": operation_id, "ok": False, "code": "interrupted"}
+        self.store.update_operation(operation_id, status, time.time())
+        self.websocket.publish_now(context.workspace_id, GatewayEnvelope(
+            id=str(uuid4()), type="agent.completed", timestamp=utc_timestamp(),
+            session_id=request.session_id, request_id=request.request_id,
+            payload=payload,
+        ))
 
     def _approval_list(
         self, context: GatewayContext, request: GatewayEnvelope
     ) -> GatewayEnvelope:
-        values = self.store.operations(
-            workspace_id=context.workspace_id, kind="approval"
-        )
+        values = self.store.approvals(workspace_id=context.workspace_id)
         return response_envelope(request, "approval.listed", {"approvals": [
-            {"id": item["operation_id"], "status": item["status"],
+            {"id": item["approval_id"], "status": item["status"],
              "session_id": item["session_id"]}
             for item in values
         ]})
@@ -146,8 +191,10 @@ class SlonGateway:
         if not isinstance(approval_id, str) or decision not in {"allow", "deny"}:
             from gateway.contracts import GatewayProtocolError
             raise GatewayProtocolError("invalid_payload", "approval decision is invalid.")
-        status = "completed" if decision == "allow" else "denied"
-        if not self.store.update_operation(approval_id, status, time.time()):
+        if not self.approvals.decide(
+            approval_id=approval_id, workspace_id=context.workspace_id,
+            allow=decision == "allow", device_id=context.device_id,
+        ):
             from gateway.contracts import GatewayProtocolError
             raise GatewayProtocolError("approval_unavailable", "Approval is unavailable.")
         return response_envelope(request, "approval.decided", {
@@ -235,6 +282,8 @@ class SlonGateway:
         return self.websocket.publish_now(workspace_id, envelope)
 
     def close(self) -> None:
+        self.approvals.close()
+        self._jobs.shutdown(wait=True, cancel_futures=True)
         self.websocket.close()
         self.store.close()
 

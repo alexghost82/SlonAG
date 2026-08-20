@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from gateway.service import SlonGateway
 from server.listener import DesktopControlListener
 from server.schemas import CODE_UNAUTHORIZED
 from server.tls import TlsConfigError, ensure_tls_material, generate_self_signed_cert
@@ -89,5 +90,36 @@ def test_ensure_tls_material_generate(tmp_path: Path) -> None:
     assert material.generated is True
     assert material.certfile.is_file()
     assert material.keyfile.is_file()
+    assert material.keyfile.stat().st_mode & 0o777 == 0o600
+    decoded = ssl._ssl._test_decode_cert(str(material.certfile))
+    assert ("DNS", "mark-test.local") in decoded["subjectAltName"]
     again = ensure_tls_material(cert_dir=tmp_path, generate=False)
     assert again.generated is False
+
+
+def test_tls_gateway_rejects_unauthorized_websocket_upgrade(tmp_path: Path) -> None:
+    material = ensure_tls_material(
+        cert_dir=tmp_path / "certs", generate=True, common_name="127.0.0.1"
+    )
+    gateway = SlonGateway(
+        database_path=tmp_path / "gateway.sqlite3",
+        artifact_root=tmp_path / "artifacts", signing_key=b"gateway-tls-test-key",
+    )
+    listener = DesktopControlListener(
+        bind_port=_free_loopback_port(), tls_certfile=material.certfile,
+        tls_keyfile=material.keyfile, require_tls=True, gateway=gateway,
+    )
+    host, port = listener.start()
+    try:
+        request = urllib.request.Request(
+            f"https://{host}:{port}/v1/gateway/ws",
+            headers={"Upgrade": "websocket", "Sec-WebSocket-Key": "dGVzdA=="},
+        )
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(
+                request, timeout=2, context=ssl._create_unverified_context()
+            )
+        assert caught.value.code == 401
+    finally:
+        listener.stop()
+        gateway.close()

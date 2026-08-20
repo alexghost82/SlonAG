@@ -55,8 +55,10 @@ except Exception:  # pragma: no cover
     DesktopControlListener = None  # type: ignore[assignment,misc]
 try:
     from gateway.bootstrap import build_gateway
+    from gateway.status import read_gateway_status
 except Exception:  # pragma: no cover
     build_gateway = None  # type: ignore[assignment]
+    read_gateway_status = None  # type: ignore[assignment]
 try:
     from server.tls import ensure_tls_material
 except Exception:  # pragma: no cover
@@ -1110,6 +1112,7 @@ class MainWindow(QMainWindow):
         self._clock_tmr.timeout.connect(self._tick_clock)
         self._clock_tmr.start(1000)
         self._tick_clock()
+        self._gateway_lan_last_state: str | None = None
 
         # Metrik güncelleme timer'ı
         self._metric_tmr = QTimer(self)
@@ -1231,6 +1234,22 @@ class MainWindow(QMainWindow):
                 )
             except Exception:
                 pass
+        if read_gateway_status is not None:
+            status = read_gateway_status(BASE_DIR / "memory" / "slon_gateway.sqlite3")
+            state = str(status.get("state", "unavailable")).upper()
+            if state != self._gateway_lan_last_state:
+                self._gateway_lan_last_state = state
+                host = status.get("bind_host")
+                tls = bool(status.get("tls_active", False))
+                details = f" · {host} · TLS" if host and tls else ""
+                self._log_sig.emit(f"SYS: Gateway LAN {state}{details}")
+            if plane is not None:
+                plane.update_state(
+                    gateway_lan_state=state,
+                    gateway_lan_host=status.get("bind_host"),
+                    gateway_lan_tls=bool(status.get("tls_active", False)),
+                    gateway_connected_devices=int(status.get("connected_devices", 0)),
+                )
 
 
     def _build_header(self) -> QWidget:

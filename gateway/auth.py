@@ -41,6 +41,7 @@ class GatewayAuthService:
         self, *, store: GatewayStore, signing_key: bytes,
         pairing: PairingService | None = None,
         clock: Callable[[], float] | None = None,
+        access_ttl_seconds: float = 900.0,
     ) -> None:
         self.store = store
         self._clock = clock or time.time
@@ -48,6 +49,9 @@ class GatewayAuthService:
         self._lock = threading.RLock()
         self._pairing_limit = RateLimiter(
             capacity=10, refill_per_second=1 / 12, clock=self._clock
+        )
+        self._challenge_limit = RateLimiter(
+            capacity=8, refill_per_second=1 / 10, clock=self._clock
         )
         self._challenges: dict[str, tuple[str, float]] = {}
         self._tokens = TokenService(
@@ -58,6 +62,7 @@ class GatewayAuthService:
             jti_consume=lambda jti: self.store.consume_access_jti(
                 jti, float(self._clock())
             ),
+            access_ttl_seconds=access_ttl_seconds,
         )
 
     def start_pairing(self) -> PairingStart:
@@ -84,6 +89,8 @@ class GatewayAuthService:
         return credential.device_id
 
     def challenge(self, device_id: str) -> DeviceChallenge:
+        if not self._challenge_limit.allow(device_id):
+            raise GatewayAuthError("device challenge rate limit exceeded")
         if not self._active(device_id):
             raise GatewayAuthError("device is not trusted")
         nonce = secrets.token_urlsafe(32)
