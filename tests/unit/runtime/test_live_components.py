@@ -225,6 +225,12 @@ async def test_live_session_delegates_same_response_tool_batch_once() -> None:
 
 @pytest.mark.asyncio
 async def test_live_turn_callbacks_distinguish_interrupted_and_completed() -> None:
+    partial = SimpleNamespace(
+        interrupted=False,
+        input_transcription=SimpleNamespace(text="old question"),
+        output_transcription=SimpleNamespace(text="old answer"),
+        turn_complete=False,
+    )
     interrupted = SimpleNamespace(
         interrupted=True, input_transcription=None,
         output_transcription=None, turn_complete=False,
@@ -236,6 +242,7 @@ async def test_live_turn_callbacks_distinguish_interrupted_and_completed() -> No
         turn_complete=True,
     )
     session = FakeSession([
+        SimpleNamespace(data=None, server_content=partial, tool_call=None),
         SimpleNamespace(data=None, server_content=interrupted, tool_call=None),
         SimpleNamespace(data=None, server_content=completed, tool_call=None),
     ])
@@ -253,8 +260,11 @@ async def test_live_turn_callbacks_distinguish_interrupted_and_completed() -> No
         ),
     )
 
-    assert starts == ["start"]
-    assert finishes == [("", "", True), ("new question", "new answer", False)]
+    assert starts == ["start", "start"]
+    assert finishes == [
+        ("old question", "old answer", True),
+        ("new question", "new answer", False),
+    ]
 
 
 @pytest.mark.asyncio

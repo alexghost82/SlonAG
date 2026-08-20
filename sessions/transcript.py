@@ -14,7 +14,7 @@ from providers.contracts import (
     ToolResultMessage,
     UserMessage,
 )
-from sessions.contracts import TranscriptEntry, TranscriptKind
+from sessions.contracts import TranscriptEntry, TranscriptKind, TranscriptState
 
 
 class TranscriptFields(TypedDict, total=False):
@@ -87,6 +87,11 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
             continue
         flush_calls()
         if entry.kind is TranscriptKind.TEXT:
+            if (
+                entry.role == "assistant"
+                and entry.state is not TranscriptState.COMPLETED
+            ):
+                continue
             if entry.role == "user":
                 result.append(UserMessage(entry.text or ""))
             elif entry.role == "system":
@@ -113,8 +118,9 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
             while cursor < len(result) and isinstance(result[cursor], ToolResultMessage):
                 tool_result = result[cursor]
                 assert isinstance(tool_result, ToolResultMessage)
-                if tool_result.tool_call_id in expected:
-                    expected.pop(tool_result.tool_call_id)
+                if tool_result.tool_call_id not in expected:
+                    raise ValueError("unexpected or duplicate tool result in transcript")
+                expected.pop(tool_result.tool_call_id)
                 protocol_safe.append(tool_result)
                 cursor += 1
             for call_id, name in expected.items():
@@ -125,6 +131,8 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
                 ))
             index = cursor
             continue
+        if isinstance(message, ToolResultMessage):
+            raise ValueError("orphan tool result in transcript")
         index += 1
     return tuple(protocol_safe)
 

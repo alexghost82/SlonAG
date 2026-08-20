@@ -20,7 +20,7 @@ from sessions.contracts import (
     TranscriptKind,
     TranscriptState,
 )
-from sessions.store import SessionStore
+from sessions.store import SessionInactiveError, SessionStore
 
 
 class SessionNotFoundError(KeyError):
@@ -80,10 +80,10 @@ class SessionManager:
         if session.status is SessionStatus.ARCHIVED:
             raise SessionStateError("archived session cannot be resumed")
         if session.status is SessionStatus.CLOSED:
-            self.store.update_status(
-                session_id, workspace_id=workspace_id,
-                status=SessionStatus.ACTIVE, updated_at=_now(),
-            )
+            if not self.store.resume_session(
+                session_id, workspace_id=workspace_id, updated_at=_now()
+            ):
+                raise SessionStateError("session could not be resumed")
         return self.get(session_id, workspace_id=workspace_id)
 
     def close(self, session_id: str, *, workspace_id: str) -> Session:
@@ -95,24 +95,25 @@ class SessionManager:
                 cancellers = tuple(self._cancellers.pop(session_id, ()))
             for cancel in cancellers:
                 cancel()
-            now = _now()
-            for run in session.active_runs:
-                self.store.update_run_status(run.id, RunStatus.CANCELLED, now)
-            self.store.update_status(
-                session_id, workspace_id=workspace_id,
-                status=SessionStatus.CLOSED, updated_at=now,
-            )
+            try:
+                self.store.close_session(
+                    session_id, workspace_id=workspace_id, updated_at=_now()
+                )
+            except SessionInactiveError as exc:
+                raise SessionStateError("session is not active") from exc
         return self.get(session_id, workspace_id=workspace_id)
 
     def archive(self, session_id: str, *, workspace_id: str) -> Session:
         session = self.get(session_id, workspace_id=workspace_id)
-        if session.active_runs:
-            raise SessionStateError("session with active runs cannot be archived")
         if session.status is not SessionStatus.ARCHIVED:
-            self.store.update_status(
-                session_id, workspace_id=workspace_id,
-                status=SessionStatus.ARCHIVED, updated_at=_now(),
-            )
+            try:
+                changed = self.store.archive_session(
+                    session_id, workspace_id=workspace_id, updated_at=_now()
+                )
+            except SessionInactiveError as exc:
+                raise SessionStateError("session with active runs cannot be archived") from exc
+            if not changed:
+                raise SessionStateError("session could not be archived")
         return self.get(session_id, workspace_id=workspace_id)
 
     def delete(self, session_id: str, *, workspace_id: str) -> bool:
@@ -146,7 +147,10 @@ class SessionManager:
             tool_call_id=tool_call_id, tool_name=tool_name, data=data,
             artifacts=artifacts, media_references=media_references,
         )
-        return self.store.append_entry(entry, workspace_id=workspace_id)
+        try:
+            return self.store.append_entry(entry, workspace_id=workspace_id)
+        except SessionInactiveError as exc:
+            raise SessionStateError("session is not active") from exc
 
     def start_run(
         self,
@@ -167,15 +171,18 @@ class SessionManager:
             effective_provider_id=effective_provider_id,
             effective_model_id=effective_model_id,
         )
-        self.store.insert_run(run, workspace_id=workspace_id)
+        try:
+            self.store.insert_run(run, workspace_id=workspace_id)
+        except SessionInactiveError as exc:
+            raise SessionStateError("session is not active") from exc
         return run
 
     def finish_run(self, run: SessionRun, status: RunStatus) -> SessionRun:
         if status is RunStatus.ACTIVE:
             raise ValueError("finish status must be terminal")
         now = _now()
-        self.store.update_run_status(run.id, status, now)
-        return replace(run, status=status, updated_at=now)
+        changed = self.store.update_run_status(run.id, status, now)
+        return replace(run, status=status, updated_at=now) if changed else run
 
     def record_effective_model(
         self, run: SessionRun, *, provider_id: str, model_id: str

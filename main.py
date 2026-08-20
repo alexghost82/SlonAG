@@ -114,7 +114,7 @@ from runtime.lifecycle import run_live_lifecycle
 from runtime.live_session import receive_live_session
 from runtime.tool_bridge import LiveToolBridge, build_live_registry
 from runtime.events import RuntimeEventBus, RuntimeEventKind, UIRuntimeEventSink
-from sessions import ModelPolicy
+from sessions import ModelPolicy, TranscriptKind
 
 
 class SlonLive:
@@ -142,20 +142,31 @@ class SlonLive:
         self.selected_model = selected_model
         self.workspace_id = workspace_id
         session_manager = getattr(runtime_stack, "session_manager", None)
-        if session_id is None and session_manager is not None:
-            logical_session = session_manager.create(
-                title="Live conversation",
-                agent_id="slon",
-                model_policy=ModelPolicy(
-                    selected_model.provider_id, selected_model.model_id
-                ),
-                workspace_id=workspace_id,
-            )
-            session_id = logical_session.id
+        if session_manager is not None:
+            if session_id is None:
+                logical_session = session_manager.create(
+                    title="Live conversation",
+                    agent_id="slon",
+                    model_policy=ModelPolicy(
+                        selected_model.provider_id, selected_model.model_id
+                    ),
+                    workspace_id=workspace_id,
+                )
+                session_id = logical_session.id
+            else:
+                logical_session = session_manager.resume(
+                    session_id, workspace_id=workspace_id
+                )
+                if (
+                    logical_session.model_policy.provider_id,
+                    logical_session.model_policy.model_id,
+                ) != (selected_model.provider_id, selected_model.model_id):
+                    raise ValueError("selected model does not match session model policy")
         self.session_id = session_id or str(uuid.uuid4())
         self.connection_generation = 0
         self._active_turn_id: str | None = None
         self._active_session_run = None
+        self._active_user_persisted = False
         self._closed = False
         base_registry = getattr(runtime_stack, "tool_registry", None)
         policy = getattr(runtime_stack, "safety", None)
@@ -209,6 +220,15 @@ class SlonLive:
                 effective_model_id=self.selected_model.model_id,
                 turn_id=self._active_turn_id,
             )
+            manager.append_event(
+                self.session_id,
+                workspace_id=self.workspace_id,
+                turn_id=self._active_turn_id,
+                kind=TranscriptKind.TEXT,
+                role="user",
+                text=text,
+            )
+            self._active_user_persisted = True
         self.latency_trace.mark("user_speech_end")
         self.latency_trace.mark("provider_request_start")
         asyncio.run_coroutine_threadsafe(
@@ -284,6 +304,7 @@ class SlonLive:
         )
 
     async def _execute_tool(self, fc) -> types.FunctionResponse:
+        await self._start_live_turn()
         name = fc.name
         args = dict(fc.args or {})
         print(f"[SLON] 🔧 {name}")
@@ -299,6 +320,21 @@ class SlonLive:
             progress=0.0,
         )
         self.latency_trace.mark("tool_execution_start")
+        manager = getattr(self.runtime_stack, "session_manager", None)
+        if manager is not None and self._active_turn_id is not None:
+            from sessions import TranscriptKind
+
+            await asyncio.to_thread(
+                manager.append_event,
+                self.session_id,
+                workspace_id=self.workspace_id,
+                turn_id=self._active_turn_id,
+                kind=TranscriptKind.TOOL_CALL,
+                role="assistant",
+                tool_call_id=fc.id,
+                tool_name=name,
+                data=args,
+            )
 
         result = await self.tool_bridge.execute(
             name,
@@ -322,6 +358,33 @@ class SlonLive:
             )
         print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
+        if manager is not None and self._active_turn_id is not None:
+            from sessions import TranscriptKind
+
+            artifact_metadata = tuple(
+                {
+                    "kind": item.kind,
+                    "path": item.path,
+                    "uri": item.uri,
+                    "mime_type": item.mime_type,
+                }
+                for item in result.artifacts
+            )
+            await asyncio.to_thread(
+                manager.append_event,
+                self.session_id,
+                workspace_id=self.workspace_id,
+                turn_id=self._active_turn_id,
+                kind=TranscriptKind.TOOL_RESULT,
+                role="tool",
+                tool_call_id=fc.id,
+                tool_name=name,
+                data={
+                    "result": result.data if result.ok else None,
+                    "error": None if result.ok else result.message or result.code,
+                },
+                artifacts=artifact_metadata,
+            )
         self._emit_event(
             RuntimeEventKind.TOOL_FINISHED,
             tool_call_id=fc.id,
@@ -393,6 +456,7 @@ class SlonLive:
         if self._active_turn_id is not None:
             return
         self._active_turn_id = str(uuid.uuid4())
+        self._active_user_persisted = False
         manager = getattr(self.runtime_stack, "session_manager", None)
         if manager is not None:
             self._active_session_run = await asyncio.to_thread(
@@ -419,7 +483,7 @@ class SlonLive:
             )
 
             def persist() -> None:
-                if user_text:
+                if user_text and not self._active_user_persisted:
                     manager.append_event(
                         self.session_id, workspace_id=self.workspace_id,
                         turn_id=turn_id, kind=TranscriptKind.TEXT,
@@ -440,6 +504,7 @@ class SlonLive:
             await asyncio.to_thread(persist)
         self._active_turn_id = None
         self._active_session_run = None
+        self._active_user_persisted = False
 
     async def _play_audio(self):
         await self.audio.play()
@@ -461,6 +526,7 @@ class SlonLive:
                 manager.finish_run(self._active_session_run, RunStatus.INTERRUPTED)
         self._active_session_run = None
         self._active_turn_id = None
+        self._active_user_persisted = False
         self.set_speaking(False)
         self.session = None
         self._loop = None
@@ -483,17 +549,32 @@ class SlonLive:
             api_key=_get_api_key(),
             http_options={"api_version": "v1beta"},
         )
-        await run_live_lifecycle(
-            client=client,
-            model_id=self.selected_model.model_id,
-            build_config=self._build_config,
-            on_connected=self._on_connected,
-            on_disconnected=self._on_disconnected,
-            tasks=self._session_tasks,
-            ui=self.ui,
-            emit_event=self._emit_event,
-            should_stop=lambda: self._closed,
+        task = asyncio.current_task()
+        loop = asyncio.get_running_loop()
+        manager = getattr(self.runtime_stack, "session_manager", None)
+
+        def cancel() -> None:
+            if task is not None:
+                loop.call_soon_threadsafe(task.cancel)
+
+        unregister = (
+            manager.register_canceller(self.session_id, cancel)
+            if manager is not None else lambda: None
         )
+        try:
+            await run_live_lifecycle(
+                client=client,
+                model_id=self.selected_model.model_id,
+                build_config=self._build_config,
+                on_connected=self._on_connected,
+                on_disconnected=self._on_disconnected,
+                tasks=self._session_tasks,
+                ui=self.ui,
+                emit_event=self._emit_event,
+                should_stop=lambda: self._closed,
+            )
+        finally:
+            unregister()
 
     async def close(self) -> None:
         """Idempotently stop the transport and close the logical session."""
@@ -501,13 +582,15 @@ class SlonLive:
             return
         self._closed = True
         session = self.session
-        if session is not None:
-            await session.close()
         manager = getattr(self.runtime_stack, "session_manager", None)
-        if manager is not None:
-            await asyncio.to_thread(
-                manager.close, self.session_id, workspace_id=self.workspace_id
-            )
+        try:
+            if session is not None:
+                await session.close()
+        finally:
+            if manager is not None:
+                await asyncio.to_thread(
+                    manager.close, self.session_id, workspace_id=self.workspace_id
+                )
 
 JarvisLive = SlonLive
 

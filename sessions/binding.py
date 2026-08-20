@@ -7,7 +7,7 @@ import asyncio
 import threading
 
 from providers.contracts import ConversationMessage, ModelInfo
-from sessions.contracts import RunStatus, TranscriptState
+from sessions.contracts import RunStatus, SessionStatus, TranscriptState
 from sessions.manager import SessionManager
 from sessions.transcript import entry_fields, messages_from_entries
 
@@ -58,6 +58,10 @@ class SessionAgentBinding:
                 event_loop.call_soon_threadsafe(task.cancel)
 
         unregister = self.manager.register_canceller(session_id, cancel)
+        if self.manager.get(session_id, workspace_id=workspace_id).status is not SessionStatus.ACTIVE:
+            unregister()
+            cancel_event.set()
+            raise RuntimeError("session closed before provider dispatch")
         loop = self.runtime_stack.create_agent_loop(
             model=model, budget=budget, cancel_event=cancel_event
         )

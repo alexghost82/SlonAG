@@ -56,6 +56,7 @@ async def receive_live_session(
             accept_playback = False
             invalidated = interrupt_playback()
             ui.write_log(f"SYS: playback interrupted cleared={invalidated}")
+            input_transcript.clear()
             output_transcript.clear()
             cancel_turn = getattr(latency_trace, "cancel_turn", None)
             if cancel_turn is not None:

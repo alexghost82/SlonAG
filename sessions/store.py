@@ -34,6 +34,10 @@ class SessionCorruptionError(SessionStoreError):
         self.backup_path = backup_path
 
 
+class SessionInactiveError(SessionStoreError):
+    pass
+
+
 class SessionStore:
     """One transaction-safe SQLite store at an injected path."""
 
@@ -88,15 +92,19 @@ class SessionStore:
         temporary = target_path.with_suffix(target_path.suffix + ".tmp")
         if temporary.exists():
             temporary.unlink()
-        with self._lock:
-            destination = sqlite3.connect(temporary)
-            try:
-                self._connection.backup(destination)
-                check = destination.execute("PRAGMA integrity_check").fetchone()
-                if check is None or str(check[0]).lower() != "ok":
-                    raise SessionStoreError("session backup integrity check failed")
-            finally:
-                destination.close()
+        try:
+            with self._lock:
+                destination = sqlite3.connect(temporary)
+                try:
+                    self._connection.backup(destination)
+                    checks = destination.execute("PRAGMA integrity_check").fetchall()
+                    if not checks or any(str(row[0]).lower() != "ok" for row in checks):
+                        raise SessionStoreError("session backup integrity check failed")
+                finally:
+                    destination.close()
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         temporary.replace(target_path)
         return target_path
 
@@ -150,11 +158,68 @@ class SessionStore:
             )
         return cursor.rowcount > 0
 
+    def resume_session(
+        self, session_id: str, *, workspace_id: str, updated_at: str
+    ) -> bool:
+        with self.transaction():
+            cursor = self._connection.execute(
+                """UPDATE sessions SET status = ?, updated_at = ?
+                WHERE id = ? AND workspace_id = ? AND status = ?""",
+                (SessionStatus.ACTIVE.value, updated_at, session_id, workspace_id,
+                 SessionStatus.CLOSED.value),
+            )
+        return cursor.rowcount > 0
+
+    def archive_session(
+        self, session_id: str, *, workspace_id: str, updated_at: str
+    ) -> bool:
+        with self.transaction():
+            active = self._connection.execute(
+                """SELECT 1 FROM session_runs
+                WHERE session_id = ? AND status = ? LIMIT 1""",
+                (session_id, RunStatus.ACTIVE.value),
+            ).fetchone()
+            if active is not None:
+                raise SessionInactiveError("session has active runs")
+            cursor = self._connection.execute(
+                """UPDATE sessions SET status = ?, updated_at = ?
+                WHERE id = ? AND workspace_id = ? AND status IN (?, ?)""",
+                (SessionStatus.ARCHIVED.value, updated_at, session_id, workspace_id,
+                 SessionStatus.ACTIVE.value, SessionStatus.CLOSED.value),
+            )
+        return cursor.rowcount > 0
+
+    def close_session(
+        self, session_id: str, *, workspace_id: str, updated_at: str
+    ) -> bool:
+        with self.transaction():
+            row = self._connection.execute(
+                "SELECT status FROM sessions WHERE id = ? AND workspace_id = ?",
+                (session_id, workspace_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(session_id)
+            current = SessionStatus(str(row["status"]))
+            if current is SessionStatus.CLOSED:
+                return False
+            if current is not SessionStatus.ACTIVE:
+                raise SessionInactiveError("session is not active")
+            self._connection.execute(
+                "UPDATE session_runs SET status = ?, updated_at = ? WHERE session_id = ? AND status = ?",
+                (RunStatus.CANCELLED.value, updated_at, session_id, RunStatus.ACTIVE.value),
+            )
+            self._connection.execute(
+                "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
+                (SessionStatus.CLOSED.value, updated_at, session_id),
+            )
+        return True
+
     def delete_session(self, session_id: str, *, workspace_id: str) -> bool:
         with self.transaction():
             cursor = self._connection.execute(
-                "DELETE FROM sessions WHERE id = ? AND workspace_id = ?",
-                (session_id, workspace_id),
+                """DELETE FROM sessions
+                WHERE id = ? AND workspace_id = ? AND status = ?""",
+                (session_id, workspace_id, SessionStatus.ARCHIVED.value),
             )
         return cursor.rowcount > 0
 
@@ -166,6 +231,8 @@ class SessionStore:
             ).fetchone()
             if owner is None:
                 raise KeyError(entry.session_id)
+            if str(owner["status"]) != SessionStatus.ACTIVE.value:
+                raise SessionInactiveError("session is not active")
             sequence = int(self._connection.execute(
                 "SELECT COALESCE(MAX(sequence), 0) + 1 FROM transcript_entries WHERE session_id = ?",
                 (entry.session_id,),
@@ -204,11 +271,13 @@ class SessionStore:
     def insert_run(self, run: SessionRun, *, workspace_id: str) -> None:
         with self.transaction():
             owner = self._connection.execute(
-                "SELECT 1 FROM sessions WHERE id = ? AND workspace_id = ?",
+                "SELECT status FROM sessions WHERE id = ? AND workspace_id = ?",
                 (run.session_id, workspace_id),
             ).fetchone()
             if owner is None:
                 raise KeyError(run.session_id)
+            if str(owner["status"]) != SessionStatus.ACTIVE.value:
+                raise SessionInactiveError("session is not active")
             self._connection.execute(
                 "INSERT INTO session_runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (run.id, run.session_id, run.turn_id, run.status.value,
@@ -218,9 +287,20 @@ class SessionStore:
 
     def update_run_status(self, run_id: str, status: RunStatus, updated_at: str) -> bool:
         with self.transaction():
+            row = self._connection.execute(
+                "SELECT status FROM session_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            current = RunStatus(str(row["status"]))
+            if current is status:
+                return True
+            if current is not RunStatus.ACTIVE:
+                return False
             cursor = self._connection.execute(
-                "UPDATE session_runs SET status = ?, updated_at = ? WHERE id = ?",
-                (status.value, updated_at, run_id),
+                """UPDATE session_runs SET status = ?, updated_at = ?
+                WHERE id = ? AND status = ?""",
+                (status.value, updated_at, run_id, RunStatus.ACTIVE.value),
             )
         return cursor.rowcount > 0
 
@@ -314,4 +394,7 @@ def _run_from_row(row: sqlite3.Row) -> SessionRun:
     )
 
 
-__all__ = ["SessionCorruptionError", "SessionStore", "SessionStoreError"]
+__all__ = [
+    "SessionCorruptionError", "SessionInactiveError", "SessionStore",
+    "SessionStoreError",
+]

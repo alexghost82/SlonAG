@@ -27,6 +27,7 @@ from sessions import (
 )
 from sessions.binding import SessionAgentBinding
 from sessions.manager import SessionNotFoundError, SessionStateError
+from sessions.store import SessionInactiveError
 from sessions.transcript import entry_fields, messages_from_entries
 from mark.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
 from mark.tools import ToolExecutor, ToolRegistry, ToolSpec
@@ -140,6 +141,67 @@ def test_orphan_tool_call_hydrates_as_error_without_replay(tmp_path: Path) -> No
     assert isinstance(hydrated[-1], ToolResultMessage)
     assert hydrated[-1].tool_call_id == "uncertain"
     assert "not replayed" in (hydrated[-1].error or "")
+
+
+def test_interrupted_assistant_partial_is_not_hydrated_as_completed(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    manager.append_event(
+        session.id, workspace_id="a", turn_id="interrupted",
+        kind=TranscriptKind.TEXT, state=TranscriptState.INTERRUPTED,
+        role="assistant", text="partial answer",
+    )
+    assert messages_from_entries(
+        manager.get(session.id, workspace_id="a").transcript
+    ) == ()
+
+
+def test_orphan_or_duplicate_tool_results_are_rejected(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    manager.append_event(
+        session.id, workspace_id="a", turn_id="bad",
+        kind=TranscriptKind.TOOL_RESULT, role="tool",
+        tool_call_id="orphan", tool_name="read", data={"result": "x"},
+    )
+    with pytest.raises(ValueError, match="orphan"):
+        messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
+
+
+def test_store_rejects_stale_append_and_run_after_close(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    manager.close(session.id, workspace_id="a")
+    with pytest.raises(SessionStateError):
+        manager.append_event(
+            session.id, workspace_id="a", turn_id="late",
+            kind=TranscriptKind.TEXT, role="user", text="late",
+        )
+    with pytest.raises(SessionStateError):
+        manager.start_run(session.id, workspace_id="a")
+
+
+def test_run_terminal_state_is_compare_and_set(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    run = manager.start_run(session.id, workspace_id="a")
+
+    assert manager.store.update_run_status(run.id, RunStatus.COMPLETED, "first")
+    assert not manager.store.update_run_status(run.id, RunStatus.INTERRUPTED, "late")
+    assert manager.store.update_run_status(run.id, RunStatus.COMPLETED, "repeat")
+    assert manager.get(session.id, workspace_id="a").active_runs == ()
+
+
+def test_store_does_not_close_archived_session(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = _create(manager)
+    manager.archive(session.id, workspace_id="a")
+
+    with pytest.raises(SessionInactiveError):
+        manager.store.close_session(
+            session.id, workspace_id="a", updated_at="late"
+        )
+    assert manager.get(session.id, workspace_id="a").status is SessionStatus.ARCHIVED
 
 
 def test_restart_recovery_interrupts_active_runs_and_streams(tmp_path: Path) -> None:
