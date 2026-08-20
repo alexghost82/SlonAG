@@ -224,6 +224,7 @@ class SlonLive:
             name,
             args,
             intent="Gemini Live function call",
+            call_id=fc.id,
         )
         self.latency_trace.mark("tool_execution_finish")
         if not self.ui.muted:
@@ -234,7 +235,7 @@ class SlonLive:
         else:
             response = {"error": result.message, "code": result.code}
             self.speak_error(name, result.message or result.code)
-        print(f"[SLON] 📤 {name} → {str(response)[:80]}")
+        print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
         return types.FunctionResponse(id=fc.id, name=name, response=response)
 

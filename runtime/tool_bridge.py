@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import queue
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
@@ -36,8 +38,14 @@ class LiveToolBridge:
         speak: Callable[[str], object],
         registry: ToolRegistry | None = None,
         policy: SafetyPolicy | None = None,
+        approval_timeout_seconds: float = 30.0,
+        dedupe_limit: int = 256,
     ) -> None:
         self.ui = ui
+        self.approval_timeout_seconds = max(0.01, approval_timeout_seconds)
+        self._dedupe_limit = max(1, dedupe_limit)
+        self._calls: dict[str, asyncio.Future[ToolResult]] = {}
+        self._calls_lock = asyncio.Lock()
         self.registry = registry or build_live_registry(ui=ui, speak=speak)
         self.executor = ToolExecutor(
             self.registry,
@@ -49,19 +57,73 @@ class LiveToolBridge:
         control_plane = getattr(self.ui, "control_plane", None)
         if control_plane is None:
             return False
-        try:
-            return bool(
-                control_plane.request_approval(
+        result: queue.Queue[bool] = queue.Queue(maxsize=1)
+
+        def request() -> None:
+            try:
+                approved = bool(control_plane.request_approval(
                     decision.tool_name,
                     decision.args,
                     source="desktop_ui",
                     reason=decision.reason or "SafetyPolicy confirmation required",
-                )
-            )
-        except Exception:
+                ))
+            except Exception:
+                approved = False
+            try:
+                result.put_nowait(approved)
+            except queue.Full:
+                pass
+
+        threading.Thread(target=request, name="slon-approval", daemon=True).start()
+        try:
+            return result.get(timeout=self.approval_timeout_seconds)
+        except queue.Empty:
             return False
 
     async def execute(
+        self,
+        name: str,
+        arguments: Mapping[str, object],
+        *,
+        intent: str,
+        call_id: str | None = None,
+    ) -> ToolResult:
+        if not call_id:
+            return await self._execute_once(name, arguments, intent=intent)
+
+        async with self._calls_lock:
+            existing = self._calls.get(call_id)
+            if existing is None:
+                existing = asyncio.get_running_loop().create_future()
+                self._calls[call_id] = existing
+                owner = True
+                while len(self._calls) > self._dedupe_limit:
+                    oldest = next(iter(self._calls))
+                    if oldest == call_id:
+                        break
+                    self._calls.pop(oldest)
+            else:
+                owner = False
+        if not owner:
+            return await asyncio.shield(existing)
+
+        try:
+            result = await self._execute_once(name, arguments, intent=intent)
+        except asyncio.CancelledError:
+            result = ToolResult(
+                ok=False,
+                code="cancelled",
+                message="Tool execution was cancelled.",
+            )
+            if not existing.done():
+                existing.set_result(result)
+            raise
+        else:
+            if not existing.done():
+                existing.set_result(result)
+            return result
+
+    async def _execute_once(
         self,
         name: str,
         arguments: Mapping[str, object],
@@ -73,13 +135,19 @@ class LiveToolBridge:
             current_file = getattr(self.ui, "current_file", None)
             if current_file:
                 checked["file_path"] = current_file
-        return await asyncio.to_thread(
-            self.executor.execute,
-            name,
-            checked,
-            source=UntrustedSource.USER,
-            intent=intent,
-        )
+        cancel_event = threading.Event()
+        try:
+            return await asyncio.to_thread(
+                self.executor.execute,
+                name,
+                checked,
+                source=UntrustedSource.USER,
+                intent=intent,
+                cancel_event=cancel_event,
+            )
+        except asyncio.CancelledError:
+            cancel_event.set()
+            raise
 
 
 __all__ = ["LiveToolBridge", "build_live_registry"]

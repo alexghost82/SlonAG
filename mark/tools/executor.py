@@ -43,9 +43,13 @@ class ToolExecutor:
         *,
         source: UntrustedSource,
         intent: str = "",
+        cancel_event: threading.Event | None = None,
     ) -> ToolResult:
         """Execute one tool call and return a non-throwing structured outcome."""
         started_at = time.monotonic()
+
+        if cancel_event is not None and cancel_event.is_set():
+            return self._error("cancelled", "Tool execution was cancelled.", started_at)
 
         try:
             spec = self._registry.get(name)
@@ -88,6 +92,9 @@ class ToolExecutor:
                 return self._error(
                     "confirmation_declined", "Confirmation was declined.", started_at
                 )
+
+        if cancel_event is not None and cancel_event.is_set():
+            return self._error("cancelled", "Tool execution was cancelled.", started_at)
 
         outcome = self._invoke(spec.handler, checked, spec.timeout_seconds)
         if outcome is _TIMED_OUT:

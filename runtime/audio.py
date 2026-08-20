@@ -11,6 +11,26 @@ SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
 CHANNELS = 1
 CHUNK_SIZE = 1024
+MIC_QUEUE_CHUNKS = 10
+PLAYBACK_QUEUE_CHUNKS = 32
+
+
+class FreshAudioQueue(asyncio.Queue):
+    """Bounded queue that discards the oldest chunk instead of stale buffering."""
+
+    def __init__(self, maxsize: int) -> None:
+        super().__init__(maxsize=maxsize)
+        self.dropped_chunks = 0
+
+    def put_nowait(self, item: Any) -> None:
+        if self.full():
+            try:
+                self.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            else:
+                self.dropped_chunks += 1
+        super().put_nowait(item)
 
 
 class AudioPipeline:
@@ -31,14 +51,14 @@ class AudioPipeline:
         self.speaking_lock = speaking_lock
         self.is_speaking = is_speaking
         self.session: Any = None
-        self.audio_in_queue: asyncio.Queue[bytes] | None = None
-        self.out_queue: asyncio.Queue[dict[str, object]] | None = None
+        self.audio_in_queue: FreshAudioQueue | None = None
+        self.out_queue: FreshAudioQueue | None = None
 
     def bind(self, session: Any) -> None:
         """Bind fresh queues to one newly connected session."""
         self.session = session
-        self.audio_in_queue = asyncio.Queue()
-        self.out_queue = asyncio.Queue(maxsize=10)
+        self.audio_in_queue = FreshAudioQueue(PLAYBACK_QUEUE_CHUNKS)
+        self.out_queue = FreshAudioQueue(MIC_QUEUE_CHUNKS)
 
     def unbind(self) -> None:
         self.session = None
@@ -52,6 +72,7 @@ class AudioPipeline:
             message = await self.out_queue.get()
             if not getattr(self.latency_trace, "active", False):
                 self.latency_trace.start_turn()
+                self.latency_trace.mark("user_input_activity_start")
                 self.latency_trace.mark("provider_request_start")
             await self.session.send_realtime_input(media=message)
 
@@ -109,4 +130,4 @@ class AudioPipeline:
             stream.close()
 
 
-__all__ = ["AudioPipeline"]
+__all__ = ["AudioPipeline", "FreshAudioQueue"]

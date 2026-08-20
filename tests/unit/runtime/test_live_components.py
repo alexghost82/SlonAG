@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from runtime.live_session import receive_live_session
-from runtime.audio import AudioPipeline
+from runtime.audio import AudioPipeline, FreshAudioQueue
 from runtime.tool_bridge import LiveToolBridge
 from runtime.lifecycle import run_live_lifecycle
 from mark.safety import RiskLevel
@@ -32,6 +32,17 @@ def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> Non
     pipeline.unbind()
     assert pipeline.session is None
     assert pipeline.audio_in_queue is None
+
+
+def test_audio_queue_drops_oldest_chunk_when_full() -> None:
+    queue = FreshAudioQueue(maxsize=2)
+    queue.put_nowait(b"oldest")
+    queue.put_nowait(b"middle")
+    queue.put_nowait(b"fresh")
+
+    assert queue.dropped_chunks == 1
+    assert queue.get_nowait() == b"middle"
+    assert queue.get_nowait() == b"fresh"
 
 
 @pytest.mark.asyncio
@@ -66,6 +77,141 @@ async def test_live_tool_bridge_requires_real_confirmation_for_side_effects(
 
     assert result.ok is approved
     assert len(calls) == int(approved)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "control_plane",
+    [
+        None,
+        SimpleNamespace(
+            request_approval=lambda *args, **kwargs: (_ for _ in ()).throw(
+                RuntimeError("boom")
+            )
+        ),
+    ],
+)
+async def test_live_tool_bridge_approval_failure_fails_closed(control_plane) -> None:
+    calls: list[dict[str, object]] = []
+    bridge = LiveToolBridge(
+        ui=SimpleNamespace(control_plane=control_plane, current_file=None),
+        speak=lambda _text: None,
+        registry=_side_effect_registry(calls),
+        approval_timeout_seconds=0.1,
+    )
+
+    result = await bridge.execute(
+        "open_app", {"app_name": "Calculator"}, intent="approval failure"
+    )
+
+    assert result.ok is False
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_live_tool_bridge_approval_timeout_fails_closed() -> None:
+    calls: list[dict[str, object]] = []
+    release = threading.Event()
+    registry = _side_effect_registry(calls)
+    control_plane = SimpleNamespace(
+        request_approval=lambda *args, **kwargs: release.wait(1)
+    )
+    bridge = LiveToolBridge(
+        ui=SimpleNamespace(control_plane=control_plane, current_file=None),
+        speak=lambda _text: None,
+        registry=registry,
+        approval_timeout_seconds=0.02,
+    )
+
+    result = await bridge.execute(
+        "open_app", {"app_name": "Calculator"},
+        intent="test timeout", call_id="approval-timeout"
+    )
+    release.set()
+
+    assert result.ok is False
+    assert result.code == "confirmation_declined"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_live_tool_bridge_cancellation_during_approval_prevents_execution(
+) -> None:
+    calls: list[dict[str, object]] = []
+    approval_started = threading.Event()
+    release = threading.Event()
+
+    def approve(*args, **kwargs) -> bool:
+        approval_started.set()
+        return release.wait(1)
+
+    bridge = LiveToolBridge(
+        ui=SimpleNamespace(
+            control_plane=SimpleNamespace(request_approval=approve), current_file=None
+        ),
+        speak=lambda _text: None,
+        registry=_side_effect_registry(calls),
+        approval_timeout_seconds=1,
+    )
+    task = asyncio.create_task(
+        bridge.execute(
+            "open_app", {"app_name": "Calculator"},
+            intent="cancel", call_id="cancelled-call"
+        )
+    )
+    await asyncio.to_thread(approval_started.wait, 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    release.set()
+    await asyncio.sleep(0.05)
+
+    assert calls == []
+    duplicate = await bridge.execute(
+        "open_app", {"app_name": "Calculator"},
+        intent="duplicate", call_id="cancelled-call"
+    )
+    assert duplicate.code == "cancelled"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_live_tool_bridge_deduplicates_side_effect_call_id() -> None:
+    calls: list[dict[str, object]] = []
+    bridge = LiveToolBridge(
+        ui=SimpleNamespace(
+            control_plane=SimpleNamespace(request_approval=lambda *a, **k: True),
+            current_file=None,
+        ),
+        speak=lambda _text: None,
+        registry=_side_effect_registry(calls),
+    )
+
+    arguments = {"app_name": "Calculator"}
+    first = await bridge.execute(
+        "open_app", arguments, intent="first", call_id="same-id"
+    )
+    second = await bridge.execute(
+        "open_app", arguments, intent="second", call_id="same-id"
+    )
+
+    assert first.ok is True and second.ok is True
+    assert len(calls) == 1
+
+
+def _side_effect_registry(calls: list[dict[str, object]]) -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(
+            name="open_app",
+            description="open",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda arguments: calls.append(dict(arguments)) or "opened",
+            risk=RiskLevel.CONFIRM,
+        )
+    )
+    return registry
 
 
 class FakeSession:
