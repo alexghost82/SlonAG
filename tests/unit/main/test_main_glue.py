@@ -44,3 +44,24 @@ def test_main_no_longer_exposes_legacy_authorize_tool_dispatch() -> None:
     mod = _load_main_module()
     assert not hasattr(mod, "authorize_tool")
     assert mod.LiveToolBridge is not None
+
+
+def test_live_config_exports_the_injected_registry() -> None:
+    mod = _load_main_module()
+    ui = type(
+        "UI",
+        (),
+        {
+            "on_text_command": None,
+            "control_plane": None,
+            "muted": False,
+            "set_state": lambda *_args: None,
+            "write_log": lambda *_args: None,
+        },
+    )()
+    live = mod.SlonLive(ui, runtime_stack=None)
+
+    config = live._build_config()
+
+    declarations = config.tools[0].function_declarations
+    assert [item.name for item in declarations] == list(live.tool_registry.names())

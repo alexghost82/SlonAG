@@ -26,6 +26,8 @@ class RuntimeStack:
     router: Any | None = None
     memory: Any | None = None
     safety: Any | None = None
+    tool_registry: Any | None = None
+    tool_executor: Any | None = None
     network: Any | None = None
     tts_ready: bool = False
     tts_message: str = ""
@@ -36,6 +38,19 @@ class RuntimeStack:
     def summary_lines(self) -> list[str]:
         return list(self.status_lines)
 
+    def create_agent_loop(self, *, model: Any, budget: Any | None = None) -> Any:
+        """Create the canonical AgentLoop from composition-owned dependencies."""
+        if self.router is None or self.tool_executor is None:
+            raise RuntimeError("runtime stack is missing provider or tool runtime")
+        from agent.runtime import AgentLoop
+
+        return AgentLoop(
+            model=model,
+            provider=self.router,
+            tool_executor=self.tool_executor,
+            budget=budget,
+        )
+
 
 def _try(label: str, fn: Callable[[], Any], status: list[str]) -> Any | None:
     try:
@@ -43,7 +58,7 @@ def _try(label: str, fn: Callable[[], Any], status: list[str]) -> Any | None:
         status.append(f"{label}: ok")
         return value
     except Exception as exc:  # noqa: BLE001 — degrade path
-        status.append(f"{label}: unavailable ({exc})")
+        status.append(f"{label}: unavailable ({type(exc).__name__})")
         return None
 
 
@@ -96,6 +111,22 @@ def build_runtime_stack(
     router = _try("router", _router, status)
     memory = _try("memory", _memory, status)
     safety = _try("safety", _safety, status)
+
+    def _tools() -> Any:
+        from mark.tools.builtin import build_builtin_registry
+
+        return build_builtin_registry()
+
+    tool_registry = _try("tools", _tools, status)
+
+    def _executor() -> Any:
+        if tool_registry is None or safety is None:
+            raise RuntimeError("tool registry or safety policy unavailable")
+        from mark.tools import ToolExecutor
+
+        return ToolExecutor(tool_registry, safety)
+
+    tool_executor = _try("executor", _executor, status)
     network = _try("network", _network, status)
 
     tts_ready = False
@@ -110,8 +141,8 @@ def build_runtime_stack(
             f"tts: {'ready' if tts_ready else 'unavailable'} — {built.message}"
         )
     except Exception as exc:  # noqa: BLE001
-        tts_message = str(exc)
-        status.append(f"tts: unavailable ({exc})")
+        tts_message = type(exc).__name__
+        status.append(f"tts: unavailable ({type(exc).__name__})")
 
     stt_ready = False
     stt_message = "stt: not probed"
@@ -125,8 +156,8 @@ def build_runtime_stack(
             f"stt: {'ready' if stt_ready else 'unavailable'} — {built_stt.message}"
         )
     except Exception as exc:  # noqa: BLE001
-        stt_message = str(exc)
-        status.append(f"stt: unavailable ({exc})")
+        stt_message = type(exc).__name__
+        status.append(f"stt: unavailable ({type(exc).__name__})")
 
     status.insert(0, f"provider_id={pid} network_mode={mode}")
     return RuntimeStack(
@@ -135,6 +166,8 @@ def build_runtime_stack(
         router=router,
         memory=memory,
         safety=safety,
+        tool_registry=tool_registry,
+        tool_executor=tool_executor,
         network=network,
         tts_ready=tts_ready,
         tts_message=tts_message,
@@ -151,9 +184,9 @@ def authorize_tool(
     *,
     source: str = "desktop_ui",
 ) -> tuple[bool, str]:
-    """Return (allowed, reason). Missing safety → allow with note (legacy path)."""
+    """Compatibility authorization facade; fail closed when policy is unavailable."""
     if stack.safety is None:
-        return True, "safety unavailable; legacy allow"
+        return False, "safety unavailable"
     try:
         from mark.safety.types import DecisionKind
 
@@ -167,9 +200,8 @@ def authorize_tool(
         if decision.kind.name == "CONFIRM" or str(decision.kind).endswith("CONFIRM"):
             return False, decision.reason or "confirmation required"
         return True, decision.reason or "allowed"
-    except Exception as exc:  # noqa: BLE001
-        # Unknown tools / schema gaps: do not hard-break legacy Gemini tools.
-        return True, f"safety degrade ({exc}); legacy allow"
+    except Exception:  # noqa: BLE001
+        return False, "safety authorization failed"
 
 
 __all__ = [

@@ -56,7 +56,7 @@ def _build_stack():
             key_provider=_key_provider,
         )
     except Exception as exc:
-        print(f"[Bridge] unavailable: {exc}")
+        print(f"[Bridge] unavailable: {type(exc).__name__}")
         return None
 
 
@@ -89,20 +89,16 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
         if data:
             update_memory(data)
             print(f"[Memory] ✅ {list(data.keys())}")
-    except Exception as e:
-        if "429" not in str(e):
-            print(f"[Memory] ⚠️ {e}")
+    except Exception as exc:
+        if "429" not in str(exc):
+            print(f"[Memory] ⚠️ {type(exc).__name__}")
 
-from mark.tools.builtin import build_builtin_registry
 from mark.tools.exporters.gemini import export_gemini_tools
 from agent.latency import TurnLatencyTracker
 from runtime.audio import AudioPipeline
 from runtime.lifecycle import run_live_lifecycle
 from runtime.live_session import receive_live_session
-from runtime.tool_bridge import LiveToolBridge
-
-
-TOOL_DECLARATIONS = export_gemini_tools(build_builtin_registry().list())
+from runtime.tool_bridge import LiveToolBridge, build_live_registry
 
 
 class SlonLive:
@@ -116,9 +112,22 @@ class SlonLive:
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
         self.runtime_stack  = runtime_stack
-        self.tool_bridge = LiveToolBridge(ui=ui, speak=self.speak)
+        base_registry = getattr(runtime_stack, "tool_registry", None)
+        policy = getattr(runtime_stack, "safety", None)
+        live_registry = build_live_registry(
+            ui=ui,
+            speak=self.speak,
+            base_registry=base_registry,
+        )
+        self.tool_bridge = LiveToolBridge(
+            ui=ui,
+            speak=self.speak,
+            registry=live_registry,
+            policy=policy,
+        )
         self.tool_registry = self.tool_bridge.registry
         self.tool_executor = self.tool_bridge.executor
+        self.tool_declarations = export_gemini_tools(self.tool_registry.list())
         self.latency_trace = TurnLatencyTracker()
         self.audio = AudioPipeline(
             ui=ui,
@@ -200,7 +209,7 @@ class SlonLive:
                 activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS
             ),
             system_instruction="\n".join(parts),
-            tools=[{"function_declarations": TOOL_DECLARATIONS}],
+            tools=[{"function_declarations": self.tool_declarations}],
             session_resumption=types.SessionResumptionConfig(),
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
@@ -310,7 +319,7 @@ def main():
     def runner():
         ui.wait_for_api_key()
         # Live Gemini path remains the default when Gemini keys are present.
-        stack = _build_stack()
+        stack = getattr(ui, "_runtime_stack", None) or _build_stack()
         slon = SlonLive(ui, runtime_stack=stack)
         try:
             asyncio.run(slon.run())

@@ -15,10 +15,16 @@ from mark.tools.builtin import build_builtin_registry
 from mark.tools.legacy.adapters import with_legacy_context
 
 
-def build_live_registry(*, ui: Any, speak: Callable[[str], object]) -> ToolRegistry:
+def build_live_registry(
+    *,
+    ui: Any,
+    speak: Callable[[str], object],
+    base_registry: ToolRegistry | None = None,
+) -> ToolRegistry:
     """Bind UI compatibility context without changing canonical schemas."""
     registry = ToolRegistry()
-    for spec in build_builtin_registry().list():
+    source = base_registry or build_builtin_registry()
+    for spec in source.list():
         registry.register(
             replace(
                 spec,
