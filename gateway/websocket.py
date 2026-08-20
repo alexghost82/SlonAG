@@ -29,6 +29,7 @@ class GatewayConnection:
         self, *, context: GatewayContext, store: GatewayStore,
         router: GatewayRouter, is_active: Callable[[str], bool],
         on_close: Callable[[str], None] | None = None,
+        validate_auth: Callable[[], object] | None = None,
         max_pending: int = 128,
     ) -> None:
         if max_pending <= 0:
@@ -39,6 +40,7 @@ class GatewayConnection:
         self.is_active = is_active
         self.max_pending = max_pending
         self._on_close = on_close
+        self._validate_auth = validate_auth
         self._pending: deque[SequencedEnvelope] = deque()
         self.closed = False
         self.last_pong_at = time.monotonic()
@@ -111,6 +113,14 @@ class GatewayConnection:
         if not self.is_active(self.context.device_id):
             self.close()
             raise GatewayProtocolError("revoked", "Device is no longer trusted.")
+        if self._validate_auth is not None:
+            try:
+                self._validate_auth()
+            except Exception as exc:
+                self.close()
+                raise GatewayProtocolError(
+                    "unauthorized", "Gateway connection authorization expired."
+                ) from exc
 
 
 class GatewayWebSocketRuntime:
@@ -131,6 +141,7 @@ class GatewayWebSocketRuntime:
 
     async def connect(
         self, *, device_id: str, after_sequence: int | None = None,
+        validate_auth: Callable[[], object] | None = None,
     ) -> GatewayConnection:
         if not self.is_active(device_id):
             raise GatewayProtocolError("unauthorized", "Device is not trusted.")
@@ -141,6 +152,7 @@ class GatewayWebSocketRuntime:
             context=GatewayContext(device_id, workspace_id, connection_id),
             store=self.store, router=self.router, is_active=self.is_active,
             on_close=self._remove_connection,
+            validate_auth=validate_auth,
             max_pending=self.max_pending,
         )
         cursor = (

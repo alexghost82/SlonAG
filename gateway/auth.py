@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from gateway.store import GatewayStore
 from server.auth import (
     DeviceCredential, DevicePrincipal, IssuedTokens, RateLimiter, TokenService,
+    _RefreshRecord,
 )
 from server.pairing import PairingService, PairingStart
 
@@ -52,6 +53,11 @@ class GatewayAuthService:
         self._tokens = TokenService(
             signing_key=signing_key, clock=self._clock,
             is_revoked=lambda device_id: not self._active(device_id),
+            refresh_put=self._put_refresh,
+            refresh_pop=self._pop_refresh,
+            jti_consume=lambda jti: self.store.consume_access_jti(
+                jti, float(self._clock())
+            ),
         )
 
     def start_pairing(self) -> PairingStart:
@@ -116,6 +122,12 @@ class GatewayAuthService:
     def authenticate(self, headers: dict[str, str]) -> DevicePrincipal:
         return self._tokens.authenticate(headers)
 
+    def authenticate_connection(self, headers: dict[str, str]) -> DevicePrincipal:
+        return self._tokens.authenticate(headers, consume_jti=True)
+
+    def validate_connection(self, headers: dict[str, str]) -> DevicePrincipal:
+        return self._tokens.authenticate(headers, consume_jti=False)
+
     def revoke(self, device_id: str) -> bool:
         with self._lock:
             self._challenges.pop(device_id, None)
@@ -133,6 +145,23 @@ class GatewayAuthService:
     def _active(self, device_id: str) -> bool:
         record = self.store.device(device_id)
         return bool(record is not None and record["active"])
+
+    def _put_refresh(self, token_hash: str, record: _RefreshRecord) -> None:
+        self.store.put_refresh_token(
+            token_hash, device_id=record.device_id, device_name=record.device_name,
+            expires_at=record.expires_at, scopes=sorted(record.scopes),
+        )
+
+    def _pop_refresh(self, token_hash: str) -> _RefreshRecord | None:
+        row = self.store.pop_refresh_token(token_hash)
+        if row is None:
+            return None
+        return _RefreshRecord(
+            device_id=str(row["device_id"]),
+            device_name=(str(row["device_name"]) if row["device_name"] is not None else None),
+            expires_at=float(row["expires_at"]),
+            scopes=frozenset(str(value) for value in row["scopes"]),
+        )
 
 
 def _decode_public_key(value: str) -> bytes:

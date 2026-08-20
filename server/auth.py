@@ -29,6 +29,9 @@ CODE_INVALID_TOKEN = "invalid_token"
 
 Clock = Callable[[], float]
 RevocationCheck = Callable[[str], bool]
+RefreshPut = Callable[[str, "_RefreshRecord"], None]
+RefreshPop = Callable[[str], "_RefreshRecord | None"]
+JtiConsume = Callable[[str], bool]
 
 
 def _b64url_encode(raw: bytes) -> str:
@@ -156,6 +159,9 @@ class TokenService:
         is_revoked: RevocationCheck | MutableSet[str] | None = None,
         used_jtis: MutableSet[str] | None = None,
         used_nonces: MutableSet[str] | None = None,
+        refresh_put: RefreshPut | None = None,
+        refresh_pop: RefreshPop | None = None,
+        jti_consume: JtiConsume | None = None,
     ) -> None:
         if isinstance(signing_key, str):
             key = signing_key.encode("utf-8")
@@ -173,6 +179,9 @@ class TokenService:
             used_nonces if used_nonces is not None else set()
         )
         self._refresh_by_hash: MutableMapping[str, _RefreshRecord] = {}
+        self._refresh_put = refresh_put
+        self._refresh_pop = refresh_pop
+        self._jti_consume = jti_consume
 
     def mint(
         self,
@@ -207,7 +216,11 @@ class TokenService:
             raise AuthError("invalid refresh token", code=CODE_INVALID_TOKEN)
         self._consume_nonce(nonce)
         token_hash = _hash_secret(refresh_token)
-        record = self._refresh_by_hash.pop(token_hash, None)
+        record = (
+            self._refresh_pop(token_hash)
+            if self._refresh_pop is not None
+            else self._refresh_by_hash.pop(token_hash, None)
+        )
         if record is None:
             raise AuthError("refresh token rejected", code=CODE_INVALID_TOKEN)
         now = float(self._clock())
@@ -303,12 +316,17 @@ class TokenService:
         access_token = self._sign_claims(claims)
         refresh_raw = "rt_" + secrets.token_urlsafe(32)
         refresh_expires = now + self._refresh_ttl
-        self._refresh_by_hash[_hash_secret(refresh_raw)] = _RefreshRecord(
+        refresh_record = _RefreshRecord(
             device_id=device_id,
             device_name=device_name,
             expires_at=refresh_expires,
             scopes=scopes,
         )
+        refresh_hash = _hash_secret(refresh_raw)
+        if self._refresh_put is not None:
+            self._refresh_put(refresh_hash, refresh_record)
+        else:
+            self._refresh_by_hash[refresh_hash] = refresh_record
         return IssuedTokens(
             access_token=access_token,
             refresh_token=refresh_raw,
@@ -367,6 +385,10 @@ class TokenService:
         self._used_nonces.add(nonce)
 
     def _consume_jti(self, jti: str) -> None:
+        if self._jti_consume is not None:
+            if not self._jti_consume(jti):
+                raise AuthError("replayed jti rejected", code=CODE_REPLAY)
+            return
         if jti in self._used_jtis:
             raise AuthError("replayed jti rejected", code=CODE_REPLAY)
         self._used_jtis.add(jti)

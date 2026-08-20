@@ -32,6 +32,7 @@ from gateway.store import GatewayStore, GatewayStoreError
 from gateway.websocket import GatewayWebSocketRuntime
 from sessions import ModelPolicy, SessionManager, SessionStore
 from server.listener import DesktopControlListener
+from server.__main__ import main as server_main
 
 
 def _store(tmp_path: Path) -> GatewayStore:
@@ -138,6 +139,39 @@ def test_pinned_key_mismatch_and_challenge_replay_fail_closed(tmp_path: Path) ->
             nonce=challenge.nonce,
             signature=base64.b64encode(private.sign(challenge.nonce.encode())).decode(),
         )
+
+
+def test_refresh_rotation_and_access_replay_survive_restart(tmp_path: Path) -> None:
+    path = tmp_path / "durable.sqlite3"
+    store = GatewayStore(path)
+    auth = GatewayAuthService(store=store, signing_key=b"durable-key")
+    private = Ed25519PrivateKey.generate()
+    device_id = _pair(auth, private)
+    challenge = auth.challenge(device_id)
+    tokens = auth.exchange_proof(
+        device_id=device_id, nonce=challenge.nonce,
+        signature=base64.b64encode(private.sign(challenge.nonce.encode())).decode(),
+    )
+    headers = {"Authorization": f"Bearer {tokens.access_token}"}
+    auth.authenticate_connection(headers)
+    store.close()
+
+    reopened = GatewayStore(path)
+    restarted = GatewayAuthService(store=reopened, signing_key=b"durable-key")
+    with pytest.raises(Exception, match="replayed"):
+        restarted.authenticate_connection(headers)
+    rotated = restarted.refresh(tokens.refresh_token)
+    assert rotated.refresh_token != tokens.refresh_token
+    with pytest.raises(Exception, match="rejected"):
+        restarted.refresh(tokens.refresh_token)
+
+
+def test_gateway_lan_cli_is_explicit_and_tls_only() -> None:
+    assert server_main(["--gateway-lan"]) == 2
+    assert server_main([
+        "--gateway-lan", "--allow-non-loopback", "--host", "192.168.1.20"
+    ]) == 2
+    assert server_main(["--gateway-pair"]) == 2
 
 
 @pytest.mark.asyncio

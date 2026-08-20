@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Mapping
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class GatewayStoreError(RuntimeError):
@@ -99,6 +99,14 @@ class GatewayStore:
               created_at REAL NOT NULL,
               FOREIGN KEY(device_id) REFERENCES trusted_devices(device_id)
             );
+            CREATE TABLE gateway_refresh_tokens(
+              token_hash TEXT PRIMARY KEY, device_id TEXT NOT NULL,
+              device_name TEXT, expires_at REAL NOT NULL, scopes_json TEXT NOT NULL,
+              FOREIGN KEY(device_id) REFERENCES trusted_devices(device_id)
+            );
+            CREATE TABLE used_access_jtis(
+              jti TEXT PRIMARY KEY, used_at REAL NOT NULL
+            );
             """
             for statement in schema.split(";"):
                 if statement.strip():
@@ -113,6 +121,20 @@ class GatewayStore:
                   size INTEGER NOT NULL, sha256 TEXT NOT NULL, storage_name TEXT NOT NULL,
                   created_at REAL NOT NULL,
                   FOREIGN KEY(device_id) REFERENCES trusted_devices(device_id)
+                )
+            """)
+            self._db.execute("UPDATE gateway_schema SET version=?", (SCHEMA_VERSION,))
+        if version in {1, 2}:
+            self._db.execute("""
+                CREATE TABLE IF NOT EXISTS gateway_refresh_tokens(
+                  token_hash TEXT PRIMARY KEY, device_id TEXT NOT NULL,
+                  device_name TEXT, expires_at REAL NOT NULL, scopes_json TEXT NOT NULL,
+                  FOREIGN KEY(device_id) REFERENCES trusted_devices(device_id)
+                )
+            """)
+            self._db.execute("""
+                CREATE TABLE IF NOT EXISTS used_access_jtis(
+                  jti TEXT PRIMARY KEY, used_at REAL NOT NULL
                 )
             """)
             self._db.execute("UPDATE gateway_schema SET version=?", (SCHEMA_VERSION,))
@@ -155,6 +177,9 @@ class GatewayStore:
             self._db.execute(
                 "UPDATE device_sessions SET disconnected_at=? WHERE device_id=? AND disconnected_at IS NULL",
                 (revoked_at, device_id),
+            )
+            self._db.execute(
+                "DELETE FROM gateway_refresh_tokens WHERE device_id=?", (device_id,)
             )
         return changed > 0
 
@@ -310,6 +335,37 @@ class GatewayStore:
                 "SELECT * FROM artifacts WHERE artifact_id=?", (artifact_id,)
             ).fetchone()
         return None if row is None else dict(row)
+
+    def put_refresh_token(
+        self, token_hash: str, *, device_id: str, device_name: str | None,
+        expires_at: float, scopes: list[str],
+    ) -> None:
+        with self.transaction():
+            self._db.execute(
+                "INSERT OR REPLACE INTO gateway_refresh_tokens VALUES (?,?,?,?,?)",
+                (token_hash, device_id, device_name, expires_at, _json(scopes)),
+            )
+
+    def pop_refresh_token(self, token_hash: str) -> Mapping[str, object] | None:
+        with self.transaction():
+            row = self._db.execute(
+                "SELECT * FROM gateway_refresh_tokens WHERE token_hash=?", (token_hash,)
+            ).fetchone()
+            if row is not None:
+                self._db.execute(
+                    "DELETE FROM gateway_refresh_tokens WHERE token_hash=?", (token_hash,)
+                )
+        if row is None:
+            return None
+        return {**dict(row), "scopes": json.loads(str(row["scopes_json"]))}
+
+    def consume_access_jti(self, jti: str, now: float) -> bool:
+        try:
+            with self.transaction():
+                self._db.execute("INSERT INTO used_access_jtis VALUES (?,?)", (jti, now))
+            return True
+        except sqlite3.IntegrityError:
+            return False
 
     def cached_response(
         self, *, device_id: str, workspace_id: str, request_id: str,

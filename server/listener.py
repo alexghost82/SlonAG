@@ -1222,7 +1222,8 @@ def _make_handler(
             from gateway.framing import decode_client_frame, encode_server_frame
 
             try:
-                principal = listener._gateway.auth.authenticate(self._headers_map())
+                auth_headers = self._headers_map()
+                principal = listener._gateway.auth.authenticate_connection(auth_headers)
             except Exception:
                 self._write_response(_error(401, CODE_UNAUTHORIZED))
                 return
@@ -1250,7 +1251,8 @@ def _make_handler(
             self.send_header("Sec-WebSocket-Accept", accept)
             self.end_headers()
             connection = asyncio.run(listener._gateway.websocket.connect(
-                device_id=principal.device_id, after_sequence=cursor
+                device_id=principal.device_id, after_sequence=cursor,
+                validate_auth=lambda: listener._gateway.auth.validate_connection(auth_headers),
             ))
             try:
                 while listener.listening and not connection.closed:
