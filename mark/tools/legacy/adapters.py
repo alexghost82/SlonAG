@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
 from mark.tools.contracts import ToolResult
@@ -27,6 +28,22 @@ def with_legacy_speak(
 
     def contextual_handler(args: Mapping[str, object]) -> object:
         return handler(args, _speak=speak)  # type: ignore[call-arg]
+
+    return contextual_handler
+
+
+def with_legacy_context(
+    handler: Callable[[Mapping[str, object]], object],
+    *,
+    speak: Callable[..., object] | None = None,
+    player: object | None = None,
+) -> Callable[[Mapping[str, object]], object]:
+    """Bind legacy UI callbacks at composition time, outside model arguments."""
+    if not getattr(handler, "_accepts_legacy_context", False):
+        return handler
+
+    def contextual_handler(args: Mapping[str, object]) -> object:
+        return handler(args, _speak=speak, _player=player)  # type: ignore[call-arg]
 
     return contextual_handler
 
@@ -59,10 +76,11 @@ def _action_handler(
     accepts_speak: bool = False,
 ) -> LegacyHandler:
     def handler(
-        args: Mapping[str, object], *, _speak: Callable[..., object] | None = None
+        args: Mapping[str, object], *, _speak: Callable[..., object] | None = None,
+        _player: object | None = None,
     ) -> ToolResult:
         action = getattr(import_module(module_name), function_name)
-        kwargs: dict[str, Any] = {"parameters": dict(args), "player": None}
+        kwargs: dict[str, Any] = {"parameters": dict(args), "player": _player}
         if accepts_speak:
             kwargs["speak"] = _speak
         return normalize_legacy_result(action(**kwargs))
@@ -108,6 +126,15 @@ dev_agent_handler = _action_handler(
 )
 
 
+def read_file_handler(args: Mapping[str, object]) -> ToolResult:
+    """Canonical narrow read helper used by the iterative agent runtime."""
+    try:
+        content = Path(str(args["path"])).read_text(encoding="utf-8")
+    except (OSError, UnicodeError, KeyError) as exc:
+        return ToolResult(ok=False, code="read_error", message=str(exc))
+    return ToolResult(ok=True, code="ok", data=content)
+
+
 def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
     """Preserve the existing asynchronous task-queue bridge from ``main.py``."""
     task_queue = import_module("agent.task_queue")
@@ -129,6 +156,7 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
 
 
 LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
+    "read_file": read_file_handler,
     "open_app": open_app_handler,
     "web_search": web_search_handler,
     "browser_control": browser_control_handler,
@@ -156,5 +184,6 @@ __all__ = [
     "LegacyHandler",
     "agent_task_handler",
     "normalize_legacy_result",
+    "with_legacy_context",
     "with_legacy_speak",
 ]

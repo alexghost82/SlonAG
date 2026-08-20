@@ -8,6 +8,7 @@ read ``api_keys.json`` and does not implement cost accounting.
 from __future__ import annotations
 
 import importlib
+import inspect
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import replace
 from typing import Protocol, runtime_checkable
@@ -243,11 +244,8 @@ class Router:
     def _build_from_factory(self, provider_id: str) -> ChatProvider:
         factory = _factory_for(provider_id)
         key = self._lookup_key(provider_id)
-        if key is not None:
-            try:
-                return factory(api_key=key)
-            except TypeError:
-                pass
+        if key is not None and "api_key" in inspect.signature(factory).parameters:
+            return factory(api_key=key)
         return factory()
 
 

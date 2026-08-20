@@ -7,6 +7,7 @@ tools, and structured output are never inferred from a model name.
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
@@ -107,14 +108,47 @@ class OpenAIChatProvider:
         return self._client
 
     def _chat_body(self, request: ChatRequest, *, stream: bool) -> dict[str, Any]:
-        return {
+        body: dict[str, Any] = {
             "model": request.model.model_id,
-            "messages": [
-                {"role": message.role, "content": message.content}
-                for message in request.messages
-            ],
+            "messages": [_message_payload(message) for message in request.messages],
             "stream": stream,
         }
+        if request.tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": dict(tool.parameters),
+                    },
+                }
+                for tool in request.tools
+            ]
+        if request.tool_choice is not None:
+            body["tool_choice"] = request.tool_choice
+        return body
+
+
+def _message_payload(message: Any) -> dict[str, Any]:
+    if message.role == "tool":
+        payload = message.error if message.error is not None else message.result
+        return {
+            "role": "tool",
+            "tool_call_id": message.tool_call_id,
+            "content": payload if isinstance(payload, str) else json.dumps(payload),
+        }
+    item: dict[str, Any] = {"role": message.role, "content": message.content}
+    if message.tool_calls:
+        item["tool_calls"] = [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
+            }
+            for call in message.tool_calls
+        ]
+    return item
 
 
 def conservative_capabilities(model_id: str) -> dict[str, bool]:

@@ -82,6 +82,10 @@ _REMINDER_TYPES = _types(
 )
 
 _REGISTRY: dict[str, SafetyRule] = {
+    "read_file": SafetyRule(
+        RiskLevel.READ,
+        schema=ArgSchema(required=("path",), types=_types(path="str")),
+    ),
     "web_search": SafetyRule(
         RiskLevel.READ,
         schema=ArgSchema(required=("query",), types=_types(query="str", mode="str")),

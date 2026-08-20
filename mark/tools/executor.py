@@ -30,6 +30,11 @@ class ToolExecutor:
         self._safety_policy = safety_policy
         self._confirmer = confirmer
 
+    @property
+    def registry(self) -> ToolRegistry:
+        """Canonical definitions used by this executor."""
+        return self._registry
+
     def execute(
         self,
         name: str,

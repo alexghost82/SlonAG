@@ -11,6 +11,7 @@ from mark.tools.registry import ToolRegistry
 
 
 _DESCRIPTIONS: Mapping[str, str] = {
+    "read_file": "Read a UTF-8 text file.",
     "open_app": "Open an installed application.",
     "web_search": "Search the web for information.",
     "browser_control": "Control the web browser.",
@@ -71,6 +72,10 @@ def build_builtin_registry() -> ToolRegistry:
                 output_schema=None,
                 handler=handler,
                 risk=rule.risk,
+                read_only=rule.risk.value == 0,
+                idempotent=rule.risk.value == 0,
+                side_effects=rule.risk.value != 0,
+                parallel_safe=rule.risk.value == 0,
             )
         )
     return registry

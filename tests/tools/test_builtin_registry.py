@@ -9,6 +9,7 @@ from mark.tools.legacy import LEGACY_HANDLERS
 
 EXPECTED_TOOLS = frozenset(
     {
+        "read_file",
         "open_app",
         "web_search",
         "browser_control",

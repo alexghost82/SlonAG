@@ -61,10 +61,42 @@ def _contents_and_config(
         if message.role == "system":
             system_parts.append(message.content)
             continue
+        if message.role == "tool":
+            response = (
+                {"error": message.error}
+                if message.error is not None
+                else {"result": message.result}
+            )
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "function_response": {
+                                "id": message.tool_call_id,
+                                "name": message.name,
+                                "response": response,
+                            }
+                        }
+                    ],
+                }
+            )
+            continue
         gemini_role = "model" if message.role in {"assistant", "model"} else "user"
-        contents.append(
-            {"role": gemini_role, "parts": [{"text": message.content}]}
+        parts: list[dict[str, Any]] = []
+        if message.content:
+            parts.append({"text": message.content})
+        parts.extend(
+            {
+                "function_call": {
+                    "id": call.id,
+                    "name": call.name,
+                    "args": dict(call.arguments),
+                }
+            }
+            for call in message.tool_calls
         )
+        contents.append({"role": gemini_role, "parts": parts})
     config = (
         {"system_instruction": "\n\n".join(system_parts)} if system_parts else None
     )
@@ -184,6 +216,19 @@ class GeminiChatProvider:
         }
         if config is not None:
             kwargs["config"] = config
+        if request.tools:
+            kwargs.setdefault("config", {})["tools"] = [
+                {
+                    "function_declarations": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": dict(tool.parameters),
+                        }
+                        for tool in request.tools
+                    ]
+                }
+            ]
         generate = models.generate_content
         if asyncio.iscoroutinefunction(generate):
             return await generate(**kwargs)

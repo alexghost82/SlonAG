@@ -37,10 +37,19 @@ class ModelInfo:
 
 @dataclass(frozen=True)
 class ChatMessage:
-    """One turn in a chat request."""
+    """One provider-neutral conversation item.
+
+    Tool calls live on the assistant message that requested them. Tool results
+    use ``role='tool'`` and retain their correlation id end-to-end.
+    """
 
     role: str
-    content: str
+    content: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str | None = None
+    name: str | None = None
+    result: object | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)

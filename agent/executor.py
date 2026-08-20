@@ -1,4 +1,3 @@
-import json
 import sys
 import threading
 from collections.abc import Callable
@@ -27,7 +26,6 @@ def get_base_dir() -> Path:
 
 
 BASE_DIR = get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 class ToolDeniedError(SafetyPolicyError):
     """authorize returned deny, or required confirmation was not granted."""
@@ -42,12 +40,10 @@ class ToolDeniedError(SafetyPolicyError):
 
 def _get_api_key() -> str:
     """Lazy helper for leftover translate/summarize paths. Not used for tools."""
-    if not API_CONFIG_PATH.is_file():
-        raise FileNotFoundError("API key file is not available.")
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    key = data.get("gemini_api_key")
-    if not isinstance(key, str) or not key.strip():
+    from config.secrets import get_secret
+
+    key = get_secret("gemini_api_key")
+    if key is None:
         raise RuntimeError("Gemini API key is not configured.")
     return key
 
@@ -413,4 +409,3 @@ def execute_plan(
     """Legacy plan-step execution helper function using AgentExecutor."""
     executor = AgentExecutor()
     return executor.execute(goal, speak=speak, cancel_flag=cancel_flag)
-

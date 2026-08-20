@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import time
 from collections.abc import Mapping, Sequence
@@ -13,7 +12,14 @@ from typing import Any
 from agent.observation import Observation, ObservationKind
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from mark.tools.contracts import ToolResult
-from providers.contracts import ChatMessage, ChatRequest, ChatResponse, ModelInfo, ToolCall
+from providers.contracts import (
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    ModelInfo,
+    ToolCall,
+    ToolDefinition,
+)
 
 
 @dataclass
@@ -37,6 +43,10 @@ class LoopBudget:
         if elapsed >= self.timeout_seconds:
             return True, f"Timeout ({self.timeout_seconds:.1f}s) exceeded"
         return False, None
+
+    def remaining_seconds(self) -> float:
+        """Return the positive wall-clock allowance left for an awaited operation."""
+        return max(0.0, self.timeout_seconds - (time.time() - self.start_time))
 
 
 class LoopDetector:
@@ -147,11 +157,13 @@ class AgentLoop:
         self,
         provider: Any = None,
         tool_executor: Any = None,
+        model: ModelInfo | None = None,
         budget: LoopBudget | None = None,
         loop_detector: LoopDetector | None = None,
     ) -> None:
         self.provider = provider
         self.tool_executor = tool_executor
+        self.model = model
         self.budget = budget if budget is not None else LoopBudget()
         self.loop_detector = (
             loop_detector if loop_detector is not None else LoopDetector()
@@ -203,10 +215,19 @@ class AgentLoop:
                         text = signal.text or "User guidance injected"
                         messages.append(ChatMessage(role="user", content=text))
 
+            if self.budget.turn_count >= self.budget.max_turns:
+                return AgentLoopResult(False, steps=steps, reason=f"Max turns ({self.budget.max_turns}) reached")
             self.budget.turn_count += 1
 
             # Dispatch call to model provider
-            response = await self._call_provider(messages)
+            try:
+                response = await asyncio.wait_for(
+                    self._call_provider(messages), timeout=self.budget.remaining_seconds()
+                )
+            except TimeoutError:
+                return AgentLoopResult(False, steps=steps, reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded")
+            except asyncio.CancelledError:
+                raise
 
             response_text = getattr(response, "text", None)
             if response_text is None and isinstance(response, dict):
@@ -218,8 +239,13 @@ class AgentLoop:
             if isinstance(response, dict) and not tool_calls:
                 tool_calls = response.get("tool_calls", ())
 
-            if response_text:
-                messages.append(ChatMessage(role="assistant", content=str(response_text)))
+            messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=str(response_text or ""),
+                    tool_calls=tuple(tool_calls),
+                )
+            )
 
             if not tool_calls:
                 return AgentLoopResult(
@@ -230,21 +256,23 @@ class AgentLoop:
                 )
 
             for tool_call in tool_calls:
-                self.budget.tool_call_count += 1
-                exceeded, reason = self.budget.is_exceeded()
-                if exceeded:
+                if self.budget.tool_call_count >= self.budget.max_tool_calls:
                     return AgentLoopResult(
                         ok=False,
                         final_answer=str(response_text) if response_text else None,
                         steps=steps,
-                        reason=reason or "Budget exceeded",
+                        reason=f"Max tool calls ({self.budget.max_tool_calls}) reached",
                     )
+                self.budget.tool_call_count += 1
 
                 tool_id, tool_name, tool_args = self._parse_tool_call(tool_call)
 
                 # Execute tool, returning observation on error instead of crashing
                 try:
-                    raw_res = await self._execute_tool(tool_name, tool_args, user_goal)
+                    raw_res = await asyncio.wait_for(
+                        self._execute_tool(tool_name, tool_args, user_goal),
+                        timeout=self.budget.remaining_seconds(),
+                    )
                     if isinstance(raw_res, Observation):
                         obs = raw_res
                     elif isinstance(raw_res, ToolResult):
@@ -257,6 +285,16 @@ class AgentLoop:
                             ok=True,
                             content=raw_res,
                         )
+                except TimeoutError:
+                    obs = Observation(
+                        tool_call_id=tool_id,
+                        tool_name=tool_name,
+                        kind=ObservationKind.TIMEOUT,
+                        ok=False,
+                        error="Tool execution timed out.",
+                    )
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
                     obs = Observation(
                         tool_call_id=tool_id,
@@ -279,7 +317,7 @@ class AgentLoop:
                 )
 
                 is_loop, loop_reason = self.loop_detector.check_loop()
-                if is_loop:
+                if is_loop and self.budget.turn_count < self.budget.max_turns:
                     return AgentLoopResult(
                         ok=False,
                         final_answer=None,
@@ -287,16 +325,22 @@ class AgentLoop:
                         reason=loop_reason or "Loop detected",
                     )
 
-                obs_payload = (
-                    obs.to_model_dict()
-                    if hasattr(obs, "to_model_dict")
-                    else str(obs)
-                )
                 messages.append(
                     ChatMessage(
-                        role="user",
-                        content=f"Observation [{tool_name}]: {json.dumps(obs_payload, default=str)}",
+                        role="tool",
+                        tool_call_id=tool_id,
+                        name=tool_name,
+                        result=obs.content if obs.ok else None,
+                        error=None if obs.ok else obs.error,
                     )
+                )
+
+            if self.budget.turn_count >= self.budget.max_turns:
+                return AgentLoopResult(
+                    ok=False,
+                    final_answer=str(response_text) if response_text else None,
+                    steps=steps,
+                    reason=f"Max turns ({self.budget.max_turns}) reached",
                 )
 
             # Check steering queue after observation processing
@@ -333,25 +377,28 @@ class AgentLoop:
             )
 
         if hasattr(self.provider, "chat"):
-            chat_fn = self.provider.chat
-            model = ModelInfo(
-                provider_id="default",
-                model_id="default",
-                display_name="default",
-                text=True,
-                tool_calling=True,
-            )
-            req = ChatRequest(model=model, messages=messages)
-            try:
-                res = chat_fn(req)
-            except TypeError:
-                res = chat_fn(messages)
+            model = self.model or getattr(self.provider, "model_info", None)
+            if not isinstance(model, ModelInfo):
+                model = ModelInfo(
+                    provider_id=str(getattr(self.provider, "provider_id", "unselected")),
+                    model_id=str(getattr(self.provider, "model_id", "unselected")),
+                    display_name="Unselected compatibility model",
+                    text=True,
+                    tool_calling=False,
+                )
+            specs = getattr(getattr(self.tool_executor, "registry", None), "list", lambda: ())()
+            tools = tuple(
+                ToolDefinition(spec.name, spec.description, spec.input_schema)
+                for spec in specs
+            ) if model.tool_calling else ()
+            req = ChatRequest(model=model, messages=messages, tools=tools)
+            res = self.provider.chat(req)
         elif callable(self.provider):
             res = self.provider(messages)
         else:
             raise RuntimeError(f"Unsupported provider type: {type(self.provider)}")
 
-        if inspect.isawaitable(res):
+        if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
             res = await res
 
         return res
@@ -371,21 +418,21 @@ class AgentLoop:
                 raise RuntimeError("No tool_executor provided and default cannot be built.")
 
         if hasattr(executor, "execute"):
-            exec_fn = executor.execute
-            try:
-                from mark.safety import UntrustedSource
+            from mark.safety import UntrustedSource
 
-                res = exec_fn(
-                    tool_name, args, source=UntrustedSource.USER, intent=goal
-                )
-            except TypeError:
-                res = exec_fn(tool_name, args)
+            res = await asyncio.to_thread(
+                executor.execute,
+                tool_name,
+                args,
+                source=UntrustedSource.USER,
+                intent=goal,
+            )
         elif callable(executor):
             res = executor(tool_name, args)
         else:
             raise RuntimeError(f"Unsupported tool_executor type: {type(executor)}")
 
-        if inspect.isawaitable(res):
+        if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
             res = await res
 
         return res

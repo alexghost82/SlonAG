@@ -23,7 +23,10 @@ class ToolSpec:
     handler: Callable[..., object]
     risk: RiskLevel
     timeout_seconds: float = 30.0
+    read_only: bool = False
     idempotent: bool = False
+    side_effects: bool = True
+    parallel_safe: bool = False
     cancellable: bool = False
     capabilities: frozenset[str] = frozenset()
     scopes: frozenset[str] = frozenset()

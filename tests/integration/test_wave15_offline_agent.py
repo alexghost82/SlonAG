@@ -312,7 +312,7 @@ def test_offline_agent_legacy_execute_plan_intact(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(planner_mod, "create_plan", mock_create_plan)
 
-    def mock_call_tool(tool: str, params: dict, speak=None, intent=""):
+    def mock_call_tool(self, tool: str, params: dict, speak=None, *, intent=""):
         return "Search result output"
 
     monkeypatch.setattr(AgentExecutor, "_call_tool", mock_call_tool)

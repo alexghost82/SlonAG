@@ -34,6 +34,7 @@ def test_normalizer_does_not_report_false_as_success() -> None:
 
 def test_all_required_handlers_are_exposed() -> None:
     assert set(adapters.LEGACY_HANDLERS) == {
+        "read_file",
         "open_app",
         "web_search",
         "browser_control",

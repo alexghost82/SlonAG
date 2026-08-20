@@ -97,11 +97,48 @@ def _chat_payload(request: ChatRequest, *, stream: bool = False) -> dict[str, An
     }
     if stream:
         payload["stream"] = True
+    if request.tools:
+        payload["tools"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": dict(tool.parameters),
+                },
+            }
+            for tool in request.tools
+        ]
+    if request.tool_choice is not None:
+        payload["tool_choice"] = request.tool_choice
     return payload
 
 
-def _messages_payload(messages: Sequence[ChatMessage]) -> list[dict[str, str]]:
-    return [{"role": message.role, "content": message.content} for message in messages]
+def _messages_payload(messages: Sequence[ChatMessage]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for message in messages:
+        if message.role == "tool":
+            value = message.error if message.error is not None else message.result
+            payload.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": message.tool_call_id,
+                    "content": value if isinstance(value, str) else json.dumps(value),
+                }
+            )
+            continue
+        item: dict[str, Any] = {"role": message.role, "content": message.content}
+        if message.tool_calls:
+            item["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
+                }
+                for call in message.tool_calls
+            ]
+        payload.append(item)
+    return payload
 
 
 def _message_text(data: object) -> str:
