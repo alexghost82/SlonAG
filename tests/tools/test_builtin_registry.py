@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from mark.safety.registry import registered_tools, risk_for, tool_spec
+from mark.safety.types import RiskLevel
 from mark.tools.builtin import build_builtin_registry
 from mark.tools.legacy import LEGACY_HANDLERS
 
@@ -84,3 +85,13 @@ def test_safety_only_tools_are_not_invented_without_handlers() -> None:
         "generated_code",
     }
     assert not safety_only.intersection(build_builtin_registry().names())
+
+
+def test_tools_with_nested_side_effects_require_confirmation() -> None:
+    registry = build_builtin_registry()
+
+    for name in ("flight_finder", "youtube_video", "file_processor"):
+        spec = registry.get(name)
+        assert spec.risk >= RiskLevel.CONFIRM
+        assert spec.read_only is False
+        assert spec.parallel_safe is False

@@ -148,6 +148,7 @@ class Settings:
     model_roles: ModelRoles = field(default_factory=ModelRoles)
     local_models: LocalModelsSettings = field(default_factory=LocalModelsSettings)
     os_system: str | None = None
+    camera_index: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -161,6 +162,8 @@ class Settings:
         }
         if self.os_system is not None:
             payload["os_system"] = self.os_system
+        if self.camera_index is not None:
+            payload["camera_index"] = self.camera_index
         return payload
 
 
@@ -200,6 +203,7 @@ def validate_settings(data: object) -> Settings:
     model_roles = _validate_model_roles(data.get("model_roles", {}))
     local_models = _validate_local_models(data.get("local_models", {}))
     os_system = _optional_os_overlay(data)
+    camera_index = _optional_non_negative_int(data, "camera_index")
 
     return Settings(
         privacy_profile=privacy_profile,
@@ -210,7 +214,21 @@ def validate_settings(data: object) -> Settings:
         model_roles=model_roles,
         local_models=local_models,
         os_system=os_system,
+        camera_index=camera_index,
     )
+
+
+def _optional_non_negative_int(
+    data: Mapping[str, Any], field_name: str
+) -> int | None:
+    if field_name not in data:
+        return None
+    value = data[field_name]
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SettingsValidationError(f"{field_name} must be a non-negative integer")
+    return value
 
 
 def _optional_enum(

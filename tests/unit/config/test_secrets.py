@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,22 @@ from config.settings import load_settings, save_settings
 
 
 SENTINEL = "dummy-not-a-live-key-XYZ-4242"
+
+
+def test_production_code_does_not_access_legacy_key_file_directly() -> None:
+    root = Path(__file__).resolve().parents[3]
+    forbidden_names = ("API_FILE", "API_CONFIG_PATH", "API_KEY_PATH")
+    violations: list[str] = []
+    candidates = [root / "main.py", root / "ui.py", root / "or_client.py"]
+    for package in ("actions", "agent", "runtime", "providers", "mark"):
+        candidates.extend((root / package).rglob("*.py"))
+
+    for path in candidates:
+        source = path.read_text(encoding="utf-8")
+        if any(name in source for name in forbidden_names):
+            violations.append(str(path.relative_to(root)))
+
+    assert violations == []
 
 
 @pytest.fixture
@@ -39,6 +56,18 @@ def test_file_fallback_round_trip(file_fallback):
     set_secret("openrouter_api_key", SENTINEL)
     assert get_secret("openrouter_api_key") == SENTINEL
     assert get_secret("openai_api_key") is None
+
+
+def test_file_fallback_repairs_existing_permissions(file_fallback):
+    if os.name == "nt":
+        pytest.skip("POSIX modes are not applicable on Windows")
+    file_fallback.write_text(
+        '{"gemini_api_key": "' + SENTINEL + '"}', encoding="utf-8"
+    )
+    file_fallback.chmod(0o644)
+
+    assert get_secret("gemini_api_key") == SENTINEL
+    assert stat.S_IMODE(file_fallback.stat().st_mode) == 0o600
 
 
 def test_missing_fallback_file_returns_none(file_fallback):

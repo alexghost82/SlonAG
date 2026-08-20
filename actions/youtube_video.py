@@ -34,8 +34,6 @@ def _get_base_dir() -> Path:
 
 
 BASE_DIR        = _get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
-
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) "
@@ -264,14 +262,14 @@ def _handle_play(parameters: dict, player) -> str:
         return "Please tell me what you'd like to watch, sir."
 
     if player:
-        player.write_log(f"[YouTube] Searching: {query}")
+        player.write_log("[YouTube] Searching")
 
-    print(f"[YouTube] 🔍 Scraping first non-Shorts video for: {query}")
+    print(f"[YouTube] 🔍 Searching query_length={len(query)}")
 
     video_url = _scrape_first_video_url(query)
 
     if video_url:
-        print(f"[YouTube] ▶️ Opening: {video_url}")
+        print("[YouTube] ▶️ Opening selected video")
         _open_url(video_url)
         return f"Playing: {query}"
 
@@ -300,7 +298,7 @@ def _handle_summarize(parameters: dict, player, speak) -> str:
         return "Could not extract video ID from that URL, sir."
 
     if player:
-        player.write_log(f"[YouTube] Summarizing: {url}")
+        player.write_log("[YouTube] Summarizing video")
     if speak:
         speak("Fetching the transcript now, sir. One moment.")
 
@@ -338,7 +336,7 @@ def _handle_get_info(parameters: dict, player, speak) -> str:
         return "Could not extract video ID, sir."
 
     if player:
-        player.write_log(f"[YouTube] Getting info: {url}")
+        player.write_log("[YouTube] Getting video info")
 
     info = _scrape_video_info(video_id)
     if not info:
@@ -400,7 +398,7 @@ def youtube_video(
 
     if player:
         player.write_log(f"[YouTube] Action: {action}")
-    print(f"[YouTube] ▶️  Action: {action}  Params: {params}")
+    print(f"[YouTube] ▶️  Action: {action} keys={sorted(params)}")
 
     handler = _ACTION_MAP.get(action)
     if handler is None:

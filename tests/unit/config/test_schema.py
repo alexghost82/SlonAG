@@ -21,6 +21,7 @@ def test_defaults_use_russian_language():
     assert settings.local_models.ollama.base_url == "http://127.0.0.1:11434"
     assert settings.local_models.llama_cpp.base_url == "http://127.0.0.1:8080"
     assert settings.os_system is None
+    assert settings.camera_index is None
 
 
 def test_rejects_invalid_privacy_profile_type():
@@ -76,6 +77,18 @@ def test_rejects_secret_fields():
 def test_rejects_invalid_os_system_type():
     with pytest.raises(SettingsValidationError, match="os_system"):
         validate_settings({"os_system": 3})
+
+
+@pytest.mark.parametrize("value", [-1, True, "0"])
+def test_rejects_invalid_camera_index(value):
+    with pytest.raises(SettingsValidationError, match="camera_index"):
+        validate_settings({"camera_index": value})
+
+
+def test_camera_index_round_trip():
+    settings = validate_settings({"camera_index": 2})
+    assert settings.camera_index == 2
+    assert validate_settings(settings.to_dict()) == settings
 
 
 def test_rejects_non_object_payload():

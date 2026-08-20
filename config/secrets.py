@@ -247,6 +247,11 @@ def _file_get(name: str) -> str | None:
     path = FALLBACK_PATH
     if not path.is_file():
         return None
+    if os.name != "nt":
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            raise SecretStoreError(f"failed to secure secret file for {name}") from None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

@@ -13,15 +13,18 @@ def get_base_dir():
 
 
 BASE_DIR         = get_base_dir()
-API_CONFIG_PATH  = BASE_DIR / "config" / "api_keys.json"
 PROJECTS_DIR     = Path.home() / "Desktop" / "SlonProjects"
 MAX_FIX_ATTEMPTS = 5
 MODEL_PLANNER    = "gemini-2.5-flash"
 MODEL_WRITER     = "gemini-2.5-flash"
 
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    from config.secrets import get_secret
+
+    key = get_secret("gemini_api_key")
+    if key is None:
+        raise RuntimeError("Gemini API key is not configured.")
+    return key
 
 
 def _get_model(model_name: str):

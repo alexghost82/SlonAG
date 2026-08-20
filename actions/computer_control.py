@@ -30,17 +30,12 @@ def _base_dir() -> Path:
 
 
 _BASE         = _base_dir()
-_CONFIG_PATH  = _BASE / "config" / "api_keys.json"
 _MEMORY_PATH  = _BASE / "memory" / "long_term.json"
 
-def _load_config() -> dict:
-    try:
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
 def _get_os() -> str:
-    return _load_config().get("os_system", "windows").lower()
+    from config import get_os
+
+    return get_os()
 
 _SAFE_SCREENSHOT_ROOTS = (
     Path.home(),
@@ -377,7 +372,7 @@ def computer_control(
     if player:
         player.write_log(f"[Computer] {action}")
 
-    print(f"[ComputerControl] ▶ {action}  {params}")
+    print(f"[ComputerControl] ▶ {action} keys={sorted(params)}")
 
     try:
 

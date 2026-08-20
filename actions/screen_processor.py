@@ -29,8 +29,6 @@ def get_base_dir():
     return Path(__file__).resolve().parent.parent
 
 BASE_DIR        = get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
-
 LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 CHANNELS            = 1
 RECEIVE_SAMPLE_RATE = 24000
@@ -52,23 +50,21 @@ SYSTEM_PROMPT = (
 
 
 def _get_api_key() -> str:
-    try:
-        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-            keys = json.load(f)
-        key = keys.get("gemini_api_key", "")
-        if not key:
-            raise ValueError("gemini_api_key not found")
-        return key
-    except Exception as e:
-        raise RuntimeError(f"Could not load API key: {e}")
+    from config.secrets import get_secret
+
+    key = get_secret("gemini_api_key")
+    if key is None:
+        raise RuntimeError("Gemini API key is not configured.")
+    return key
 
 
 def _get_camera_index() -> int:
+    from config.settings import load_settings
+
     try:
-        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        if "camera_index" in cfg:
-            return int(cfg["camera_index"])
+        configured = load_settings().camera_index
+        if configured is not None:
+            return configured
     except Exception:
         pass
 
@@ -92,13 +88,10 @@ def _get_camera_index() -> int:
             print(f"[Camera] ⚠️  Index {idx}: no valid frame.")
 
     try:
-        cfg = {}
-        if API_CONFIG_PATH.exists():
-            with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-        cfg["camera_index"] = best_index
-        with open(API_CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=4)
+        from dataclasses import replace
+        from config.settings import load_settings, save_settings
+
+        save_settings(replace(load_settings(), camera_index=best_index))
         print(f"[Camera] 💾 Camera index {best_index} saved to config.")
     except Exception as e:
         print(f"[Camera] ⚠️  Could not save camera index: {e}")
@@ -254,7 +247,9 @@ class _LiveSession:
                         full = re.sub(r'\s+', ' ', " ".join(transcript_buf)).strip()
                         if full:
                             self._player.write_log(f"Slon: {full}")
-                            print(f"[ScreenProcess] 💬 {full}")
+                            print(
+                                f"[ScreenProcess] 💬 transcript_length={len(full)}"
+                            )
                     transcript_buf = []
         except Exception as e:
             print(f"[ScreenProcess] ⚠️ Recv error: {e}")
@@ -320,7 +315,7 @@ def screen_process(
         return False
 
     angle = (parameters or {}).get("angle", "screen").lower().strip()
-    print(f"[ScreenProcess] angle={angle!r}  text={user_text!r}")
+    print(f"[ScreenProcess] angle={angle!r} text_length={len(user_text)}")
 
     _ensure_started(player=player)
 

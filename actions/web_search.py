@@ -10,12 +10,13 @@ def _get_base_dir() -> Path:
 
 
 BASE_DIR        = _get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
-
-
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    from config.secrets import get_secret
+
+    key = get_secret("gemini_api_key")
+    if key is None:
+        raise RuntimeError("Gemini API key is not configured.")
+    return key
 
 
 def _gemini_search(query: str) -> str:
@@ -113,9 +114,9 @@ def web_search(
         mode = "compare"
 
     if player:
-        player.write_log(f"[Search] {query or ', '.join(items)}")
+        player.write_log(f"[Search] mode={mode}")
 
-    print(f"[WebSearch] 🔍 Query: {query!r}  Mode: {mode}")
+    print(f"[WebSearch] 🔍 query_length={len(query)} mode={mode}")
 # replace: result = _gemini_search(query) block with:
     try:
         from or_client import client

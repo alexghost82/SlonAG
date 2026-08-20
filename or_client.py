@@ -1,4 +1,3 @@
-import json
 import sys
 import time
 import base64
@@ -18,20 +17,13 @@ def _get_base_dir() -> Path:
 
 
 BASE_DIR     = _get_base_dir()
-API_KEY_PATH = BASE_DIR / "config" / "api_keys.json"
-
 def _load_api_key() -> str:
-    try:
-        with open(API_KEY_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        key = data.get("openrouter_api_key", "").strip()
-        if not key:
-            raise ValueError("openrouter_api_key is empty in api_keys.json")
-        return key
-    except FileNotFoundError:
-        raise RuntimeError(f"api_keys.json not found at: {API_KEY_PATH}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to load OpenRouter API key: {e}")
+    from config.secrets import get_secret
+
+    key = get_secret("openrouter_api_key")
+    if key is None:
+        raise RuntimeError("OpenRouter API key is not configured.")
+    return key
 
 TEXT_MODELS: list[str] = [
     "nvidia/nemotron-3-super-120b-a12b:free",

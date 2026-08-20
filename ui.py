@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import math
 import os
@@ -12,6 +13,9 @@ import time
 from pathlib import Path
 
 import psutil
+
+from config.secrets import get_secret, set_secret
+from config.settings import load_settings, save_settings
 
 from PyQt6.QtCore import (
     QEasingCurve, QMimeData, QObject, QPointF, QRectF, QSize, Qt,
@@ -63,8 +67,6 @@ def _base_dir() -> Path:
     return Path(__file__).resolve().parent
 
 BASE_DIR   = _base_dir()
-CONFIG_DIR = BASE_DIR / "config"
-API_FILE   = CONFIG_DIR / "api_keys.json"
 
 _DEFAULT_W, _DEFAULT_H = 980, 700
 _MIN_W,     _MIN_H     = 820, 580
@@ -1610,12 +1612,7 @@ class MainWindow(QMainWindow):
             return
         try:
             def _keys(name: str) -> str | None:
-                try:
-                    data = json.loads(API_FILE.read_text(encoding="utf-8"))
-                except Exception:
-                    return None
-                value = data.get(name)
-                return value if isinstance(value, str) and value.strip() else None
+                return get_secret(name)
 
             stack = build_runtime_stack(
                 repo_root=BASE_DIR,
@@ -1628,7 +1625,9 @@ class MainWindow(QMainWindow):
                 self._log_sig.emit(f"SYS: bridge {line}")
         except Exception as exc:
             self._runtime_stack = None
-            self._log_sig.emit(f"SYS: runtime bridge failed — {exc}")
+            self._log_sig.emit(
+                f"SYS: runtime bridge failed — {type(exc).__name__}"
+            )
 
     def _init_control_plane(self) -> None:
         self._control_plane = None
@@ -1892,12 +1891,11 @@ class MainWindow(QMainWindow):
             plane.append_log(text)
 
     def _check_config(self) -> bool:
-        if not API_FILE.exists(): return False
         try:
-            d = json.loads(API_FILE.read_text(encoding="utf-8"))
-            return (bool(d.get("gemini_api_key")) and
-                    bool(d.get("openrouter_api_key")) and
-                    bool(d.get("os_system")))
+            return bool(
+                get_secret("gemini_api_key")
+                and get_secret("openrouter_api_key")
+            )
         except Exception:
             return False
 
@@ -1915,15 +1913,9 @@ class MainWindow(QMainWindow):
         self._overlay = ov
 
     def _on_setup_done(self, key: str, or_key: str, os_name: str):
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        API_FILE.write_text(
-            json.dumps({
-                "gemini_api_key":    key,
-                "openrouter_api_key": or_key,
-                "os_system":         os_name,
-            }, indent=4),
-            encoding="utf-8",
-        )
+        set_secret("gemini_api_key", key)
+        set_secret("openrouter_api_key", or_key)
+        save_settings(replace(load_settings(), os_system=os_name.lower()))
         self._ready = True
         if self._overlay:
             self._overlay.hide()

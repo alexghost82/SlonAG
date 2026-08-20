@@ -95,7 +95,8 @@ _REGISTRY: dict[str, SafetyRule] = {
         schema=ArgSchema(required=("city",), types=_types(city="str")),
     ),
     "flight_finder": SafetyRule(
-        RiskLevel.READ,
+        # Opens a browser and may persist results to Desktop.
+        RiskLevel.CONFIRM,
         schema=ArgSchema(
             required=("origin", "destination", "date"),
             types=_types(
@@ -110,7 +111,8 @@ _REGISTRY: dict[str, SafetyRule] = {
         ),
     ),
     "youtube_video": SafetyRule(
-        RiskLevel.NOTIFY,
+        # Actions may open URLs or save generated summaries.
+        RiskLevel.CONFIRM,
         schema=ArgSchema(
             types=_types(
                 action="str",
@@ -133,7 +135,8 @@ _REGISTRY: dict[str, SafetyRule] = {
         schema=ArgSchema(types=_types(key="str", value="str")),
     ),
     "file_processor": SafetyRule(
-        RiskLevel.NOTIFY,
+        # Many format-specific actions create derived files.
+        RiskLevel.CONFIRM,
         schema=ArgSchema(
             types=_types(action="str", file_path="str", instruction="str"),
         ),
