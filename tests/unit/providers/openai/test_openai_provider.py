@@ -13,6 +13,7 @@ from providers.contracts import (
     ChatRequest,
     ChatResponse,
     ModelInfo,
+    ToolCall,
 )
 from providers.errors import CapabilityError, ProviderAuthError
 from providers.openai.client import OpenAIHttpClient
@@ -213,6 +214,21 @@ async def test_stream_yields_delta_then_done() -> None:
     assert len(transport.calls) == 1
     assert transport.calls[0]["json"]["model"] == TEXT_MODEL_ID
     assert transport.calls[0]["json"]["stream"] is True
+
+
+async def test_stream_assembles_fragmented_tool_call() -> None:
+    transport = FakeTransport()
+    transport.stream_lines = [
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1",'
+        '"function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+        '"function":{"arguments":"\\"x\\"}"}}]},"finish_reason":"tool_calls"}]}',
+        "data: [DONE]",
+    ]
+    provider, _ = _provider(transport)
+    events = [event async for event in provider.stream(_request())]
+    assert [event.type for event in events] == ["tool_call", "done"]
+    assert events[0].tool_call == ToolCall("call-1", "lookup", {"q": "x"})
 
 
 def test_factory_is_registered_as_openai() -> None:

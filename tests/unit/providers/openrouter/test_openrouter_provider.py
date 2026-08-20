@@ -13,6 +13,7 @@ from providers.contracts import (
     ChatProvider,
     ChatRequest,
     ModelInfo,
+    ToolCall,
 )
 from providers.errors import CapabilityError, ProviderAuthError, ProviderError
 from providers.openrouter import (
@@ -225,6 +226,22 @@ async def test_chat_and_stream_event_shape(chat_request: ChatRequest) -> None:
     assert events[1] == ChatEvent(type="delta", text="lo")
     assert events[-1] == ChatEvent(type="done")
     assert events[-1].text == ""
+
+
+async def test_stream_assembles_fragmented_tool_call(chat_request: ChatRequest) -> None:
+    def fake_request(method: str, url: str, **kwargs: object) -> FakeResponse:
+        return FakeResponse(lines=[
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"or-1",'
+            '"function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+            '"function":{"arguments":"\\"x\\"}"}}]},"finish_reason":"tool_calls"}]}',
+            "data: [DONE]",
+        ])
+
+    provider = OpenRouterChatProvider(api_key="test-key", request=fake_request)
+    events = [event async for event in provider.stream(chat_request)]
+    assert [event.type for event in events] == ["tool_call", "done"]
+    assert events[0].tool_call == ToolCall("or-1", "lookup", {"q": "x"})
 
 
 async def test_capability_reject_before_http() -> None:

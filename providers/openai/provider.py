@@ -7,11 +7,10 @@ tools, and structured output are never inferred from a model name.
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from providers.capabilities import require_capability
+from providers.capabilities import require_capability, require_provider_match
 from providers.contracts import (
     ChatEvent,
     ChatRequest,
@@ -27,6 +26,12 @@ from providers.openai.client import (
     OpenAIHttpClient,
     extract_delta_text,
     extract_message_text,
+)
+from providers.openai_compat import (
+    ToolCallStreamAssembler,
+    finish_reason,
+    message_payload,
+    parse_tool_calls,
 )
 from providers.registry import register
 
@@ -76,6 +81,7 @@ class OpenAIChatProvider:
         return ProviderStatus(provider_id=PROVIDER_ID, ok=True)
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
+        require_provider_match(request.model, PROVIDER_ID)
         require_capability(request.model, request.role)
         payload = self._http().chat_completion(self._chat_body(request, stream=False))
         return ChatResponse(
@@ -86,13 +92,22 @@ class OpenAIChatProvider:
         )
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
+        require_provider_match(request.model, PROVIDER_ID)
         require_capability(request.model, request.role)
+        assembler = ToolCallStreamAssembler(PROVIDER_ID)
         for event in self._http().stream_chat_completion(
             self._chat_body(request, stream=True)
         ):
             text = extract_delta_text(event)
             if text:
                 yield ChatEvent(type="delta", text=text)
+            assembler.add(event)
+            if finish_reason(event) == "tool_calls":
+                for call in assembler.finish():
+                    yield ChatEvent(type="tool_call", tool_call=call)
+        if assembler.pending:
+            for call in assembler.finish():
+                yield ChatEvent(type="tool_call", tool_call=call)
         yield ChatEvent(type="done")
 
     def _http(self) -> OpenAIHttpClient:
@@ -112,7 +127,7 @@ class OpenAIChatProvider:
     def _chat_body(self, request: ChatRequest, *, stream: bool) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": request.model.model_id,
-            "messages": [_message_payload(message) for message in request.messages],
+            "messages": [message_payload(message) for message in request.messages],
             "stream": stream,
         }
         if request.tools:
@@ -133,50 +148,11 @@ class OpenAIChatProvider:
 
 
 def _message_payload(message: Any) -> dict[str, Any]:
-    if message.role == "tool":
-        payload = message.error if message.error is not None else message.result
-        return {
-            "role": "tool",
-            "tool_call_id": message.tool_call_id,
-            "content": payload if isinstance(payload, str) else json.dumps(payload),
-        }
-    item: dict[str, Any] = {"role": message.role, "content": message.content}
-    if message.tool_calls:
-        item["tool_calls"] = [
-            {
-                "id": call.id,
-                "type": "function",
-                "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
-            }
-            for call in message.tool_calls
-        ]
-    return item
+    return message_payload(message)  # compatibility for tests/importers
 
 
 def _tool_calls(payload: object) -> tuple[ToolCall, ...]:
-    if not isinstance(payload, dict):
-        return ()
-    choices = payload.get("choices")
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        return ()
-    message = choices[0].get("message")
-    raw_calls = message.get("tool_calls") if isinstance(message, dict) else None
-    if not isinstance(raw_calls, list):
-        return ()
-    calls: list[ToolCall] = []
-    for index, raw in enumerate(raw_calls):
-        function = raw.get("function") if isinstance(raw, dict) else None
-        if not isinstance(function, dict) or not isinstance(function.get("name"), str):
-            continue
-        encoded = function.get("arguments", "{}")
-        try:
-            arguments = json.loads(encoded) if isinstance(encoded, str) else encoded
-        except json.JSONDecodeError:
-            arguments = {"_malformed_arguments": encoded}
-        if not isinstance(arguments, dict):
-            arguments = {"_malformed_arguments": encoded}
-        calls.append(ToolCall(str(raw.get("id") or f"call_{index}"), function["name"], arguments))
-    return tuple(calls)
+    return parse_tool_calls(payload, PROVIDER_ID)
 
 
 def conservative_capabilities(model_id: str) -> dict[str, bool]:

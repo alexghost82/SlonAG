@@ -3,13 +3,15 @@ from __future__ import annotations
 import pytest
 
 from providers.contracts import (
+    AssistantToolCallMessage,
     ChatMessage,
     ChatRequest,
     ModelInfo,
     ToolCall,
     ToolDefinition,
+    ToolResultMessage,
 )
-from providers.errors import CapabilityError
+from providers.errors import CapabilityError, ProviderError
 from providers.local import OllamaChatProvider
 from tests.unit.providers.local.fakes import FakeTransport
 
@@ -94,21 +96,12 @@ async def test_chat_serializes_tools_and_parses_tool_calls() -> None:
 
 async def test_tool_stream_uses_non_stream_request_and_emits_canonical_call() -> None:
     transport = FakeTransport(
-        chat={
-            "message": {
-                "role": "assistant",
-                "content": "Calling weather",
-                "tool_calls": [
-                    {
-                        "id": "call-weather",
-                        "function": {
-                            "name": "get_weather",
-                            "arguments": {"city": "Rome"},
-                        },
-                    }
-                ],
-            }
-        }
+        stream_lines=(
+            '{"message":{"content":"Calling weather"},"done":false}',
+            '{"message":{"content":"","tool_calls":[{"id":"call-weather",'
+            '"function":{"name":"get_weather","arguments":{"city":"Rome"}}}]},'
+            '"done":true}',
+        )
     )
     events = [
         event
@@ -119,8 +112,8 @@ async def test_tool_stream_uses_non_stream_request_and_emits_canonical_call() ->
         id="call-weather", name="get_weather", arguments={"city": "Rome"}
     )
     assert len(transport.calls) == 1
-    assert transport.calls[0]["stream"] is False
-    assert transport.calls[0]["json_body"]["stream"] is False
+    assert transport.calls[0]["stream"] is True
+    assert transport.calls[0]["json_body"]["stream"] is True
 
 
 async def test_unknown_tool_capability_is_rejected_before_http() -> None:
@@ -145,3 +138,39 @@ async def test_text_only_payload_is_unchanged() -> None:
     assert isinstance(body, dict)
     assert "tools" not in body
     assert "tool_choice" not in body
+
+
+async def test_native_continuation_uses_ollama_tool_name_contract() -> None:
+    call = ToolCall("internal-call", "get_weather", {"city": "Paris"})
+    base = _request()
+    request = ChatRequest(
+        model=base.model,
+        messages=(
+            ChatMessage(role="user", content="Weather?"),
+            AssistantToolCallMessage((call,)),
+            ToolResultMessage(
+                "internal-call", "get_weather", result={"temperature": 22}
+            ),
+        ),
+        tools=base.tools,
+    )
+    transport = FakeTransport(
+        chat={"message": {"role": "assistant", "content": "22 C"}}
+    )
+    await OllamaChatProvider(transport=transport).chat(request)
+    messages = transport.calls[0]["json_body"]["messages"]
+    assert messages[1]["tool_calls"][0]["id"] == "internal-call"
+    assert messages[2]["tool_name"] == "get_weather"
+    assert "tool_call_id" not in messages[2]  # Ollama native API correlates by name/order.
+
+
+async def test_duplicate_native_ollama_ids_are_rejected() -> None:
+    duplicate = {
+        "id": "same",
+        "function": {"name": "get_weather", "arguments": {"city": "Paris"}},
+    }
+    transport = FakeTransport(
+        chat={"message": {"role": "assistant", "content": "", "tool_calls": [duplicate, duplicate]}}
+    )
+    with pytest.raises(ProviderError, match="duplicate"):
+        await OllamaChatProvider(transport=transport).chat(_request())

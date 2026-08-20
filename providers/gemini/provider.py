@@ -9,12 +9,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from providers.capabilities import require_capability
+from providers.capabilities import require_capability, require_provider_match
 from providers.contracts import (
     ChatEvent,
-    ChatMessage,
+    ConversationMessage,
     ChatRequest,
     ChatResponse,
     ModelInfo,
@@ -55,7 +56,7 @@ def _text_of(payload: object) -> str:
 
 
 def _contents_and_config(
-    messages: Sequence[ChatMessage],
+    messages: Sequence[ConversationMessage],
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     system_parts: list[str] = []
     contents: list[dict[str, Any]] = []
@@ -69,6 +70,11 @@ def _contents_and_config(
                 if message.error is not None
                 else {"result": message.result}
             )
+            if message.artifacts:
+                response["artifacts"] = [
+                    asdict(item) if is_dataclass(item) else item
+                    for item in message.artifacts
+                ]
             contents.append(
                 {
                     "role": "user",
@@ -96,7 +102,7 @@ def _contents_and_config(
                     "args": dict(call.arguments),
                 }
             }
-            for call in message.tool_calls
+            for call in getattr(message, "tool_calls", ())
         )
         contents.append({"role": gemini_role, "parts": parts})
     config = (
@@ -133,27 +139,41 @@ def _next_or_end(iterator: Iterator[Any]) -> Any:
     return next(iterator, _END)
 
 
-def _tool_calls_of(response: object) -> tuple[ToolCall, ...]:
+def _tool_calls_of(
+    response: object, *, fallback_prefix: str = "call"
+) -> tuple[ToolCall, ...]:
     raw_calls = getattr(response, "function_calls", None)
     if raw_calls is None:
         return ()
     calls: list[ToolCall] = []
     for index, raw in enumerate(raw_calls):
         name = getattr(raw, "name", None)
-        if not isinstance(name, str):
-            continue
+        if not isinstance(name, str) or not name:
+            raise ProviderError(
+                "Gemini returned an unnamed function call",
+                provider_id=PROVIDER_ID,
+            )
         arguments = getattr(raw, "args", {})
         if not isinstance(arguments, dict):
             try:
                 arguments = dict(arguments)
-            except (TypeError, ValueError):
-                arguments = {"_malformed_arguments": str(arguments)}
+            except (TypeError, ValueError) as exc:
+                raise ProviderError(
+                    "Gemini returned malformed function arguments",
+                    provider_id=PROVIDER_ID,
+                ) from exc
         calls.append(
             ToolCall(
-                id=str(getattr(raw, "id", None) or f"call_{index}"),
+                id=str(getattr(raw, "id", None) or f"{fallback_prefix}_{index}"),
                 name=name,
                 arguments=arguments,
             )
+        )
+    ids = [call.id for call in calls]
+    if len(ids) != len(set(ids)):
+        raise ProviderError(
+            "Gemini returned duplicate function call ids",
+            provider_id=PROVIDER_ID,
         )
     return tuple(calls)
 
@@ -196,6 +216,7 @@ class GeminiChatProvider:
         return ProviderStatus(provider_id=PROVIDER_ID, ok=True)
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
+        require_provider_match(request.model, PROVIDER_ID)
         require_capability(request.model, request.role)
         try:
             response = await self._generate(request)
@@ -212,14 +233,28 @@ class GeminiChatProvider:
         )
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
+        require_provider_match(request.model, PROVIDER_ID)
         require_capability(request.model, request.role)
         try:
             raw = self._open_stream(request)
+            seen_call_ids: set[str] = set()
+            chunk_index = 0
             if hasattr(raw, "__aiter__"):
                 async for chunk in raw:
                     text = _text_of(chunk)
                     if text:
                         yield ChatEvent(type="delta", text=text)
+                    for call in _tool_calls_of(
+                        chunk, fallback_prefix=f"stream_{chunk_index}"
+                    ):
+                        if call.id in seen_call_ids:
+                            raise ProviderError(
+                                "Gemini stream returned a duplicate function call id",
+                                provider_id=PROVIDER_ID,
+                            )
+                        seen_call_ids.add(call.id)
+                        yield ChatEvent(type="tool_call", tool_call=call)
+                    chunk_index += 1
             else:
                 while True:
                     chunk = await asyncio.to_thread(_next_or_end, raw)
@@ -228,6 +263,17 @@ class GeminiChatProvider:
                     text = _text_of(chunk)
                     if text:
                         yield ChatEvent(type="delta", text=text)
+                    for call in _tool_calls_of(
+                        chunk, fallback_prefix=f"stream_{chunk_index}"
+                    ):
+                        if call.id in seen_call_ids:
+                            raise ProviderError(
+                                "Gemini stream returned a duplicate function call id",
+                                provider_id=PROVIDER_ID,
+                            )
+                        seen_call_ids.add(call.id)
+                        yield ChatEvent(type="tool_call", tool_call=call)
+                    chunk_index += 1
         except (CapabilityError, ProviderAuthError, ProviderError):
             raise
         except Exception as exc:
@@ -237,26 +283,7 @@ class GeminiChatProvider:
 
     async def _generate(self, request: ChatRequest) -> Any:
         models = _models_api(self._require_client())
-        contents, config = _contents_and_config(request.messages)
-        kwargs: dict[str, Any] = {
-            "model": request.model.model_id,
-            "contents": contents,
-        }
-        if config is not None:
-            kwargs["config"] = config
-        if request.tools:
-            kwargs.setdefault("config", {})["tools"] = [
-                {
-                    "function_declarations": [
-                        {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": dict(tool.parameters),
-                        }
-                        for tool in request.tools
-                    ]
-                }
-            ]
+        kwargs = _request_kwargs(request)
         generate = models.generate_content
         if inspect.iscoroutinefunction(generate):
             return await generate(**kwargs)
@@ -264,11 +291,28 @@ class GeminiChatProvider:
 
     def _open_stream(self, request: ChatRequest) -> Any:
         models = _models_api(self._require_client())
-        contents, config = _contents_and_config(request.messages)
-        kwargs: dict[str, Any] = {
-            "model": request.model.model_id,
-            "contents": contents,
-        }
-        if config is not None:
-            kwargs["config"] = config
-        return models.generate_content_stream(**kwargs)
+        return models.generate_content_stream(**_request_kwargs(request))
+
+
+def _request_kwargs(request: ChatRequest) -> dict[str, Any]:
+    contents, config = _contents_and_config(request.messages)
+    kwargs: dict[str, Any] = {
+        "model": request.model.model_id,
+        "contents": contents,
+    }
+    if config is not None:
+        kwargs["config"] = config
+    if request.tools:
+        kwargs.setdefault("config", {})["tools"] = [
+            {
+                "function_declarations": [
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": dict(tool.parameters),
+                    }
+                    for tool in request.tools
+                ]
+            }
+        ]
+    return kwargs
