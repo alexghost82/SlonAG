@@ -23,6 +23,20 @@ async def receive_live_session(
     input_transcript: list[str] = []
 
     async for response in session.receive():
+        provider_output = bool(
+            response.data
+            or response.tool_call
+            or (
+                response.server_content
+                and response.server_content.output_transcription
+                and response.server_content.output_transcription.text
+            )
+        )
+        if provider_output:
+            latency_trace.ensure_turn()
+            latency_trace.mark("user_speech_end")
+            latency_trace.mark("provider_first_response")
+
         if response.data:
             audio_in_queue.put_nowait(response.data)
 
@@ -35,13 +49,14 @@ async def receive_live_session(
                     output_transcript.append(text)
 
             if content.input_transcription and content.input_transcription.text:
+                if not latency_trace.active:
+                    latency_trace.start_turn()
                 text = content.input_transcription.text.strip()
                 if text:
                     input_transcript.append(text)
 
             if content.turn_complete:
-                latency_trace.mark("user_speech_end")
-                latency_trace.mark("turn_complete")
+                breakdown = latency_trace.finish_turn()
                 set_speaking(False)
                 user_text = " ".join(input_transcript).strip()
                 assistant_text = " ".join(output_transcript).strip()
@@ -51,6 +66,12 @@ async def receive_live_session(
                     ui.write_log(f"You: {user_text}")
                 if assistant_text:
                     ui.write_log(f"Slon: {assistant_text}")
+                if breakdown:
+                    rendered = " ".join(
+                        f"{name}={value:.1f}ms"
+                        for name, value in breakdown.items()
+                    )
+                    ui.write_log(f"SYS: latency {rendered}")
                 if len(user_text) > 5:
                     threading.Thread(
                         target=update_memory,

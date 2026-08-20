@@ -50,6 +50,9 @@ class AudioPipeline:
             raise RuntimeError("audio pipeline is not bound")
         while True:
             message = await self.out_queue.get()
+            if not getattr(self.latency_trace, "active", False):
+                self.latency_trace.start_turn()
+                self.latency_trace.mark("provider_request_start")
             await self.session.send_realtime_input(media=message)
 
     async def listen(self) -> None:

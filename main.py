@@ -95,7 +95,7 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
 
 from mark.tools.builtin import build_builtin_registry
 from mark.tools.exporters.gemini import export_gemini_tools
-from agent.latency import LatencyTrace
+from agent.latency import TurnLatencyTracker
 from runtime.audio import AudioPipeline
 from runtime.lifecycle import run_live_lifecycle
 from runtime.live_session import receive_live_session
@@ -119,7 +119,7 @@ class SlonLive:
         self.tool_bridge = LiveToolBridge(ui=ui, speak=self.speak)
         self.tool_registry = self.tool_bridge.registry
         self.tool_executor = self.tool_bridge.executor
-        self.latency_trace = LatencyTrace()
+        self.latency_trace = TurnLatencyTracker()
         self.audio = AudioPipeline(
             ui=ui,
             set_speaking=self.set_speaking,
@@ -142,6 +142,9 @@ class SlonLive:
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
             return
+        self.latency_trace.start_turn()
+        self.latency_trace.mark("user_speech_end")
+        self.latency_trace.mark("provider_request_start")
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
                 turns={"parts": [{"text": text}]},

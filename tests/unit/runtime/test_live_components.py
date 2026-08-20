@@ -10,8 +10,10 @@ import pytest
 from runtime.live_session import receive_live_session
 from runtime.audio import AudioPipeline
 from runtime.tool_bridge import LiveToolBridge
+from runtime.lifecycle import run_live_lifecycle
 from mark.safety import RiskLevel
 from mark.tools import ToolRegistry, ToolSpec
+from agent.latency import TurnLatencyTracker
 
 
 def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> None:
@@ -98,8 +100,7 @@ async def test_receive_live_session_routes_audio_transcript_and_tool_result() ->
     logs: list[str] = []
     speaking: list[bool] = []
     memory: list[tuple[str, str]] = []
-    marks: list[str] = []
-    trace = SimpleNamespace(mark=lambda event: marks.append(event))
+    trace = TurnLatencyTracker()
 
     async def execute_tool(call):
         assert call.id == "call-1"
@@ -116,8 +117,68 @@ async def test_receive_live_session_routes_audio_transcript_and_tool_result() ->
     )
 
     assert await audio_queue.get() == b"pcm"
-    assert logs == ["You: question long enough", "Slon: answer"]
-    assert "tool_call_received" in marks
+    assert logs[:2] == ["You: question long enough", "Slon: answer"]
+    assert logs[2].startswith("SYS: latency ")
+    assert len(trace.history()) == 1
     session.send_tool_response.assert_awaited_once_with(
         function_responses=["native-result"]
     )
+
+
+def test_live_latency_tracker_resets_marks_between_turns() -> None:
+    tracker = TurnLatencyTracker()
+    tracker.start_turn()
+    tracker.mark("provider_request_start")
+    tracker.mark("provider_first_response")
+    first = tracker.finish_turn()
+    tracker.start_turn()
+    assert tracker.breakdown() == {}
+    tracker.mark("tool_execution_start")
+    tracker.mark("tool_execution_finish")
+    second = tracker.finish_turn()
+
+    assert "provider" in first and "tool" not in first
+    assert "tool" in second and "provider" not in second
+    assert len(tracker.history()) == 2
+
+
+@pytest.mark.asyncio
+async def test_live_lifecycle_cancellation_cleans_up_connection() -> None:
+    connected = asyncio.Event()
+    disconnected: list[bool] = []
+
+    class Connection:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    client = SimpleNamespace(
+        aio=SimpleNamespace(
+            live=SimpleNamespace(connect=lambda **_kwargs: Connection())
+        )
+    )
+    ui = SimpleNamespace(set_state=lambda _state: None, write_log=lambda _text: None)
+
+    def on_connected(_session, _loop) -> None:
+        connected.set()
+
+    task = asyncio.create_task(
+        run_live_lifecycle(
+            client=client,
+            model_id="model",
+            build_config=lambda: {},
+            on_connected=on_connected,
+            on_disconnected=lambda: disconnected.append(True),
+            tasks=lambda: (asyncio.Event().wait(),),
+            ui=ui,
+            reconnect_delay=0,
+        )
+    )
+    await asyncio.wait_for(connected.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert disconnected == [True]
