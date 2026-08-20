@@ -172,11 +172,6 @@ class SlonLive:
             self._loop
         )
 
-    def speak_error(self, tool_name: str, error: str):
-        short = str(error)[:120]
-        self.ui.write_log(f"ERR: {tool_name} — {short}")
-        self.speak(f"Sir, {tool_name} encountered an error. {short}")
-
     def _build_config(self) -> types.LiveConnectConfig:
         from datetime import datetime
 
@@ -234,7 +229,9 @@ class SlonLive:
             response = {"result": value}
         else:
             response = {"error": result.message, "code": result.code}
-            self.speak_error(name, result.message or result.code)
+            self.ui.write_log(
+                f"ERR: {name} — {str(result.message or result.code)[:120]}"
+            )
         print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
         return types.FunctionResponse(id=fc.id, name=name, response=response)
