@@ -1,7 +1,5 @@
-"""Gemini Live runtime components used by the desktop composition root."""
+"""Gemini Live runtime components used by the desktop composition root.
 
-from runtime.audio import AudioPipeline
-from runtime.lifecycle import run_live_lifecycle
-from runtime.live_session import receive_live_session
-
-__all__ = ["AudioPipeline", "receive_live_session", "run_live_lifecycle"]
+Submodules stay lazy so headless agent/provider tests do not require the
+optional desktop audio dependency.
+"""

@@ -1,12 +1,32 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from runtime.live_session import receive_live_session
+from runtime.audio import AudioPipeline
+
+
+def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> None:
+    pipeline = AudioPipeline(
+        ui=SimpleNamespace(muted=False),
+        set_speaking=lambda _value: None,
+        latency_trace=SimpleNamespace(mark=lambda _event: None),
+        speaking_lock=threading.Lock(),
+        is_speaking=lambda: False,
+    )
+    session = SimpleNamespace()
+    pipeline.bind(session)
+    assert pipeline.session is session
+    assert pipeline.audio_in_queue is not None
+    assert pipeline.out_queue is not None
+    pipeline.unbind()
+    assert pipeline.session is None
+    assert pipeline.audio_in_queue is None
 
 
 class FakeSession:

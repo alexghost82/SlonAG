@@ -26,9 +26,10 @@ def test_wake_word_canonical() -> None:
 
 def test_active_ui_and_main_identity() -> None:
     main_py = (BASE_DIR / "main.py").read_text(encoding="utf-8")
+    lifecycle_py = (BASE_DIR / "runtime" / "lifecycle.py").read_text(encoding="utf-8")
     assert "SlonLive" in main_py
     assert "SlonUI" in main_py
-    assert "SYS: Slon online." in main_py
+    assert "SYS: Slon online." in lifecycle_py
     assert "You are Slon" in main_py
 
     ui_py = (BASE_DIR / "ui.py").read_text(encoding="utf-8")

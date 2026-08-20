@@ -7,8 +7,6 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-import sounddevice as sd
-
 SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
 CHANNELS = 1
@@ -58,6 +56,8 @@ class AudioPipeline:
         if self.out_queue is None:
             raise RuntimeError("audio pipeline is not bound")
         print("[SLON] 🎤 Mic started")
+        import sounddevice as sd
+
         loop = asyncio.get_running_loop()
 
         def callback(indata, frames, time_info, status) -> None:
@@ -85,6 +85,8 @@ class AudioPipeline:
         if self.audio_in_queue is None:
             raise RuntimeError("audio pipeline is not bound")
         print("[SLON] 🔊 Play started")
+        import sounddevice as sd
+
         stream = sd.RawOutputStream(
             samplerate=RECEIVE_SAMPLE_RATE,
             channels=CHANNELS,
