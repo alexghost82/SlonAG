@@ -95,7 +95,7 @@ class TurnLatencyTracker:
             return tuple(dict(item) for item in self._history)
 
     def statistics(self) -> dict[str, dict[str, float | int]]:
-        """Return payload-free per-metric min/median/p95/max aggregates."""
+        """Return payload-free per-metric min/median/p90/p95/max aggregates."""
         with self._lock:
             history = tuple(dict(item) for item in self._history)
         metrics = sorted({name for turn in history for name in turn})
@@ -105,10 +105,12 @@ class TurnLatencyTracker:
             if not values:
                 continue
             p95_index = max(0, math.ceil(0.95 * len(values)) - 1)
+            p90_index = max(0, math.ceil(0.90 * len(values)) - 1)
             result[metric] = {
                 "count": len(values),
                 "min": round(values[0], 1),
                 "median": round(statistics.median(values), 1),
+                "p90": round(values[p90_index], 1),
                 "p95": round(values[p95_index], 1),
                 "max": round(values[-1], 1),
             }

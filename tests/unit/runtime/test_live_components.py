@@ -307,6 +307,7 @@ def test_live_latency_tracker_reports_distribution_without_payloads(
         "count": 2,
         "min": 100.0,
         "median": 200.0,
+        "p90": 300.0,
         "p95": 300.0,
         "max": 300.0,
     }
@@ -353,3 +354,56 @@ async def test_live_lifecycle_cancellation_cleans_up_connection() -> None:
         await task
 
     assert disconnected == [True]
+
+
+@pytest.mark.asyncio
+async def test_live_lifecycle_reconnects_when_session_task_ends() -> None:
+    connected_count = 0
+    second_connection = asyncio.Event()
+    disconnected: list[bool] = []
+
+    class Connection:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    client = SimpleNamespace(
+        aio=SimpleNamespace(
+            live=SimpleNamespace(connect=lambda **_kwargs: Connection())
+        )
+    )
+    ui = SimpleNamespace(set_state=lambda _state: None, write_log=lambda _text: None)
+
+    def on_connected(_session, _loop) -> None:
+        nonlocal connected_count
+        connected_count += 1
+        if connected_count == 2:
+            second_connection.set()
+
+    async def session_ends() -> None:
+        await asyncio.sleep(0)
+
+    async def sibling_waits() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(
+        run_live_lifecycle(
+            client=client,
+            model_id="model",
+            build_config=lambda: {},
+            on_connected=on_connected,
+            on_disconnected=lambda: disconnected.append(True),
+            tasks=lambda: (session_ends(), sibling_waits()),
+            ui=ui,
+            reconnect_delay=0,
+        )
+    )
+    await asyncio.wait_for(second_connection.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert connected_count == 2
+    assert disconnected == [True, True]

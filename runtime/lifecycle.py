@@ -8,6 +8,15 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 
+class _SessionTaskEnded(Exception):
+    """Internal signal used to cancel sibling tasks when a session task ends."""
+
+
+async def _run_owned_task(operation: Awaitable[None]) -> None:
+    await operation
+    raise _SessionTaskEnded
+
+
 async def run_live_lifecycle(
     *,
     client: Any,
@@ -31,9 +40,12 @@ async def run_live_lifecycle(
                 print("[SLON] ✅ Connected.")
                 ui.set_state("LISTENING")
                 ui.write_log("SYS: Slon online.")
-                async with asyncio.TaskGroup() as task_group:
-                    for operation in tasks():
-                        task_group.create_task(operation)
+                try:
+                    async with asyncio.TaskGroup() as task_group:
+                        for operation in tasks():
+                            task_group.create_task(_run_owned_task(operation))
+                except* _SessionTaskEnded:
+                    pass
         except asyncio.CancelledError:
             on_disconnected()
             raise
