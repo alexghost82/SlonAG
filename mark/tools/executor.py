@@ -5,7 +5,8 @@ from __future__ import annotations
 import queue
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 
 from mark.safety import DecisionKind, SafetyDecision, SafetyPolicy, UntrustedSource
 from mark.tools.contracts import ToolResult
@@ -115,6 +116,38 @@ class ToolExecutor:
             )
 
         return self._normalize(outcome, started_at)
+
+    def execute_many(
+        self,
+        calls: Sequence[tuple[str, Mapping[str, object]]],
+        *,
+        source: UntrustedSource,
+        intent: str = "",
+    ) -> tuple[ToolResult, ...]:
+        """Execute a batch in input order, parallelizing only explicitly safe tools."""
+        if not calls:
+            return ()
+        specs = []
+        for name, _arguments in calls:
+            try:
+                specs.append(self._registry.get(name))
+            except Exception:
+                specs.append(None)
+        if not all(spec is not None and spec.parallel_safe for spec in specs):
+            return tuple(
+                self.execute(name, arguments, source=source, intent=intent)
+                for name, arguments in calls
+            )
+        with ThreadPoolExecutor(
+            max_workers=min(len(calls), 8), thread_name_prefix="slon-tool-batch"
+        ) as pool:
+            futures = [
+                pool.submit(
+                    self.execute, name, arguments, source=source, intent=intent
+                )
+                for name, arguments in calls
+            ]
+            return tuple(future.result() for future in futures)
 
     @staticmethod
     def _invoke(

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent.observation import Observation, ObservationKind
+from agent.latency import LatencyTrace
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from mark.tools.contracts import ToolResult
 from providers.contracts import (
@@ -148,6 +149,7 @@ class AgentLoopResult:
     final_answer: str | None = None
     steps: list[AgentLoopStepResult] = field(default_factory=list)
     reason: str = ""
+    latency_ms: dict[str, float] = field(default_factory=dict)
 
 
 class AgentLoop:
@@ -176,6 +178,7 @@ class AgentLoop:
     ) -> AgentLoopResult:
         """Executes the multi-turn agent loop until a final answer or termination condition is reached."""
         steps: list[AgentLoopStepResult] = []
+        trace = LatencyTrace()
         messages: list[ChatMessage] = [ChatMessage(role="user", content=user_goal)]
 
         while True:
@@ -221,6 +224,7 @@ class AgentLoop:
 
             # Dispatch call to model provider
             try:
+                trace.mark("provider_request_start")
                 response = await asyncio.wait_for(
                     self._call_provider(messages), timeout=self.budget.remaining_seconds()
                 )
@@ -228,6 +232,7 @@ class AgentLoop:
                 return AgentLoopResult(False, steps=steps, reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded")
             except asyncio.CancelledError:
                 raise
+            trace.mark("provider_first_response")
 
             response_text = getattr(response, "text", None)
             if response_text is None and isinstance(response, dict):
@@ -248,14 +253,44 @@ class AgentLoop:
             )
 
             if not tool_calls:
+                trace.mark("turn_complete")
                 return AgentLoopResult(
                     ok=True,
                     final_answer=str(response_text) if response_text else None,
                     steps=steps,
                     reason="Completed successfully",
+                    latency_ms=trace.breakdown(),
                 )
 
-            for tool_call in tool_calls:
+            parsed_calls = [self._parse_tool_call(call) for call in tool_calls]
+            remaining_calls = max(
+                0, self.budget.max_tool_calls - self.budget.tool_call_count
+            )
+            batch_results: tuple[object, ...] | None = None
+            if hasattr(self.tool_executor, "execute_many") and remaining_calls:
+                from mark.safety import UntrustedSource
+
+                selected = parsed_calls[:remaining_calls]
+                try:
+                    trace.mark("tool_call_received")
+                    trace.mark("tool_execution_start")
+                    batch_results = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.tool_executor.execute_many,
+                            [(name, args) for _id, name, args in selected],
+                            source=UntrustedSource.USER,
+                            intent=user_goal,
+                        ),
+                        timeout=self.budget.remaining_seconds(),
+                    )
+                except TimeoutError:
+                    return AgentLoopResult(
+                        False,
+                        steps=steps,
+                        reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded",
+                    )
+
+            for call_index, tool_call in enumerate(tool_calls):
                 if self.budget.tool_call_count >= self.budget.max_tool_calls:
                     return AgentLoopResult(
                         ok=False,
@@ -265,14 +300,17 @@ class AgentLoop:
                     )
                 self.budget.tool_call_count += 1
 
-                tool_id, tool_name, tool_args = self._parse_tool_call(tool_call)
+                tool_id, tool_name, tool_args = parsed_calls[call_index]
 
                 # Execute tool, returning observation on error instead of crashing
                 try:
-                    raw_res = await asyncio.wait_for(
-                        self._execute_tool(tool_name, tool_args, user_goal),
-                        timeout=self.budget.remaining_seconds(),
-                    )
+                    if batch_results is not None:
+                        raw_res = batch_results[call_index]
+                    else:
+                        raw_res = await asyncio.wait_for(
+                            self._execute_tool(tool_name, tool_args, user_goal),
+                            timeout=self.budget.remaining_seconds(),
+                        )
                     if isinstance(raw_res, Observation):
                         obs = raw_res
                     elif isinstance(raw_res, ToolResult):
@@ -303,6 +341,7 @@ class AgentLoop:
                         ok=False,
                         error=str(exc),
                     )
+                trace.mark("tool_execution_finish")
 
                 step_res = AgentLoopStepResult(
                     turn_index=self.budget.turn_count,
@@ -334,6 +373,7 @@ class AgentLoop:
                         error=None if obs.ok else obs.error,
                     )
                 )
+                trace.mark("observation_returned")
 
             if self.budget.turn_count >= self.budget.max_turns:
                 return AgentLoopResult(
@@ -391,7 +431,7 @@ class AgentLoop:
                 ToolDefinition(spec.name, spec.description, spec.input_schema)
                 for spec in specs
             ) if model.tool_calling else ()
-            req = ChatRequest(model=model, messages=messages, tools=tools)
+            req = ChatRequest(model=model, messages=tuple(messages), tools=tools)
             res = self.provider.chat(req)
         elif callable(self.provider):
             res = self.provider(messages)

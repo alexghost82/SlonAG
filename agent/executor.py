@@ -17,6 +17,7 @@ from mark.safety import (
 from mark.tools import ToolExecutor, ToolRegistry, ToolResult
 from mark.tools.builtin import build_builtin_registry
 from mark.tools.legacy.adapters import with_legacy_speak
+from providers.contracts import ModelInfo
 
 
 def get_base_dir() -> Path:
@@ -391,12 +392,14 @@ async def execute_agent_loop(
     tool_executor: Any = None,
     budget: LoopBudget | None = None,
     steering_queue: SteeringQueue | None = None,
+    model: ModelInfo | None = None,
 ) -> AgentLoopResult:
     """Execute iterative multi-turn AgentLoop engine."""
     loop = AgentLoop(
         provider=provider,
         tool_executor=tool_executor,
         budget=budget,
+        model=model,
     )
     return await loop.run(user_goal=user_goal, steering_queue=steering_queue)
 

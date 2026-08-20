@@ -107,6 +107,7 @@ from mark.tools import ToolExecutor, ToolRegistry
 from mark.tools.builtin import build_builtin_registry
 from mark.tools.exporters.gemini import export_gemini_tools
 from mark.tools.legacy.adapters import with_legacy_context
+from agent.latency import LatencyTrace
 
 
 def _contextual_registry(*, ui, speak) -> ToolRegistry:
@@ -139,6 +140,7 @@ class SlonLive:
         self.tool_executor = ToolExecutor(
             self.tool_registry, SafetyPolicy(), confirmer=lambda _decision: True
         )
+        self.latency_trace = LatencyTrace()
         self.ui.on_text_command = self._on_text_command
         control_plane = getattr(self.ui, "control_plane", None)
         if control_plane is not None:
@@ -227,6 +229,7 @@ class SlonLive:
         args = dict(fc.args or {})
         print(f"[SLON] 🔧 {name}  {args}")
         self.ui.set_state("THINKING")
+        self.latency_trace.mark("tool_execution_start")
 
         if name == "file_processor" and not args.get("file_path") and self.ui.current_file:
             args["file_path"] = self.ui.current_file
@@ -256,6 +259,7 @@ class SlonLive:
             source=UntrustedSource.USER,
             intent="Gemini Live function call",
         )
+        self.latency_trace.mark("tool_execution_finish")
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
         if result.ok:
@@ -265,6 +269,7 @@ class SlonLive:
             response = {"error": result.message, "code": result.code}
             self.speak_error(name, result.message or result.code)
         print(f"[SLON] 📤 {name} → {str(response)[:80]}")
+        self.latency_trace.mark("observation_returned")
         return types.FunctionResponse(id=fc.id, name=name, response=response)
 
     async def _send_realtime(self):
@@ -327,6 +332,8 @@ class SlonLive:
                                 in_buf.append(txt)
 
                         if sc.turn_complete:
+                            self.latency_trace.mark("user_speech_end")
+                            self.latency_trace.mark("turn_complete")
                             self.set_speaking(False)
 
                             full_in = " ".join(in_buf).strip()
@@ -347,6 +354,7 @@ class SlonLive:
                                 ).start()
 
                     if response.tool_call:
+                        self.latency_trace.mark("tool_call_received")
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
                             print(f"[SLON] 📞 {fc.name}")
@@ -375,6 +383,7 @@ class SlonLive:
         try:
             while True:
                 chunk = await self.audio_in_queue.get()
+                self.latency_trace.mark("first_audio_output")
                 self.set_speaking(True)
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:

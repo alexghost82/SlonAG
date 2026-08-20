@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Mapping
 
 import pytest
@@ -224,6 +225,71 @@ def test_timeout_is_bounded_and_handler_is_not_retried() -> None:
         assert result.warnings
     finally:
         release.set()
+
+
+def test_execute_many_parallel_safe_preserves_input_order() -> None:
+    registry = ToolRegistry()
+    barrier = threading.Barrier(2)
+
+    def handler(arguments):
+        barrier.wait(timeout=1)
+        return {"value": arguments["value"]}
+
+    for name in ("read_a", "read_b"):
+        registry.register(
+            ToolSpec(
+                name=name,
+                description=name,
+                input_schema={"type": "object"},
+                output_schema=None,
+                handler=handler,
+                risk=RiskLevel.READ,
+                read_only=True,
+                idempotent=True,
+                side_effects=False,
+                parallel_safe=True,
+            )
+        )
+    executor = ToolExecutor(registry, RecordingPolicy())  # type: ignore[arg-type]
+
+    results = executor.execute_many(
+        (("read_a", {"value": 1}), ("read_b", {"value": 2})),
+        source=UntrustedSource.USER,
+    )
+
+    assert [result.data for result in results] == [{"value": 1}, {"value": 2}]
+
+
+def test_execute_many_side_effects_are_sequential() -> None:
+    registry = ToolRegistry()
+    active = 0
+    max_active = 0
+
+    def handler(arguments):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        time.sleep(0.01)
+        active -= 1
+        return arguments
+
+    registry.register(
+        ToolSpec(
+            name="write",
+            description="write",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=handler,
+            risk=RiskLevel.CONFIRM,
+        )
+    )
+    executor = ToolExecutor(registry, RecordingPolicy())  # type: ignore[arg-type]
+    executor.execute_many(
+        (("write", {"value": 1}), ("write", {"value": 2})),
+        source=UntrustedSource.USER,
+    )
+
+    assert max_active == 1
 
 
 @pytest.mark.parametrize(

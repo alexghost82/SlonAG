@@ -15,7 +15,16 @@ from agent.runtime import (
 )
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from mark.tools.contracts import ToolResult
-from providers.contracts import ChatResponse, ToolCall
+from providers.contracts import ChatRequest, ChatResponse, ModelInfo, ToolCall
+
+
+MODEL = ModelInfo(
+    provider_id="test",
+    model_id="test-model",
+    display_name="Test model",
+    text=True,
+    tool_calling=True,
+)
 
 
 def test_loop_budget_defaults_and_is_exceeded():
@@ -50,6 +59,69 @@ def test_loop_budget_defaults_and_is_exceeded():
     exceeded, reason = budget.is_exceeded()
     assert exceeded is True
     assert "timeout" in reason.lower()
+
+
+@pytest.mark.parametrize("limit", [0, 1, 4])
+def test_loop_budget_allows_exactly_n_completed_calls(limit: int) -> None:
+    budget = LoopBudget(max_tool_calls=limit)
+    for completed in range(limit):
+        budget.tool_call_count = completed
+        assert budget.is_exceeded()[0] is False
+    budget.tool_call_count = limit
+    assert budget.is_exceeded()[0] is True
+
+
+@pytest.mark.asyncio
+async def test_native_tool_result_keeps_correlation_id() -> None:
+    requests: list[ChatRequest] = []
+    responses = [
+        ChatResponse(
+            text="",
+            provider_id="test",
+            model_id="test-model",
+            tool_calls=(ToolCall("call-42", "read_file", {"path": "x"}),),
+        ),
+        ChatResponse("done", "test", "test-model"),
+    ]
+
+    async def chat(request: ChatRequest) -> ChatResponse:
+        requests.append(request)
+        return responses.pop(0)
+
+    provider = MagicMock()
+    provider.chat.side_effect = chat
+    result = await AgentLoop(
+        provider=provider,
+        tool_executor=lambda _name, _args: "contents",
+        model=MODEL,
+    ).run("read")
+
+    assert result.ok
+    assert requests[1].messages[-2].role == "assistant"
+    assert requests[1].messages[-2].tool_calls[0].id == "call-42"
+    tool_result = requests[1].messages[-1]
+    assert tool_result.role == "tool"
+    assert tool_result.tool_call_id == "call-42"
+    assert tool_result.name == "read_file"
+    assert tool_result.result == "contents"
+
+
+@pytest.mark.asyncio
+async def test_provider_wait_is_actively_timed_out() -> None:
+    async def chat(_request: ChatRequest) -> ChatResponse:
+        await asyncio.sleep(1)
+        return ChatResponse("late", "test", "test-model")
+
+    provider = MagicMock()
+    provider.chat.side_effect = chat
+    result = await AgentLoop(
+        provider=provider,
+        model=MODEL,
+        budget=LoopBudget(timeout_seconds=0.01),
+    ).run("wait")
+
+    assert result.ok is False
+    assert "timeout" in result.reason.lower()
 
 
 def test_loop_detector_consecutive_calls():
