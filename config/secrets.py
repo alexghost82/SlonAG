@@ -1,6 +1,6 @@
 """Named secret storage via OS stores, with a 0600 file fallback.
 
-Supported names: ``gemini_api_key``, ``openrouter_api_key``, ``openai_api_key``.
+Supported names include provider keys and the local ``gateway_signing_key``.
 
 Resolution order:
 1. macOS Keychain through the ``security`` CLI, when available;
@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 KNOWN_SECRET_NAMES = frozenset(
-    {"gemini_api_key", "openrouter_api_key", "openai_api_key"}
+    {"gemini_api_key", "openrouter_api_key", "openai_api_key", "gateway_signing_key"}
 )
 SERVICE_NAME = "Slon"
 FALLBACK_PATH = Path(__file__).resolve().parent / "api_keys.json"
