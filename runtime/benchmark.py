@@ -7,7 +7,7 @@ import platform
 import statistics
 import sys
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 
@@ -75,4 +75,35 @@ async def measure_async(
     return summarize(scenario, measured, definition=definition)
 
 
-__all__ = ["BenchmarkReport", "SCENARIOS", "measure_async", "summarize"]
+async def measure_suite(
+    operations: Mapping[str, Callable[[], Awaitable[object]]],
+    *,
+    definitions: Mapping[str, str],
+    samples: int,
+    warmup: int = 1,
+) -> tuple[BenchmarkReport, ...]:
+    """Measure every official scenario without mixing their populations."""
+    missing = SCENARIOS.difference(operations)
+    if missing:
+        raise ValueError(f"missing benchmark scenarios: {', '.join(sorted(missing))}")
+    return tuple(
+        [
+            await measure_async(
+                scenario,
+                operations[scenario],
+                samples=samples,
+                warmup=warmup,
+                definition=definitions[scenario],
+            )
+            for scenario in sorted(SCENARIOS)
+        ]
+    )
+
+
+__all__ = [
+    "BenchmarkReport",
+    "SCENARIOS",
+    "measure_async",
+    "measure_suite",
+    "summarize",
+]

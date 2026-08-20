@@ -255,6 +255,12 @@ class SlonLive:
             tool_call_id=fc.id,
             tool_name=name,
         )
+        self.runtime_events.emit(
+            RuntimeEventKind.TOOL_PROGRESS,
+            tool_call_id=fc.id,
+            tool_name=name,
+            progress=0.0,
+        )
         self.latency_trace.mark("tool_execution_start")
 
         result = await self.tool_bridge.execute(
@@ -283,6 +289,13 @@ class SlonLive:
             RuntimeEventKind.TOOL_FINISHED,
             tool_call_id=fc.id,
             tool_name=name,
+            code=result.code,
+        )
+        self.runtime_events.emit(
+            RuntimeEventKind.TOOL_PROGRESS,
+            tool_call_id=fc.id,
+            tool_name=name,
+            progress=1.0,
             code=result.code,
         )
         return types.FunctionResponse(id=fc.id, name=name, response=response)
