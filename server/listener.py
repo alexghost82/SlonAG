@@ -9,6 +9,7 @@ protected routes. Optional TLS via ``tls_certfile`` / ``tls_keyfile``.
 from __future__ import annotations
 
 import base64
+import asyncio
 import binascii
 import hashlib
 import ipaddress
@@ -16,6 +17,7 @@ import json
 import secrets
 import ssl
 import struct
+import select
 import threading
 import time
 from collections.abc import Mapping
@@ -73,6 +75,15 @@ from server.websocket import EventsHub, EventsUnauthorizedError
 
 DEFAULT_BIND_HOST = "127.0.0.1"
 DEFAULT_BIND_PORT = 8765
+MAX_JSON_BODY_BYTES = 12 * 1024 * 1024
+
+
+class _BodyTooLarge(ValueError):
+    pass
+
+
+class _MalformedBody(ValueError):
+    pass
 
 
 def _enumerate_files(path: str) -> list[dict[str, object]]:
@@ -117,6 +128,8 @@ class DesktopControlListener:
         control_plane: Any | None = None,
         memory_backend: Any | None = None,
         files_root: str | Path | None = None,
+        gateway: Any | None = None,
+        gateway_workspace_id: str = "desktop",
     ) -> None:
         host = validate_bind_host(
             bind_host,
@@ -205,6 +218,8 @@ class DesktopControlListener:
             enumerator=_enumerate_files if root is not None else None,
         )
         self._events = EventsHub()
+        self._gateway = gateway
+        self._gateway_workspace_id = gateway_workspace_id
         self._control_plane = control_plane
         if self._control_plane is not None:
             try:
@@ -220,7 +235,16 @@ class DesktopControlListener:
         self._lock = threading.RLock()
 
     def _publish_public_event(self, event: Mapping[str, object]) -> int:
-        return self._events.publish(strip_secret_fields(dict(event)))
+        public = strip_secret_fields(dict(event))
+        sequence = self._events.publish(public)
+        if self._gateway is not None:
+            try:
+                self._gateway.publish_control_event(
+                    public, workspace_id=self._gateway_workspace_id
+                )
+            except Exception:
+                pass
+        return sequence
 
     @property
     def tls_enabled(self) -> bool:
@@ -339,6 +363,9 @@ class DesktopControlListener:
         if not route.startswith(API_VERSION_PREFIX):
             return _error(404, CODE_NOT_FOUND, "Unknown API version or path.")
 
+        if self._gateway is not None and route.startswith(f"{API_VERSION_PREFIX}/gateway/"):
+            return self._gateway_dispatch(verb, route, body, headers)
+
         principal = self._optional_principal(headers)
 
         try:
@@ -456,6 +483,62 @@ class DesktopControlListener:
             return _error(400, exc.code, str(exc))
 
         return _error(404, CODE_NOT_FOUND, "No handler for this route.")
+
+    def _gateway_dispatch(
+        self, verb: str, route: str, body: dict[str, object], headers: dict[str, str]
+    ) -> RouteResponse:
+        prefix = f"{API_VERSION_PREFIX}/gateway"
+        try:
+            if verb == "POST" and route == f"{prefix}/pairing/complete":
+                required = ("code", "device_name", "public_key")
+                if not all(isinstance(body.get(key), str) for key in required):
+                    return _error(400, CODE_INVALID_REQUEST, "Invalid pairing payload.")
+                device_id = self._gateway.auth.complete_pairing(
+                    code=body["code"], device_name=body["device_name"],
+                    public_key=body["public_key"],
+                    workspace_id=self._gateway_workspace_id,
+                )
+                return RouteResponse(201, {"device_id": device_id})
+            if verb == "POST" and route == f"{prefix}/auth/challenge":
+                device_id = body.get("device_id")
+                if not isinstance(device_id, str):
+                    return _error(400, CODE_INVALID_REQUEST, "device_id is required.")
+                challenge = self._gateway.auth.challenge(device_id)
+                return RouteResponse(200, {
+                    "device_id": challenge.device_id, "nonce": challenge.nonce,
+                    "expires_at": challenge.expires_at,
+                })
+            if verb == "POST" and route == f"{prefix}/auth/proof":
+                if not all(isinstance(body.get(key), str) for key in ("device_id", "nonce", "signature")):
+                    return _error(400, CODE_INVALID_REQUEST, "Invalid device proof.")
+                tokens = self._gateway.auth.exchange_proof(
+                    device_id=body["device_id"], nonce=body["nonce"],
+                    signature=body["signature"],
+                )
+                return RouteResponse(200, tokens.to_public_dict())
+            if verb == "POST" and route == f"{prefix}/auth/refresh":
+                token = body.get("refresh_token")
+                if not isinstance(token, str):
+                    return _error(400, CODE_INVALID_REQUEST, "refresh_token is required.")
+                return RouteResponse(200, self._gateway.auth.refresh(token).to_public_dict())
+            principal = self._gateway.auth.authenticate(headers)
+            workspace = self._gateway.auth.workspace_for(principal.device_id)
+            if verb == "GET" and route == f"{prefix}/devices":
+                return RouteResponse(200, {"devices": [
+                    {key: value for key, value in item.items() if key != "public_key"}
+                    for item in self._gateway.auth.trusted_devices(workspace_id=workspace)
+                ]})
+            if verb == "POST" and route == f"{prefix}/devices/revoke":
+                target = body.get("device_id")
+                if not isinstance(target, str):
+                    return _error(400, CODE_INVALID_REQUEST, "device_id is required.")
+                record = self._gateway.store.device(target)
+                if record is None or record["workspace_id"] != workspace:
+                    return _error(404, CODE_NOT_FOUND)
+                return RouteResponse(200, {"revoked": self._gateway.auth.revoke(target)})
+        except Exception as exc:
+            return _error(401, CODE_UNAUTHORIZED, f"Gateway request rejected ({type(exc).__name__}).")
+        return _error(404, CODE_NOT_FOUND, "No Gateway handler for this route.")
 
     def _optional_principal(
         self,
@@ -1013,8 +1096,12 @@ def _make_handler(
             length_raw = self.headers.get("Content-Length", "0")
             try:
                 length = int(length_raw)
-            except ValueError:
-                length = 0
+            except ValueError as exc:
+                raise _MalformedBody from exc
+            if length > MAX_JSON_BODY_BYTES:
+                raise _BodyTooLarge
+            if length < 0:
+                raise _MalformedBody
             if length <= 0:
                 return {}
             raw = self.rfile.read(length)
@@ -1022,8 +1109,8 @@ def _make_handler(
                 return {}
             try:
                 payload = json.loads(raw.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                return {}
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise _MalformedBody from exc
             if isinstance(payload, dict):
                 return dict(payload)
             return {}
@@ -1050,6 +1137,19 @@ def _make_handler(
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if (
+                listener._gateway is not None
+                and parsed.path.rstrip("/") == f"{API_VERSION_PREFIX}/gateway/artifacts/download"
+            ):
+                self._gateway_artifact_download()
+                return
+            if (
+                listener._gateway is not None
+                and parsed.path.rstrip("/") == f"{API_VERSION_PREFIX}/gateway/ws"
+                and self.headers.get("Upgrade", "").lower() == "websocket"
+            ):
+                self._stream_gateway(parsed.query)
+                return
             if (
                 parsed.path.rstrip("/") == f"{API_VERSION_PREFIX}/events"
                 and self.headers.get("Upgrade", "").lower() == "websocket"
@@ -1117,6 +1217,74 @@ def _make_handler(
             finally:
                 subscription.close()
 
+        def _stream_gateway(self, query_text: str) -> None:
+            from gateway.contracts import GatewayProtocolError
+            from gateway.framing import decode_client_frame, encode_server_frame
+
+            try:
+                principal = listener._gateway.auth.authenticate(self._headers_map())
+            except Exception:
+                self._write_response(_error(401, CODE_UNAUTHORIZED))
+                return
+            key = self.headers.get("Sec-WebSocket-Key", "").strip()
+            if not key:
+                self._write_response(_error(400, CODE_INVALID_REQUEST, "Missing WebSocket key."))
+                return
+            query = parse_qs(query_text)
+            try:
+                raw_cursor = query.get("cursor", [None])[0]
+                cursor = None if raw_cursor is None else int(raw_cursor)
+                if cursor is not None and cursor < 0:
+                    raise ValueError
+            except ValueError:
+                self._write_response(_error(400, CODE_INVALID_REQUEST, "Invalid replay cursor."))
+                return
+            accept = base64.b64encode(
+                hashlib.sha1(
+                    (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
+                ).digest()
+            ).decode("ascii")
+            self.send_response(101, "Switching Protocols")
+            self.send_header("Upgrade", "websocket")
+            self.send_header("Connection", "Upgrade")
+            self.send_header("Sec-WebSocket-Accept", accept)
+            self.end_headers()
+            connection = asyncio.run(listener._gateway.websocket.connect(
+                device_id=principal.device_id, after_sequence=cursor
+            ))
+            try:
+                while listener.listening and not connection.closed:
+                    if connection.heartbeat():
+                        self.connection.sendall(encode_server_frame(b"", opcode=0x9))
+                    for item in connection.drain():
+                        value = item.envelope.to_dict()
+                        value["payload"] = {
+                            **dict(item.envelope.payload),
+                            "gateway_sequence": item.sequence,
+                        }
+                        self.connection.sendall(encode_server_frame(
+                            json.dumps(value, ensure_ascii=False).encode("utf-8")
+                        ))
+                    readable, _, _ = select.select([self.connection], [], [], 0.1)
+                    if not readable:
+                        continue
+                    raw = _read_websocket_frame_bytes(self.connection)
+                    frame = decode_client_frame(raw)
+                    if frame.opcode == 0x8:
+                        break
+                    if frame.opcode == 0x9:
+                        self.connection.sendall(encode_server_frame(frame.payload, opcode=0xA))
+                        continue
+                    if frame.opcode == 0xA:
+                        connection.last_pong_at = time.monotonic()
+                        continue
+                    response = asyncio.run(connection.receive(frame.payload))
+                    self.connection.sendall(encode_server_frame(response.to_json()))
+            except (BrokenPipeError, ConnectionResetError, OSError, GatewayProtocolError):
+                return
+            finally:
+                connection.close()
+
         def _write_websocket_json(self, value: Mapping[str, object]) -> None:
             payload = json.dumps(value, ensure_ascii=False).encode("utf-8")
             header = bytearray([0x81])
@@ -1169,20 +1337,84 @@ def _make_handler(
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if (
+                listener._gateway is not None
+                and parsed.path.rstrip("/") == f"{API_VERSION_PREFIX}/gateway/artifacts/upload"
+            ):
+                self._gateway_artifact_upload()
+                return
+            try:
+                body = self._read_json_body()
+            except _BodyTooLarge:
+                self._write_response(_error(413, CODE_INVALID_REQUEST, "Request body is too large."))
+                return
+            except _MalformedBody:
+                self._write_response(_error(400, CODE_INVALID_REQUEST, "Malformed JSON request."))
+                return
             response = listener.handle(
                 "POST",
                 parsed.path,
-                body=self._read_json_body(),
+                body=body,
                 headers=self._headers_map(),
             )
             self._write_response(response)
 
+        def _gateway_artifact_upload(self) -> None:
+            from gateway.artifacts import DEFAULT_MAX_BYTES
+
+            try:
+                principal = listener._gateway.auth.authenticate(self._headers_map())
+                workspace = listener._gateway.auth.workspace_for(principal.device_id)
+                length = int(self.headers.get("Content-Length", "0"))
+                if length < 0 or length > DEFAULT_MAX_BYTES:
+                    self._write_response(_error(413, CODE_INVALID_REQUEST, "Artifact is too large."))
+                    return
+                ticket = self.headers.get("X-Slon-Transfer-Ticket", "")
+                mime = self.headers.get("Content-Type", "application/octet-stream")
+                result = listener._gateway.artifacts.upload(
+                    ticket=ticket, device_id=principal.device_id,
+                    workspace_id=workspace, mime_type=mime,
+                    data=self.rfile.read(length),
+                )
+                self._write_response(RouteResponse(201, result))
+            except Exception as exc:
+                self._write_response(_error(
+                    403, CODE_UNAUTHORIZED,
+                    f"Artifact upload rejected ({type(exc).__name__}).",
+                ))
+
+        def _gateway_artifact_download(self) -> None:
+            try:
+                principal = listener._gateway.auth.authenticate(self._headers_map())
+                workspace = listener._gateway.auth.workspace_for(principal.device_id)
+                ticket = self.headers.get("X-Slon-Transfer-Ticket", "")
+                data, mime = listener._gateway.artifacts.download(
+                    ticket=ticket, device_id=principal.device_id,
+                    workspace_id=workspace,
+                )
+                self._write_response(RouteResponse(
+                    status_code=200, body={}, raw_body=data, content_type=mime
+                ))
+            except Exception as exc:
+                self._write_response(_error(
+                    403, CODE_UNAUTHORIZED,
+                    f"Artifact download rejected ({type(exc).__name__}).",
+                ))
+
         def do_DELETE(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            try:
+                body = self._read_json_body()
+            except _BodyTooLarge:
+                self._write_response(_error(413, CODE_INVALID_REQUEST, "Request body is too large."))
+                return
+            except _MalformedBody:
+                self._write_response(_error(400, CODE_INVALID_REQUEST, "Malformed JSON request."))
+                return
             response = listener.handle(
                 "DELETE",
                 parsed.path,
-                body=self._read_json_body(),
+                body=body,
                 headers=self._headers_map(),
             )
             self._write_response(response)
@@ -1199,6 +1431,37 @@ def _normalize_path(path: str) -> str:
     if len(raw) > 1 and raw.endswith("/"):
         raw = raw.rstrip("/")
     return raw
+
+
+def _read_websocket_frame_bytes(sock) -> bytes:
+    """Read one client frame while rejecting its declared size before allocation."""
+    from gateway.contracts import MAX_ENVELOPE_BYTES, GatewayProtocolError
+
+    def exact(size: int) -> bytes:
+        chunks = bytearray()
+        while len(chunks) < size:
+            chunk = sock.recv(size - len(chunks))
+            if not chunk:
+                raise ConnectionResetError
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    header = exact(2)
+    length_code = header[1] & 0x7F
+    extended = b""
+    if length_code == 126:
+        extended = exact(2)
+        length = struct.unpack("!H", extended)[0]
+    elif length_code == 127:
+        extended = exact(8)
+        length = struct.unpack("!Q", extended)[0]
+    else:
+        length = length_code
+    if length > MAX_ENVELOPE_BYTES:
+        raise GatewayProtocolError("oversized_frame", "WebSocket frame is too large.")
+    masked = bool(header[1] & 0x80)
+    mask = exact(4) if masked else b""
+    return header + extended + mask + exact(length)
 
 
 def _error(
@@ -1218,6 +1481,7 @@ def _error(
 __all__ = [
     "DEFAULT_BIND_HOST",
     "DEFAULT_BIND_PORT",
+    "MAX_JSON_BODY_BYTES",
     "BindHostError",
     "DesktopControlListener",
 ]

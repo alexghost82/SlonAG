@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import base64
 import json
 import math
 import os
 import platform
 import random
+import secrets
 import subprocess
 import sys
 import threading
@@ -51,6 +53,10 @@ try:
     from server.listener import DesktopControlListener
 except Exception:  # pragma: no cover
     DesktopControlListener = None  # type: ignore[assignment,misc]
+try:
+    from gateway.bootstrap import build_gateway
+except Exception:  # pragma: no cover
+    build_gateway = None  # type: ignore[assignment]
 try:
     from server.tls import ensure_tls_material
 except Exception:  # pragma: no cover
@@ -1070,6 +1076,7 @@ class MainWindow(QMainWindow):
         self._local_stt_ready = False
         self._local_stt_message = "Local STT not initialised"
         self._desktop_listener = None
+        self._gateway = None
         self._desktop_tls = False
         self._runtime_stack = None
 
@@ -1135,6 +1142,9 @@ class MainWindow(QMainWindow):
             if self._desktop_listener is not None:
                 self._desktop_listener.stop()
                 self._desktop_listener = None
+            if self._gateway is not None:
+                self._gateway.close()
+                self._gateway = None
         except Exception:
             pass
         super().closeEvent(event)
@@ -1743,10 +1753,14 @@ class MainWindow(QMainWindow):
         if self._desktop_listener and self._desktop_listener.listening:
             self._desktop_listener.stop()
             self._desktop_listener = None
+            if self._gateway is not None:
+                self._gateway.close()
+                self._gateway = None
             self._desktop_tls = False
             self._style_api_btn()
             self._log.append_log("SYS: Desktop Control API stopped.")
             return
+        gateway = None
         try:
             tls_cert = None
             tls_key = None
@@ -1763,6 +1777,17 @@ class MainWindow(QMainWindow):
                     use_tls = True
                 except Exception:
                     use_tls = False
+            gateway = None
+            if build_gateway is not None and self._runtime_stack is not None:
+                signing_key = get_secret("gateway_signing_key")
+                if not signing_key:
+                    signing_key = base64.b64encode(secrets.token_bytes(32)).decode()
+                    set_secret("gateway_signing_key", signing_key)
+                gateway = build_gateway(
+                    repo_root=BASE_DIR,
+                    runtime_stack=self._runtime_stack,
+                    key_provider=get_secret,
+                )
             listener = DesktopControlListener(
                 tls_certfile=tls_cert,
                 tls_keyfile=tls_key,
@@ -1771,9 +1796,11 @@ class MainWindow(QMainWindow):
                 control_plane=self._control_plane,
                 memory_backend=getattr(self._runtime_stack, "memory", None),
                 files_root=BASE_DIR,
+                gateway=gateway,
             )
             host, port = listener.start()
             self._desktop_listener = listener
+            self._gateway = gateway
             self._desktop_tls = bool(listener.tls_enabled)
             self._style_api_btn()
             scheme = listener.scheme
@@ -1788,7 +1815,10 @@ class MainWindow(QMainWindow):
                     "(see docs/audit/tls-lan.md)"
                 )
         except Exception as exc:
+            if gateway is not None:
+                gateway.close()
             self._desktop_listener = None
+            self._gateway = None
             self._desktop_tls = False
             self._style_api_btn()
             self._log.append_log(f"SYS: Desktop API start failed — {exc}")
