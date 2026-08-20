@@ -196,6 +196,9 @@ class SlonLive:
             response_modalities=["AUDIO"],
             output_audio_transcription={},
             input_audio_transcription={},
+            realtime_input_config=types.RealtimeInputConfig(
+                activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS
+            ),
             system_instruction="\n".join(parts),
             tools=[{"function_declarations": TOOL_DECLARATIONS}],
             session_resumption=types.SessionResumptionConfig(),
@@ -248,6 +251,8 @@ class SlonLive:
         await receive_live_session(
             session=self.session,
             audio_in_queue=self.audio.audio_in_queue,
+            enqueue_playback=self.audio.enqueue_playback,
+            interrupt_playback=self.audio.interrupt_playback,
             ui=self.ui,
             set_speaking=self.set_speaking,
             execute_tool=self._execute_tool,

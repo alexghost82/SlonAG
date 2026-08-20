@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -44,6 +45,128 @@ def test_audio_queue_drops_oldest_chunk_when_full() -> None:
     assert queue.dropped_chunks == 1
     assert queue.get_nowait() == b"middle"
     assert queue.get_nowait() == b"fresh"
+
+
+@pytest.mark.asyncio
+async def test_microphone_audio_is_captured_while_assistant_is_speaking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class InputData:
+        def tobytes(self) -> bytes:
+            return b"human-speech"
+
+    class InputStream:
+        def __init__(self, *, callback, **_kwargs) -> None:
+            self.callback = callback
+
+        def __enter__(self):
+            self.callback(InputData(), 0, None, None)
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "sounddevice", SimpleNamespace(InputStream=InputStream)
+    )
+    pipeline = AudioPipeline(
+        ui=SimpleNamespace(muted=False),
+        set_speaking=lambda _value: None,
+        latency_trace=SimpleNamespace(mark=lambda _event: None),
+        speaking_lock=threading.Lock(),
+        is_speaking=lambda: True,
+    )
+    pipeline.bind(SimpleNamespace())
+
+    task = asyncio.create_task(pipeline.listen())
+    try:
+        assert pipeline.out_queue is not None
+        message = await asyncio.wait_for(pipeline.out_queue.get(), timeout=0.2)
+        assert message["data"] == b"human-speech"
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+def test_playback_interruption_invalidates_queued_audio() -> None:
+    speaking: list[bool] = []
+    pipeline = AudioPipeline(
+        ui=SimpleNamespace(muted=False),
+        set_speaking=speaking.append,
+        latency_trace=SimpleNamespace(mark=lambda _event: None),
+        speaking_lock=threading.Lock(),
+        is_speaking=lambda: False,
+    )
+    pipeline.bind(SimpleNamespace())
+    pipeline.enqueue_playback(b"old-a")
+    pipeline.enqueue_playback(b"old-b")
+
+    old_generation = pipeline.playback_generation
+    invalidated = pipeline.interrupt_playback()
+
+    assert invalidated == 2
+    assert pipeline.playback_generation == old_generation + 1
+    assert pipeline.audio_in_queue is not None
+    assert pipeline.audio_in_queue.empty()
+    assert speaking[-1] is False
+
+
+@pytest.mark.asyncio
+async def test_live_interruption_discards_same_response_and_late_old_audio() -> None:
+    interrupted = SimpleNamespace(
+        interrupted=True,
+        output_transcription=None,
+        input_transcription=None,
+        turn_complete=False,
+    )
+    new_turn = SimpleNamespace(
+        interrupted=False,
+        output_transcription=SimpleNamespace(text="new answer"),
+        input_transcription=SimpleNamespace(text="new question"),
+        turn_complete=True,
+    )
+    responses = [
+        SimpleNamespace(
+            data=b"old-same-message",
+            server_content=interrupted,
+            tool_call=None,
+        ),
+        SimpleNamespace(data=b"old-late", server_content=None, tool_call=None),
+        SimpleNamespace(data=b"new", server_content=new_turn, tool_call=None),
+    ]
+    session = FakeSession(responses)
+    pipeline = AudioPipeline(
+        ui=SimpleNamespace(muted=False),
+        set_speaking=lambda _value: None,
+        latency_trace=TurnLatencyTracker(),
+        speaking_lock=threading.Lock(),
+        is_speaking=lambda: False,
+    )
+    pipeline.bind(session)
+    logs: list[str] = []
+    speaking: list[bool] = []
+
+    await receive_live_session(
+        session=session,
+        audio_in_queue=pipeline.audio_in_queue,
+        enqueue_playback=pipeline.enqueue_playback,
+        interrupt_playback=pipeline.interrupt_playback,
+        ui=SimpleNamespace(write_log=logs.append),
+        set_speaking=speaking.append,
+        execute_tool=AsyncMock(),
+        update_memory=lambda *_args: None,
+        latency_trace=pipeline.latency_trace,
+    )
+
+    assert pipeline.audio_in_queue is not None
+    generation, data = pipeline.audio_in_queue.get_nowait()
+    assert generation == pipeline.playback_generation
+    assert data == b"new"
+    assert pipeline.audio_in_queue.empty()
+    assert all("old" not in message for message in logs)
+    assert len(pipeline.latency_trace.history()) == 1
+    assert speaking[-1] is False
 
 
 @pytest.mark.asyncio

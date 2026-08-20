@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -11,6 +12,8 @@ async def receive_live_session(
     *,
     session: Any,
     audio_in_queue: Any,
+    enqueue_playback: Callable[[bytes], None] | None = None,
+    interrupt_playback: Callable[[], int] | None = None,
     ui: Any,
     set_speaking: Callable[[bool], None],
     execute_tool: Callable[[Any], Any],
@@ -22,10 +25,46 @@ async def receive_live_session(
     output_transcript: list[str] = []
     input_transcript: list[str] = []
     awaiting_post_tool_response = False
+    accept_playback = True
+
+    if enqueue_playback is None:
+        enqueue_playback = audio_in_queue.put_nowait
+    if interrupt_playback is None:
+        def interrupt_playback() -> int:
+            cleared = 0
+            while True:
+                try:
+                    audio_in_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return cleared
+                cleared += 1
 
     async for response in session.receive():
+        content = response.server_content
+        interrupted = bool(content and getattr(content, "interrupted", False))
+        if interrupted:
+            accept_playback = False
+            invalidated = interrupt_playback()
+            ui.write_log(f"SYS: playback interrupted cleared={invalidated}")
+            output_transcript.clear()
+            cancel_turn = getattr(latency_trace, "cancel_turn", None)
+            if cancel_turn is not None:
+                cancel_turn()
+
+        # Transcription is the first unambiguous evidence that a later server
+        # message belongs to the new turn rather than the interrupted response.
+        if content and not interrupted:
+            input_text = getattr(
+                getattr(content, "input_transcription", None), "text", ""
+            )
+            output_text = getattr(
+                getattr(content, "output_transcription", None), "text", ""
+            )
+            if input_text or output_text:
+                accept_playback = True
+
         provider_output = bool(
-            response.data
+            (response.data and accept_playback and not interrupted)
             or response.tool_call
             or (
                 response.server_content
@@ -35,17 +74,15 @@ async def receive_live_session(
         )
         if provider_output:
             latency_trace.ensure_turn()
-            latency_trace.mark("user_speech_end")
             latency_trace.mark("provider_first_response")
             if awaiting_post_tool_response:
                 latency_trace.mark("provider_after_tool_first_response")
                 awaiting_post_tool_response = False
 
-        if response.data:
-            audio_in_queue.put_nowait(response.data)
+        if response.data and accept_playback and not interrupted:
+            enqueue_playback(response.data)
 
-        if response.server_content:
-            content = response.server_content
+        if content and not interrupted:
             if content.output_transcription and content.output_transcription.text:
                 set_speaking(True)
                 text = content.output_transcription.text.strip()
@@ -59,7 +96,7 @@ async def receive_live_session(
                 if text:
                     input_transcript.append(text)
 
-            if content.turn_complete:
+            if content.turn_complete and not interrupted:
                 breakdown = latency_trace.finish_turn()
                 set_speaking(False)
                 user_text = " ".join(input_transcript).strip()

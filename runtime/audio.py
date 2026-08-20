@@ -57,12 +57,14 @@ class AudioPipeline:
         self.out_queue: FreshAudioQueue | None = None
         self.dropped_microphone_chunks = 0
         self.dropped_playback_chunks = 0
+        self.playback_generation = 0
 
     def bind(self, session: Any) -> None:
         """Bind fresh queues to one newly connected session."""
         self.session = session
         self.audio_in_queue = FreshAudioQueue(PLAYBACK_QUEUE_CHUNKS)
         self.out_queue = FreshAudioQueue(MIC_QUEUE_CHUNKS)
+        self.playback_generation += 1
 
     def unbind(self) -> None:
         if self.out_queue is not None:
@@ -72,6 +74,27 @@ class AudioPipeline:
         self.session = None
         self.audio_in_queue = None
         self.out_queue = None
+        self.playback_generation += 1
+
+    def enqueue_playback(self, data: bytes) -> None:
+        """Queue provider audio for the currently valid playback generation."""
+        if self.audio_in_queue is None:
+            raise RuntimeError("audio pipeline is not bound")
+        self.audio_in_queue.put_nowait((self.playback_generation, data))
+
+    def interrupt_playback(self) -> int:
+        """Invalidate and discard pending audio from the interrupted response."""
+        self.playback_generation += 1
+        invalidated = 0
+        if self.audio_in_queue is not None:
+            while True:
+                try:
+                    self.audio_in_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                invalidated += 1
+        self.set_speaking(False)
+        return invalidated
 
     async def send_realtime(self) -> None:
         if self.session is None or self.out_queue is None:
@@ -94,9 +117,10 @@ class AudioPipeline:
 
         def callback(indata, frames, time_info, status) -> None:
             del frames, time_info, status
-            with self.speaking_lock:
-                slon_speaking = self.is_speaking()
-            if not slon_speaking and not self.ui.muted:
+            # Gemini's server-side activity detection needs microphone audio in
+            # order to signal an interruption. Muting remains the only local
+            # capture gate; playback generations prevent stale assistant audio.
+            if not self.ui.muted:
                 loop.call_soon_threadsafe(
                     self.out_queue.put_nowait,
                     {"data": indata.tobytes(), "mime_type": "audio/pcm"},
@@ -128,7 +152,9 @@ class AudioPipeline:
         stream.start()
         try:
             while True:
-                chunk = await self.audio_in_queue.get()
+                generation, chunk = await self.audio_in_queue.get()
+                if generation != self.playback_generation:
+                    continue
                 self.latency_trace.mark("first_audio_output")
                 self.set_speaking(True)
                 await asyncio.to_thread(stream.write, chunk)

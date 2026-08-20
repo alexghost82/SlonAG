@@ -28,7 +28,10 @@ class LatencyTrace:
 
     def breakdown(self) -> dict[str, float]:
         pairs = {
-            "input_vad_approx": ("user_input_activity_start", "user_speech_end"),
+            "input_first_chunk_to_response": (
+                "user_input_activity_start",
+                "provider_first_response",
+            ),
             "provider": ("provider_request_start", "provider_first_response"),
             "tool": ("tool_execution_start", "tool_execution_finish"),
             "post_tool_provider": (
@@ -85,6 +88,11 @@ class TurnLatencyTracker:
             del self._history[:-self._history_limit]
             self._current = None
             return dict(result)
+
+    def cancel_turn(self) -> None:
+        """Discard an interrupted turn without recording it as completed."""
+        with self._lock:
+            self._current = None
 
     def breakdown(self) -> dict[str, float]:
         with self._lock:
