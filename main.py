@@ -13,9 +13,8 @@ from memory.memory_manager import (
 
 # New-stack bridge (Wave 13); optional — never break legacy Gemini Live.
 try:
-    from mark.bridge import authorize_tool, build_runtime_stack
+    from mark.bridge import build_runtime_stack
 except Exception:  # pragma: no cover
-    authorize_tool = None  # type: ignore[assignment]
     build_runtime_stack = None  # type: ignore[assignment]
 
 
@@ -94,29 +93,13 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
         if "429" not in str(e):
             print(f"[Memory] ⚠️ {e}")
 
-from dataclasses import replace
-
-from mark.safety import SafetyPolicy, UntrustedSource
-from mark.tools import ToolExecutor, ToolRegistry
 from mark.tools.builtin import build_builtin_registry
 from mark.tools.exporters.gemini import export_gemini_tools
-from mark.tools.legacy.adapters import with_legacy_context
 from agent.latency import LatencyTrace
 from runtime.audio import AudioPipeline
 from runtime.lifecycle import run_live_lifecycle
 from runtime.live_session import receive_live_session
-
-
-def _contextual_registry(*, ui, speak) -> ToolRegistry:
-    registry = ToolRegistry()
-    for spec in build_builtin_registry().list():
-        registry.register(
-            replace(
-                spec,
-                handler=with_legacy_context(spec.handler, speak=speak, player=ui),
-            )
-        )
-    return registry
+from runtime.tool_bridge import LiveToolBridge
 
 
 TOOL_DECLARATIONS = export_gemini_tools(build_builtin_registry().list())
@@ -133,10 +116,9 @@ class SlonLive:
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
         self.runtime_stack  = runtime_stack
-        self.tool_registry = _contextual_registry(ui=ui, speak=self.speak)
-        self.tool_executor = ToolExecutor(
-            self.tool_registry, SafetyPolicy(), confirmer=lambda _decision: True
-        )
+        self.tool_bridge = LiveToolBridge(ui=ui, speak=self.speak)
+        self.tool_registry = self.tool_bridge.registry
+        self.tool_executor = self.tool_bridge.executor
         self.latency_trace = LatencyTrace()
         self.audio = AudioPipeline(
             ui=ui,
@@ -231,36 +213,13 @@ class SlonLive:
     async def _execute_tool(self, fc) -> types.FunctionResponse:
         name = fc.name
         args = dict(fc.args or {})
-        print(f"[SLON] 🔧 {name}  {args}")
+        print(f"[SLON] 🔧 {name}")
         self.ui.set_state("THINKING")
         self.latency_trace.mark("tool_execution_start")
 
-        if name == "file_processor" and not args.get("file_path") and self.ui.current_file:
-            args["file_path"] = self.ui.current_file
-
-        if authorize_tool is not None and self.runtime_stack is not None:
-            allowed, reason = authorize_tool(
-                self.runtime_stack, name, args, source="desktop_ui"
-            )
-            if not allowed and "confirm" in reason.lower():
-                control_plane = getattr(self.ui, "control_plane", None)
-                if control_plane is not None:
-                    allowed = await asyncio.to_thread(
-                        control_plane.request_approval,
-                        name,
-                        args,
-                        source="desktop_ui",
-                        reason=reason,
-                    )
-            if not allowed:
-                result = {"error": f"Blocked by SafetyPolicy: {reason}"}
-                return types.FunctionResponse(id=fc.id, name=name, response=result)
-
-        result = await asyncio.to_thread(
-            self.tool_executor.execute,
+        result = await self.tool_bridge.execute(
             name,
             args,
-            source=UntrustedSource.USER,
             intent="Gemini Live function call",
         )
         self.latency_trace.mark("tool_execution_finish")

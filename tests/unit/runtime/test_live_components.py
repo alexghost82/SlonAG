@@ -9,6 +9,9 @@ import pytest
 
 from runtime.live_session import receive_live_session
 from runtime.audio import AudioPipeline
+from runtime.tool_bridge import LiveToolBridge
+from mark.safety import RiskLevel
+from mark.tools import ToolRegistry, ToolSpec
 
 
 def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> None:
@@ -27,6 +30,40 @@ def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> Non
     pipeline.unbind()
     assert pipeline.session is None
     assert pipeline.audio_in_queue is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approved", [False, True])
+async def test_live_tool_bridge_requires_real_confirmation_for_side_effects(
+    approved: bool,
+) -> None:
+    calls: list[dict[str, object]] = []
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(
+            name="open_app",
+            description="open",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda arguments: calls.append(dict(arguments)) or "opened",
+            risk=RiskLevel.CONFIRM,
+        )
+    )
+    control_plane = SimpleNamespace(
+        request_approval=lambda *args, **kwargs: approved
+    )
+    bridge = LiveToolBridge(
+        ui=SimpleNamespace(control_plane=control_plane, current_file=None),
+        speak=lambda _text: None,
+        registry=registry,
+    )
+
+    result = await bridge.execute(
+        "open_app", {"app_name": "Calculator"}, intent="Open calculator"
+    )
+
+    assert result.ok is approved
+    assert len(calls) == int(approved)
 
 
 class FakeSession:
