@@ -41,6 +41,8 @@ async def run_live_lifecycle(
             print(f"[SLON] ⚠️ {exc}")
             traceback.print_exc()
             on_disconnected()
+        else:
+            on_disconnected()
 
         ui.set_state("THINKING")
         print(f"[SLON] 🔄 Reconnecting in {reconnect_delay:g}s...")
