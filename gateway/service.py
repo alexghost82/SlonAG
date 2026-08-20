@@ -40,6 +40,8 @@ class SlonGateway:
         if agent_runner is not None:
             self.router.register("agent.run", agent_runner)
         self.router.register("system.health", self._health)
+        self.router.register("node.list", self._node_list)
+        self.router.register("automation.list", self._automation_list)
         self.artifacts = ArtifactTransferService(
             store=self.store, root=artifact_root, signing_key=signing_key
         )
@@ -53,6 +55,13 @@ class SlonGateway:
             workspace_for=self.auth.workspace_for,
         )
         self.runtime_stack = runtime_stack
+        self.session_manager = session_manager
+        if session_manager is not None and runtime_stack is not None:
+            if agent_runner is None:
+                self.router.register("agent.run", self._agent_run)
+            self.router.register("approval.list", self._approval_list)
+            if approval_handler is None:
+                self.router.register("approval.decide", self._approval_decide)
 
     def _health(
         self, context: GatewayContext, request: GatewayEnvelope
@@ -60,6 +69,89 @@ class SlonGateway:
         return response_envelope(request, "system.health_status", {
             "alive": True,
             "runtime_composed": self.runtime_stack is not None,
+        })
+
+    def _node_list(self, context: GatewayContext, request: GatewayEnvelope) -> GatewayEnvelope:
+        return response_envelope(request, "node.listed", {"nodes": [{
+            "id": "local-runtime", "kind": "desktop", "online": True,
+        }]})
+
+    def _automation_list(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        return response_envelope(request, "automation.listed", {"automations": []})
+
+    async def _agent_run(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        if not request.session_id:
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("missing_session", "session_id is required.")
+        goal = request.payload.get("goal")
+        if not isinstance(goal, str) or not goal.strip():
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("invalid_payload", "goal is required.")
+        session = self.session_manager.get(
+            request.session_id, workspace_id=context.workspace_id
+        )
+        models = await self.runtime_stack.router.list_models(
+            session.model_policy.provider_id
+        )
+        model = next((item for item in models if (
+            item.provider_id == session.model_policy.provider_id
+            and item.model_id == session.model_policy.model_id
+        )), None)
+        if model is None:
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("model_unavailable", "Session model is unavailable.")
+        operation_id = request.request_id or request.id
+        self.store.put_operation(
+            operation_id=operation_id, kind="job", device_id=context.device_id,
+            workspace_id=context.workspace_id, session_id=request.session_id,
+            status="running", payload={"type": "agent.run"}, now=time.time(),
+        )
+        try:
+            result = await self.runtime_stack.create_session_binding().run(
+                request.session_id, goal.strip(), workspace_id=context.workspace_id,
+                model=model,
+            )
+        except BaseException:
+            self.store.update_operation(operation_id, "interrupted", time.time())
+            raise
+        self.store.update_operation(
+            operation_id, "completed" if result.ok else "failed", time.time()
+        )
+        return response_envelope(request, "agent.completed", {
+            "ok": bool(result.ok), "answer": result.final_answer,
+            "stop_reason": result.stop_reason,
+        })
+
+    def _approval_list(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        values = self.store.operations(
+            workspace_id=context.workspace_id, kind="approval"
+        )
+        return response_envelope(request, "approval.listed", {"approvals": [
+            {"id": item["operation_id"], "status": item["status"],
+             "session_id": item["session_id"]}
+            for item in values
+        ]})
+
+    def _approval_decide(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        approval_id = request.payload.get("approval_id")
+        decision = request.payload.get("decision")
+        if not isinstance(approval_id, str) or decision not in {"allow", "deny"}:
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("invalid_payload", "approval decision is invalid.")
+        status = "completed" if decision == "allow" else "denied"
+        if not self.store.update_operation(approval_id, status, time.time()):
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("approval_unavailable", "Approval is unavailable.")
+        return response_envelope(request, "approval.decided", {
+            "approval_id": approval_id, "decision": decision,
         })
 
     def _issue_upload(

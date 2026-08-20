@@ -175,6 +175,23 @@ def test_gateway_lan_cli_is_explicit_and_tls_only() -> None:
 
 
 @pytest.mark.asyncio
+async def test_gateway_exposes_factual_node_and_automation_inventory(tmp_path: Path) -> None:
+    gateway = SlonGateway(
+        database_path=tmp_path / "routes.sqlite3",
+        artifact_root=tmp_path / "artifacts",
+        signing_key=b"route-key",
+    )
+    context = GatewayContext("device", "workspace", "connection")
+    nodes = await gateway.router.dispatch(context, _envelope("node.list"))
+    automations = await gateway.router.dispatch(context, _envelope("automation.list"))
+    assert nodes.payload == {
+        "nodes": [{"id": "local-runtime", "kind": "desktop", "online": True}]
+    }
+    assert automations.payload == {"automations": []}
+    gateway.close()
+
+
+@pytest.mark.asyncio
 async def test_websocket_replay_cursor_ping_and_workspace_isolation(
     tmp_path: Path,
 ) -> None:

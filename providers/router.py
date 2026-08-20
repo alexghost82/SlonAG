@@ -109,6 +109,16 @@ class Router:
             )
         return await self._resolve(self.provider_id).validate()
 
+    async def list_models(self, provider_id: str | None = None) -> tuple[ModelInfo, ...]:
+        """Return canonical models for a provider without exposing its adapter."""
+        selected = provider_id or self.provider_id
+        configured = tuple(
+            model for model in self._models if model.provider_id == selected
+        )
+        if configured:
+            return configured
+        return tuple(await self._resolve(selected).list_models())
+
     async def chat(self, request: ChatRequest) -> ChatResponse:
         request = self._route_request(request)
         self._require_request_capabilities(request)

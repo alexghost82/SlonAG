@@ -45,3 +45,21 @@ uncertain.
 The existing `/v1` Desktop Control listener, Gemini Live transport, RuntimeEvent
 bus, Session Engine and all Wave 16–19 adapters remain unchanged. They can be
 removed only after their callers migrate independently.
+
+## Acceptance status
+
+Implemented and automated: strict envelopes, pinned Ed25519 device identity,
+durable refresh rotation/access replay protection, trusted-device revocation,
+duplex bounded WebSocket transport, delivered-only ACK cursors, reconnect
+replay, signed owner-scoped artifacts, Session routes, AgentLoop binding,
+durable job records, and factual node/automation inventory.
+
+The LAN/iOS entrypoint is opt-in (`--gateway-lan`), accepts only an explicit
+private address, requires `--allow-non-loopback --tls`, and never configures a
+reverse proxy, wildcard bind, UPnP, forwarding, tunnel or cloud relay. Pairing
+codes are created and displayed only on the trusted local process with
+`--gateway-pair`; no unauthenticated endpoint can mint/read a code.
+
+Human TLS/LAN/iOS validation remains pending. Approval persistence currently
+backs Gateway-native approval operations; the legacy Desktop Control approval
+waiter remains a compatibility adapter and is not replayed after restart.
