@@ -21,6 +21,7 @@ async def receive_live_session(
     print("[SLON] 👂 Recv started")
     output_transcript: list[str] = []
     input_transcript: list[str] = []
+    awaiting_post_tool_response = False
 
     async for response in session.receive():
         provider_output = bool(
@@ -36,6 +37,9 @@ async def receive_live_session(
             latency_trace.ensure_turn()
             latency_trace.mark("user_speech_end")
             latency_trace.mark("provider_first_response")
+            if awaiting_post_tool_response:
+                latency_trace.mark("provider_after_tool_first_response")
+                awaiting_post_tool_response = False
 
         if response.data:
             audio_in_queue.put_nowait(response.data)
@@ -86,6 +90,7 @@ async def receive_live_session(
                 print(f"[SLON] 📞 {function_call.name}")
                 function_responses.append(await execute_tool(function_call))
             await session.send_tool_response(function_responses=function_responses)
+            awaiting_post_tool_response = True
 
 
 __all__ = ["receive_live_session"]

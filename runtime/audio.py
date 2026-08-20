@@ -12,7 +12,9 @@ RECEIVE_SAMPLE_RATE = 24000
 CHANNELS = 1
 CHUNK_SIZE = 1024
 MIC_QUEUE_CHUNKS = 10
-PLAYBACK_QUEUE_CHUNKS = 32
+# Gemini can deliver generated audio faster than the device consumes it. Keep
+# enough bounded burst capacity for coherent speech; reconnect still discards it.
+PLAYBACK_QUEUE_CHUNKS = 256
 
 
 class FreshAudioQueue(asyncio.Queue):
@@ -53,6 +55,8 @@ class AudioPipeline:
         self.session: Any = None
         self.audio_in_queue: FreshAudioQueue | None = None
         self.out_queue: FreshAudioQueue | None = None
+        self.dropped_microphone_chunks = 0
+        self.dropped_playback_chunks = 0
 
     def bind(self, session: Any) -> None:
         """Bind fresh queues to one newly connected session."""
@@ -61,6 +65,10 @@ class AudioPipeline:
         self.out_queue = FreshAudioQueue(MIC_QUEUE_CHUNKS)
 
     def unbind(self) -> None:
+        if self.out_queue is not None:
+            self.dropped_microphone_chunks += self.out_queue.dropped_chunks
+        if self.audio_in_queue is not None:
+            self.dropped_playback_chunks += self.audio_in_queue.dropped_chunks
         self.session = None
         self.audio_in_queue = None
         self.out_queue = None

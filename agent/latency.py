@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 import threading
+import math
+import statistics
 from dataclasses import dataclass, field
 
 
@@ -26,9 +28,14 @@ class LatencyTrace:
 
     def breakdown(self) -> dict[str, float]:
         pairs = {
+            "input_vad_approx": ("user_input_activity_start", "user_speech_end"),
             "provider": ("provider_request_start", "provider_first_response"),
             "tool": ("tool_execution_start", "tool_execution_finish"),
-            "audio": ("observation_returned", "first_audio_output"),
+            "post_tool_provider": (
+                "observation_returned",
+                "provider_after_tool_first_response",
+            ),
+            "audio_first": ("provider_first_response", "first_audio_output"),
             "total": (None, "turn_complete"),
         }
         result: dict[str, float] = {}
@@ -86,6 +93,26 @@ class TurnLatencyTracker:
     def history(self) -> tuple[dict[str, float], ...]:
         with self._lock:
             return tuple(dict(item) for item in self._history)
+
+    def statistics(self) -> dict[str, dict[str, float | int]]:
+        """Return payload-free per-metric min/median/p95/max aggregates."""
+        with self._lock:
+            history = tuple(dict(item) for item in self._history)
+        metrics = sorted({name for turn in history for name in turn})
+        result: dict[str, dict[str, float | int]] = {}
+        for metric in metrics:
+            values = sorted(turn[metric] for turn in history if metric in turn)
+            if not values:
+                continue
+            p95_index = max(0, math.ceil(0.95 * len(values)) - 1)
+            result[metric] = {
+                "count": len(values),
+                "min": round(values[0], 1),
+                "median": round(statistics.median(values), 1),
+                "p95": round(values[p95_index], 1),
+                "max": round(values[-1], 1),
+            }
+        return result
 
 
 __all__ = ["LatencyTrace", "TurnLatencyTracker"]

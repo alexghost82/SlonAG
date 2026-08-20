@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from runtime.live_session import receive_live_session
-from runtime.audio import AudioPipeline, FreshAudioQueue
+from runtime.audio import AudioPipeline, FreshAudioQueue, PLAYBACK_QUEUE_CHUNKS
 from runtime.tool_bridge import LiveToolBridge
 from runtime.lifecycle import run_live_lifecycle
 from mark.safety import RiskLevel
@@ -29,6 +29,7 @@ def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> Non
     assert pipeline.session is session
     assert pipeline.audio_in_queue is not None
     assert pipeline.out_queue is not None
+    assert pipeline.audio_in_queue.maxsize == PLAYBACK_QUEUE_CHUNKS
     pipeline.unbind()
     assert pipeline.session is None
     assert pipeline.audio_in_queue is None
@@ -286,6 +287,30 @@ def test_live_latency_tracker_resets_marks_between_turns() -> None:
     assert "provider" in first and "tool" not in first
     assert "tool" in second and "provider" not in second
     assert len(tracker.history()) == 2
+
+
+def test_live_latency_tracker_reports_distribution_without_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timestamps = iter((0.0, 0.1, 0.2, 1.0, 1.3, 1.4))
+    monkeypatch.setattr("agent.latency.time.monotonic", lambda: next(timestamps))
+    tracker = TurnLatencyTracker()
+    for _ in range(2):
+        tracker.start_turn()
+        tracker.mark("provider_request_start")
+        tracker.mark("provider_first_response")
+        tracker.finish_turn()
+
+    stats = tracker.statistics()
+
+    assert stats["provider"] == {
+        "count": 2,
+        "min": 100.0,
+        "median": 200.0,
+        "p95": 300.0,
+        "max": 300.0,
+    }
+    assert set(stats) == {"provider", "total"}
 
 
 @pytest.mark.asyncio
