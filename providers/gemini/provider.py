@@ -18,6 +18,7 @@ from providers.contracts import (
     ChatResponse,
     ModelInfo,
     ProviderStatus,
+    ToolCall,
 )
 from providers.errors import CapabilityError, ProviderAuthError, ProviderError
 from providers.gemini.catalog import GEMINI_MODELS, PROVIDER_ID
@@ -131,6 +132,31 @@ def _next_or_end(iterator: Iterator[Any]) -> Any:
     return next(iterator, _END)
 
 
+def _tool_calls_of(response: object) -> tuple[ToolCall, ...]:
+    raw_calls = getattr(response, "function_calls", None)
+    if raw_calls is None:
+        return ()
+    calls: list[ToolCall] = []
+    for index, raw in enumerate(raw_calls):
+        name = getattr(raw, "name", None)
+        if not isinstance(name, str):
+            continue
+        arguments = getattr(raw, "args", {})
+        if not isinstance(arguments, dict):
+            try:
+                arguments = dict(arguments)
+            except (TypeError, ValueError):
+                arguments = {"_malformed_arguments": str(arguments)}
+        calls.append(
+            ToolCall(
+                id=str(getattr(raw, "id", None) or f"call_{index}"),
+                name=name,
+                arguments=arguments,
+            )
+        )
+    return tuple(calls)
+
+
 class GeminiChatProvider:
     """Chat and stream against Gemini using an injectable google-genai client."""
 
@@ -181,6 +207,7 @@ class GeminiChatProvider:
             text=_text_of(response),
             provider_id=PROVIDER_ID,
             model_id=request.model.model_id,
+            tool_calls=_tool_calls_of(response),
         )
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:

@@ -18,6 +18,7 @@ from providers.contracts import (
     ChatResponse,
     ModelInfo,
     ProviderStatus,
+    ToolCall,
 )
 from providers.errors import ProviderAuthError
 from providers.openai.client import (
@@ -81,6 +82,7 @@ class OpenAIChatProvider:
             text=extract_message_text(payload),
             provider_id=PROVIDER_ID,
             model_id=request.model.model_id,
+            tool_calls=_tool_calls(payload),
         )
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
@@ -149,6 +151,32 @@ def _message_payload(message: Any) -> dict[str, Any]:
             for call in message.tool_calls
         ]
     return item
+
+
+def _tool_calls(payload: object) -> tuple[ToolCall, ...]:
+    if not isinstance(payload, dict):
+        return ()
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ()
+    message = choices[0].get("message")
+    raw_calls = message.get("tool_calls") if isinstance(message, dict) else None
+    if not isinstance(raw_calls, list):
+        return ()
+    calls: list[ToolCall] = []
+    for index, raw in enumerate(raw_calls):
+        function = raw.get("function") if isinstance(raw, dict) else None
+        if not isinstance(function, dict) or not isinstance(function.get("name"), str):
+            continue
+        encoded = function.get("arguments", "{}")
+        try:
+            arguments = json.loads(encoded) if isinstance(encoded, str) else encoded
+        except json.JSONDecodeError:
+            arguments = {"_malformed_arguments": encoded}
+        if not isinstance(arguments, dict):
+            arguments = {"_malformed_arguments": encoded}
+        calls.append(ToolCall(str(raw.get("id") or f"call_{index}"), function["name"], arguments))
+    return tuple(calls)
 
 
 def conservative_capabilities(model_id: str) -> dict[str, bool]:

@@ -14,6 +14,7 @@ from providers.contracts import (
     ChatResponse,
     ModelInfo,
     ProviderStatus,
+    ToolCall,
 )
 from providers.errors import ProviderAuthError
 from providers.openrouter.catalog import parse_models_payload
@@ -71,6 +72,7 @@ class OpenRouterChatProvider:
             text=_message_text(data),
             provider_id=PROVIDER_ID,
             model_id=request.model.model_id,
+            tool_calls=_tool_calls(data),
         )
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
@@ -155,6 +157,32 @@ def _message_text(data: object) -> str:
         return ""
     content = message.get("content")
     return content if isinstance(content, str) else ""
+
+
+def _tool_calls(data: object) -> tuple[ToolCall, ...]:
+    if not isinstance(data, dict):
+        return ()
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ()
+    message = choices[0].get("message")
+    raw_calls = message.get("tool_calls") if isinstance(message, dict) else None
+    if not isinstance(raw_calls, list):
+        return ()
+    calls: list[ToolCall] = []
+    for index, raw in enumerate(raw_calls):
+        function = raw.get("function") if isinstance(raw, dict) else None
+        if not isinstance(function, dict) or not isinstance(function.get("name"), str):
+            continue
+        encoded = function.get("arguments", "{}")
+        try:
+            arguments = json.loads(encoded) if isinstance(encoded, str) else encoded
+        except json.JSONDecodeError:
+            arguments = {"_malformed_arguments": encoded}
+        if not isinstance(arguments, dict):
+            arguments = {"_malformed_arguments": encoded}
+        calls.append(ToolCall(str(raw.get("id") or f"call_{index}"), function["name"], arguments))
+    return tuple(calls)
 
 
 def _parse_sse_line(line: str) -> ChatEvent | None:
