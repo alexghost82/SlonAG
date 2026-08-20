@@ -288,15 +288,15 @@ def test_executor_module_does_not_import_planner_at_load() -> None:
 
 @pytest.mark.asyncio
 async def test_execute_agent_loop_convenience_function() -> None:
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
     from agent.executor import execute_agent_loop
     from agent.runtime import AgentLoopResult
     from providers.contracts import ChatResponse, ModelInfo
 
     mock_provider = MagicMock()
-    mock_provider.chat.return_value = ChatResponse(
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(
         text="Loop answer", provider_id="test", model_id="test"
-    )
+    ))
 
     model = ModelInfo(
         provider_id="test", model_id="test", display_name="Test", text=True

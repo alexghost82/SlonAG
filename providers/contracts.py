@@ -7,8 +7,8 @@ network APIs or read secrets.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import Protocol, TypeAlias, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -36,23 +36,6 @@ class ModelInfo:
 
 
 @dataclass(frozen=True)
-class ChatMessage:
-    """One provider-neutral conversation item.
-
-    Tool calls live on the assistant message that requested them. Tool results
-    use ``role='tool'`` and retain their correlation id end-to-end.
-    """
-
-    role: str
-    content: str = ""
-    tool_calls: tuple[ToolCall, ...] = ()
-    tool_call_id: str | None = None
-    name: str | None = None
-    result: object | None = None
-    error: str | None = None
-
-
-@dataclass(frozen=True)
 class ToolDefinition:
     """Provider-agnostic description of a tool available to a model."""
 
@@ -69,6 +52,102 @@ class ToolCall:
     name: str
     arguments: Mapping[str, object]
 
+    def __post_init__(self) -> None:
+        if not self.id:
+            raise ValueError("tool call id must be non-empty")
+        if not self.name:
+            raise ValueError("tool call name must be non-empty")
+        if not isinstance(self.arguments, Mapping):
+            raise TypeError("tool call arguments must be a mapping")
+
+
+@dataclass(frozen=True)
+class UserMessage:
+    """Provider-neutral user text."""
+
+    content: str
+    role: str = field(default="user", init=False)
+
+
+@dataclass(frozen=True)
+class SystemMessage:
+    """Provider-neutral system instruction."""
+
+    content: str
+    role: str = field(default="system", init=False)
+
+
+@dataclass(frozen=True)
+class AssistantMessage:
+    """Completed assistant text without a tool request."""
+
+    content: str = ""
+    role: str = field(default="assistant", init=False)
+    tool_calls: tuple[ToolCall, ...] = field(default=(), init=False)
+
+
+@dataclass(frozen=True)
+class AssistantToolCallMessage:
+    """One native assistant turn containing one or more correlated tool calls."""
+
+    tool_calls: tuple[ToolCall, ...]
+    content: str = ""
+    role: str = field(default="assistant", init=False)
+
+    def __post_init__(self) -> None:
+        if not self.tool_calls:
+            raise ValueError("assistant tool-call message requires at least one call")
+
+
+@dataclass(frozen=True)
+class ToolResultMessage:
+    """Native tool result correlated to the assistant request that produced it."""
+
+    tool_call_id: str
+    tool_name: str
+    result: object | None = None
+    error: str | None = None
+    artifacts: tuple[object, ...] = ()
+    role: str = field(default="tool", init=False)
+    content: str = field(default="", init=False)
+
+    @property
+    def name(self) -> str:
+        """Compatibility alias used by existing provider serializers."""
+        return self.tool_name
+
+    def __post_init__(self) -> None:
+        if not self.tool_call_id:
+            raise ValueError("tool result tool_call_id must be non-empty")
+        if not self.tool_name:
+            raise ValueError("tool result tool_name must be non-empty")
+        if self.error is not None and self.result is not None:
+            raise ValueError("tool result cannot contain both result and error")
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    """Compatibility message accepted while callers migrate to typed messages."""
+
+    role: str
+    content: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str | None = None
+    name: str | None = None
+    result: object | None = None
+    error: str | None = None
+    artifacts: tuple[object, ...] = ()
+
+
+ConversationMessage: TypeAlias = (
+    UserMessage
+    | SystemMessage
+    | AssistantMessage
+    | AssistantToolCallMessage
+    | ToolResultMessage
+    | ChatMessage
+)
+
 
 @dataclass(frozen=True)
 class ChatRequest:
@@ -79,7 +158,7 @@ class ChatRequest:
     """
 
     model: ModelInfo
-    messages: Sequence[ChatMessage]
+    messages: Sequence[ConversationMessage]
     role: str = "chat"
     tools: Sequence[ToolDefinition] = ()
     tool_choice: str | None = None
@@ -107,6 +186,16 @@ class ChatEvent:
     type: str
     text: str = ""
     tool_call: ToolCall | None = None
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+    arguments_delta: str = ""
+    index: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.type not in {"delta", "tool_call_delta", "tool_call", "done"}:
+            raise ValueError(f"unsupported chat event type: {self.type!r}")
+        if self.type == "tool_call" and self.tool_call is None:
+            raise ValueError("completed tool_call event requires a ToolCall")
 
 
 @dataclass(frozen=True)

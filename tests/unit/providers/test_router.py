@@ -273,9 +273,24 @@ async def test_explicit_policy_retries_once_when_allowed() -> None:
     response = await router.chat(request)
     assert local.chat_calls == 1
     assert cloud.chat_calls == 1
-    assert cloud.requests[0] is request
+    assert cloud.requests[0] is not request
+    assert cloud.requests[0].model.provider_id == "openai"
+    assert cloud.requests[0].model.model_id == "openai-mock"
     assert response.text == "from-openai"
-    assert response.model_id == request.model.model_id
+    assert response.model_id == "openai-mock"
+
+
+async def test_internal_type_error_never_triggers_fallback() -> None:
+    broken = FailingProvider("local", TypeError("implementation bug"))
+    fallback = RecordingProvider("openai")
+    router = Router(
+        provider_id="local",
+        fallback_policy=ToProvider("openai"),
+        providers={"local": broken, "openai": fallback},
+    )
+    with pytest.raises(TypeError, match="implementation bug"):
+        await router.chat(_request("local"))
+    assert fallback.chat_calls == 0
 
 
 async def test_missing_key_raises_without_calling_factory(clean_registry) -> None:

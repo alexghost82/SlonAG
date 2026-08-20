@@ -3,7 +3,7 @@
 import asyncio
 import time
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from agent.observation import Observation, ObservationKind
 from agent.runtime import (
@@ -15,7 +15,14 @@ from agent.runtime import (
 )
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from mark.tools.contracts import ToolResult
-from providers.contracts import ChatRequest, ChatResponse, ModelInfo, ToolCall
+from providers.contracts import (
+    AssistantToolCallMessage,
+    ChatRequest,
+    ChatResponse,
+    ModelInfo,
+    ToolCall,
+    ToolResultMessage,
+)
 
 
 MODEL = ModelInfo(
@@ -103,8 +110,10 @@ async def test_native_tool_result_keeps_correlation_id() -> None:
 
     assert result.ok
     assert requests[1].messages[-2].role == "assistant"
+    assert isinstance(requests[1].messages[-2], AssistantToolCallMessage)
     assert requests[1].messages[-2].tool_calls[0].id == "call-42"
     tool_result = requests[1].messages[-1]
+    assert isinstance(tool_result, ToolResultMessage)
     assert tool_result.role == "tool"
     assert tool_result.tool_call_id == "call-42"
     assert tool_result.name == "read_file"
@@ -207,9 +216,9 @@ def test_agent_loop_dataclasses():
 async def test_agent_loop_single_turn_text_response():
     """Verify AgentLoop completes on first turn when model returns text only."""
     mock_provider = MagicMock()
-    mock_provider.chat.return_value = ChatResponse(
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(
         text="Hello user!", provider_id="test", model_id="test"
-    )
+    ))
 
     loop = AgentLoop(provider=mock_provider, model=MODEL)
     result = await loop.run("Say hello")
@@ -342,14 +351,14 @@ async def test_agent_loop_budget_exceeded():
 async def test_agent_loop_loop_detector_halt():
     """Verify loop halts when LoopDetector detects identical repeated calls."""
     mock_provider = MagicMock()
-    mock_provider.chat.return_value = ChatResponse(
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(
         text="",
         provider_id="test",
         model_id="test",
         tool_calls=(
             ToolCall(id="call_rep", name="repeat_tool", arguments={"key": "val"}),
         ),
-    )
+    ))
 
     detector = LoopDetector(max_consecutive=3)
     loop = AgentLoop(

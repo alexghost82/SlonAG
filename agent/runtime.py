@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -14,12 +14,17 @@ from agent.latency import LatencyTrace
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from mark.tools.contracts import ToolResult
 from providers.contracts import (
-    ChatMessage,
+    AssistantMessage,
+    AssistantToolCallMessage,
+    ChatProvider,
     ChatRequest,
     ChatResponse,
+    ConversationMessage,
     ModelInfo,
+    ToolResultMessage,
     ToolCall,
     ToolDefinition,
+    UserMessage,
 )
 
 
@@ -159,7 +164,7 @@ class AgentLoop:
         self,
         *,
         model: ModelInfo,
-        provider: Any = None,
+        provider: ChatProvider | None = None,
         tool_executor: Any = None,
         budget: LoopBudget | None = None,
         loop_detector: LoopDetector | None = None,
@@ -182,7 +187,7 @@ class AgentLoop:
         """Executes the multi-turn agent loop until a final answer or termination condition is reached."""
         steps: list[AgentLoopStepResult] = []
         trace = LatencyTrace()
-        messages: list[ChatMessage] = [ChatMessage(role="user", content=user_goal)]
+        messages: list[ConversationMessage] = [UserMessage(user_goal)]
 
         while True:
             exceeded, reason = self.budget.is_exceeded()
@@ -219,7 +224,7 @@ class AgentLoop:
                         SteeringKind.VOICE_INTERRUPTION,
                     ):
                         text = signal.text or "User guidance injected"
-                        messages.append(ChatMessage(role="user", content=text))
+                        messages.append(UserMessage(text))
 
             if self.budget.turn_count >= self.budget.max_turns:
                 return AgentLoopResult(False, steps=steps, reason=f"Max turns ({self.budget.max_turns}) reached")
@@ -237,23 +242,27 @@ class AgentLoop:
                 raise
             trace.mark("provider_first_response")
 
-            response_text = getattr(response, "text", None)
-            if response_text is None and isinstance(response, dict):
-                response_text = response.get("text", "")
-            elif response_text is None and isinstance(response, str):
-                response_text = response
-
-            tool_calls = getattr(response, "tool_calls", ()) or ()
-            if isinstance(response, dict) and not tool_calls:
-                tool_calls = response.get("tool_calls", ())
-
-            messages.append(
-                ChatMessage(
-                    role="assistant",
-                    content=str(response_text or ""),
-                    tool_calls=tuple(tool_calls),
+            if not isinstance(response, ChatResponse):
+                raise TypeError("provider.chat() must return ChatResponse")
+            response_text = response.text
+            tool_calls = response.tool_calls
+            duplicate_ids = _duplicate_tool_call_ids(tool_calls)
+            if duplicate_ids:
+                return AgentLoopResult(
+                    ok=False,
+                    final_answer=None,
+                    steps=steps,
+                    reason=f"Duplicate tool_call_id: {duplicate_ids[0]}",
                 )
-            )
+            if tool_calls:
+                messages.append(
+                    AssistantToolCallMessage(
+                        content=response_text,
+                        tool_calls=tool_calls,
+                    )
+                )
+            else:
+                messages.append(AssistantMessage(response_text))
 
             if not tool_calls:
                 trace.mark("turn_complete")
@@ -368,12 +377,12 @@ class AgentLoop:
                     )
 
                 messages.append(
-                    ChatMessage(
-                        role="tool",
+                    ToolResultMessage(
                         tool_call_id=tool_id,
-                        name=tool_name,
+                        tool_name=tool_name,
                         result=obs.content if obs.ok else None,
                         error=None if obs.ok else obs.error,
+                        artifacts=tuple(obs.artifacts),
                     )
                 )
                 trace.mark("observation_returned")
@@ -411,31 +420,27 @@ class AgentLoop:
                         SteeringKind.VOICE_INTERRUPTION,
                     ):
                         text = signal.text or "User guidance injected"
-                        messages.append(ChatMessage(role="user", content=text))
+                        messages.append(UserMessage(text))
 
-    async def _call_provider(self, messages: list[ChatMessage]) -> Any:
+    async def _call_provider(self, messages: list[ConversationMessage]) -> ChatResponse:
         if self.provider is None:
-            return ChatResponse(
-                text="No provider configured", provider_id="none", model_id="none"
-            )
-
-        if hasattr(self.provider, "chat"):
-            specs = getattr(getattr(self.tool_executor, "registry", None), "list", lambda: ())()
-            tools = tuple(
+            raise RuntimeError("No ChatProvider configured")
+        specs = getattr(
+            getattr(self.tool_executor, "registry", None), "list", lambda: ()
+        )()
+        tools = (
+            tuple(
                 ToolDefinition(spec.name, spec.description, spec.input_schema)
                 for spec in specs
-            ) if self.model.tool_calling else ()
-            req = ChatRequest(model=self.model, messages=tuple(messages), tools=tools)
-            res = self.provider.chat(req)
-        elif callable(self.provider):
-            res = self.provider(messages)
-        else:
-            raise RuntimeError(f"Unsupported provider type: {type(self.provider)}")
-
-        if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
-            res = await res
-
-        return res
+            )
+            if self.model.tool_calling
+            else ()
+        )
+        req = ChatRequest(model=self.model, messages=tuple(messages), tools=tools)
+        response = await self.provider.chat(req)
+        if not isinstance(response, ChatResponse):
+            raise TypeError("provider.chat() must return ChatResponse")
+        return response
 
     async def _execute_tool(
         self, tool_name: str, args: dict, goal: str
@@ -472,23 +477,17 @@ class AgentLoop:
         return res
 
     @staticmethod
-    def _parse_tool_call(tool_call: Any) -> tuple[str, str, dict]:
-        if isinstance(tool_call, ToolCall):
-            return (
-                tool_call.id or "call_0",
-                tool_call.name,
-                dict(tool_call.arguments),
-            )
-        if isinstance(tool_call, dict):
-            tc_id = tool_call.get("id") or tool_call.get("tool_call_id") or "call_0"
-            tc_name = tool_call.get("name") or tool_call.get("tool_name") or ""
-            tc_args = tool_call.get("arguments") or tool_call.get("args") or {}
-            return tc_id, tc_name, dict(tc_args)
-        tc_id = getattr(tool_call, "id", "call_0")
-        tc_name = getattr(tool_call, "name", "")
-        tc_args = getattr(tool_call, "arguments", getattr(tool_call, "args", {}))
-        return (
-            tc_id,
-            tc_name,
-            dict(tc_args) if isinstance(tc_args, (dict, Mapping)) else {},
-        )
+    def _parse_tool_call(tool_call: ToolCall) -> tuple[str, str, dict]:
+        if not isinstance(tool_call, ToolCall):
+            raise TypeError("provider tool calls must use canonical ToolCall")
+        return tool_call.id, tool_call.name, dict(tool_call.arguments)
+
+
+def _duplicate_tool_call_ids(tool_calls: Sequence[ToolCall]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for call in tool_calls:
+        if call.id in seen and call.id not in duplicates:
+            duplicates.append(call.id)
+        seen.add(call.id)
+    return tuple(duplicates)

@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.executor import AgentExecutor, execute_agent_loop, execute_plan
@@ -234,12 +234,12 @@ async def test_offline_agent_steering_guidance_injection():
 async def test_offline_agent_budget_enforcement_turns():
     """Verify budget max turns limit halts execution."""
     mock_provider = MagicMock()
-    mock_provider.chat.return_value = ChatResponse(
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(
         text="Looping...",
         provider_id="offline",
         model_id="test",
         tool_calls=(ToolCall(id="c", name="dummy_tool", arguments={}),),
-    )
+    ))
 
     budget = LoopBudget(max_turns=3)
     result = await execute_agent_loop(
@@ -258,7 +258,7 @@ async def test_offline_agent_budget_enforcement_turns():
 async def test_offline_agent_budget_enforcement_tool_calls():
     """Verify budget max tool calls limit halts execution."""
     mock_provider = MagicMock()
-    mock_provider.chat.return_value = ChatResponse(
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(
         text="Executing multiple tools",
         provider_id="offline",
         model_id="test",
@@ -267,7 +267,7 @@ async def test_offline_agent_budget_enforcement_tool_calls():
             ToolCall(id="c2", name="t2", arguments={}),
             ToolCall(id="c3", name="t3", arguments={}),
         ),
-    )
+    ))
 
     budget = LoopBudget(max_tool_calls=2)
     result = await execute_agent_loop(
@@ -286,12 +286,12 @@ async def test_offline_agent_budget_enforcement_tool_calls():
 async def test_offline_agent_budget_enforcement_timeout():
     """Verify timeout limit halts execution."""
     mock_provider = MagicMock()
-    mock_provider.chat.return_value = ChatResponse(
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(
         text="Slow task",
         provider_id="offline",
         model_id="test",
         tool_calls=(ToolCall(id="c1", name="t1", arguments={}),),
-    )
+    ))
 
     budget = LoopBudget(timeout_seconds=0.05)
     time.sleep(0.06)
