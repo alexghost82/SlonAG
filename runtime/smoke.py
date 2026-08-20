@@ -112,7 +112,7 @@ async def run_smoke(args: argparse.Namespace) -> int:
             live._on_text_command(text)
             await _wait_for_turn(live, previous_count, args.turn_timeout)
             snapshots.append(_resource_snapshot(live))
-            if args.force_reconnect_after_turn == index:
+            if index in args.force_reconnect_after_turn:
                 await _force_reconnect(live, ui, args.connect_timeout)
                 snapshots.append(_resource_snapshot(live))
         if not args.text:
@@ -148,7 +148,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--turn-timeout", type=float, default=30.0)
     parser.add_argument("--connect-timeout", type=float, default=15.0)
     parser.add_argument("--snapshot-interval", type=float, default=60.0)
-    parser.add_argument("--force-reconnect-after-turn", type=int, default=0)
+    parser.add_argument(
+        "--force-reconnect-after-turn", action="append", type=int, default=[]
+    )
     parser.add_argument(
         "--approval", choices=("deny", "prompt"), default="deny"
     )
