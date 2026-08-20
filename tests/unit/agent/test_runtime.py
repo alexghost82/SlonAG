@@ -27,6 +27,11 @@ MODEL = ModelInfo(
 )
 
 
+def test_agent_loop_requires_explicit_selected_model() -> None:
+    with pytest.raises(TypeError, match="model"):
+        AgentLoop(provider=MagicMock())  # type: ignore[call-arg]
+
+
 def test_loop_budget_defaults_and_is_exceeded():
     """Verify default values and threshold detection for LoopBudget."""
     budget = LoopBudget()
@@ -206,7 +211,7 @@ async def test_agent_loop_single_turn_text_response():
         text="Hello user!", provider_id="test", model_id="test"
     )
 
-    loop = AgentLoop(provider=mock_provider)
+    loop = AgentLoop(provider=mock_provider, model=MODEL)
     result = await loop.run("Say hello")
 
     assert result.ok is True
@@ -248,7 +253,7 @@ async def test_agent_loop_multi_turn_tool_execution():
     def mock_executor(tool_name, args):
         return ToolResult(ok=True, code="ok", message="File contents: hello world")
 
-    loop = AgentLoop(provider=mock_provider, tool_executor=mock_executor)
+    loop = AgentLoop(provider=mock_provider, tool_executor=mock_executor, model=MODEL)
     result = await loop.run("Read file /tmp/test.txt")
 
     assert result.ok is True
@@ -288,7 +293,7 @@ async def test_agent_loop_tool_error_self_correction():
     def mock_executor(tool_name, args):
         raise RuntimeError("Disk full")
 
-    loop = AgentLoop(provider=mock_provider, tool_executor=mock_executor)
+    loop = AgentLoop(provider=mock_provider, tool_executor=mock_executor, model=MODEL)
     result = await loop.run("Run command")
 
     assert result.ok is True
@@ -322,6 +327,7 @@ async def test_agent_loop_budget_exceeded():
 
     budget = LoopBudget(max_turns=3, max_tool_calls=15)
     loop = AgentLoop(
+        model=MODEL,
         provider=mock_provider,
         tool_executor=lambda name, args: "ok",
         budget=budget,
@@ -347,6 +353,7 @@ async def test_agent_loop_loop_detector_halt():
 
     detector = LoopDetector(max_consecutive=3)
     loop = AgentLoop(
+        model=MODEL,
         provider=mock_provider,
         tool_executor=lambda name, args: "same output",
         loop_detector=detector,
@@ -364,7 +371,7 @@ async def test_agent_loop_steering_cancellation():
     steering_q.push(SteeringSignal(kind=SteeringKind.SYSTEM_CANCEL, text="User cancelled"))
 
     mock_provider = MagicMock()
-    loop = AgentLoop(provider=mock_provider)
+    loop = AgentLoop(provider=mock_provider, model=MODEL)
 
     result = await loop.run("Long task", steering_queue=steering_q)
 

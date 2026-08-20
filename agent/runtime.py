@@ -157,14 +157,17 @@ class AgentLoop:
 
     def __init__(
         self,
+        *,
+        model: ModelInfo,
         provider: Any = None,
         tool_executor: Any = None,
-        model: ModelInfo | None = None,
         budget: LoopBudget | None = None,
         loop_detector: LoopDetector | None = None,
     ) -> None:
         self.provider = provider
         self.tool_executor = tool_executor
+        if not isinstance(model, ModelInfo):
+            raise TypeError("model must be an explicitly selected ModelInfo")
         self.model = model
         self.budget = budget if budget is not None else LoopBudget()
         self.loop_detector = (
@@ -417,21 +420,12 @@ class AgentLoop:
             )
 
         if hasattr(self.provider, "chat"):
-            model = self.model or getattr(self.provider, "model_info", None)
-            if not isinstance(model, ModelInfo):
-                model = ModelInfo(
-                    provider_id=str(getattr(self.provider, "provider_id", "unselected")),
-                    model_id=str(getattr(self.provider, "model_id", "unselected")),
-                    display_name="Unselected compatibility model",
-                    text=True,
-                    tool_calling=False,
-                )
             specs = getattr(getattr(self.tool_executor, "registry", None), "list", lambda: ())()
             tools = tuple(
                 ToolDefinition(spec.name, spec.description, spec.input_schema)
                 for spec in specs
-            ) if model.tool_calling else ()
-            req = ChatRequest(model=model, messages=tuple(messages), tools=tools)
+            ) if self.model.tool_calling else ()
+            req = ChatRequest(model=self.model, messages=tuple(messages), tools=tools)
             res = self.provider.chat(req)
         elif callable(self.provider):
             res = self.provider(messages)

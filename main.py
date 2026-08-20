@@ -1,10 +1,8 @@
 import asyncio
 import threading
 import sys
-import traceback
 from pathlib import Path
 
-import sounddevice as sd
 from google import genai
 from google.genai import types
 from ui import SlonUI, JarvisUI
@@ -29,11 +27,7 @@ def get_base_dir():
 
 BASE_DIR        = get_base_dir()
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
-LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-CHANNELS            = 1
-SEND_SAMPLE_RATE    = 16000
-RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE          = 1024
+LIVE_MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 
 
 def _get_api_key() -> str:
@@ -108,6 +102,9 @@ from mark.tools.builtin import build_builtin_registry
 from mark.tools.exporters.gemini import export_gemini_tools
 from mark.tools.legacy.adapters import with_legacy_context
 from agent.latency import LatencyTrace
+from runtime.audio import AudioPipeline
+from runtime.lifecycle import run_live_lifecycle
+from runtime.live_session import receive_live_session
 
 
 def _contextual_registry(*, ui, speak) -> ToolRegistry:
@@ -141,6 +138,13 @@ class SlonLive:
             self.tool_registry, SafetyPolicy(), confirmer=lambda _decision: True
         )
         self.latency_trace = LatencyTrace()
+        self.audio = AudioPipeline(
+            ui=ui,
+            set_speaking=self.set_speaking,
+            latency_trace=self.latency_trace,
+            speaking_lock=self._speaking_lock,
+            is_speaking=lambda: self._is_speaking,
+        )
         self.ui.on_text_command = self._on_text_command
         control_plane = getattr(self.ui, "control_plane", None)
         if control_plane is not None:
@@ -273,165 +277,64 @@ class SlonLive:
         return types.FunctionResponse(id=fc.id, name=name, response=response)
 
     async def _send_realtime(self):
-        while True:
-            msg = await self.out_queue.get()
-            await self.session.send_realtime_input(media=msg)
+        await self.audio.send_realtime()
 
     async def _listen_audio(self):
-        print("[SLON] 🎤 Mic started")
-        loop = asyncio.get_event_loop()
-
-        def callback(indata, frames, time_info, status):
-            with self._speaking_lock:
-                slon_speaking = self._is_speaking
-            if not slon_speaking and not self.ui.muted:
-                data = indata.tobytes()
-                loop.call_soon_threadsafe(
-                    self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
-                )
-
-        try:
-            with sd.InputStream(
-                samplerate=SEND_SAMPLE_RATE,
-                channels=CHANNELS,
-                dtype="int16",
-                blocksize=CHUNK_SIZE,
-                callback=callback,
-            ):
-                print("[SLON] 🎤 Mic stream open")
-                while True:
-                    await asyncio.sleep(0.1)
-        except Exception as e:
-            print(f"[SLON] ❌ Mic: {e}")
-            raise
+        await self.audio.listen()
 
     async def _receive_audio(self):
-        print("[SLON] 👂 Recv started")
-        out_buf, in_buf = [], []
-
-        try:
-            while True:
-                async for response in self.session.receive():
-
-                    if response.data:
-                        self.audio_in_queue.put_nowait(response.data)
-
-                    if response.server_content:
-                        sc = response.server_content
-
-                        if sc.output_transcription and sc.output_transcription.text:
-                            self.set_speaking(True)
-                            txt = sc.output_transcription.text.strip()
-                            if txt:
-                                out_buf.append(txt)
-
-                        if sc.input_transcription and sc.input_transcription.text:
-                            txt = sc.input_transcription.text.strip()
-                            if txt:
-                                in_buf.append(txt)
-
-                        if sc.turn_complete:
-                            self.latency_trace.mark("user_speech_end")
-                            self.latency_trace.mark("turn_complete")
-                            self.set_speaking(False)
-
-                            full_in = " ".join(in_buf).strip()
-                            if full_in:
-                                self.ui.write_log(f"You: {full_in}")
-                            in_buf = []
-
-                            full_out = " ".join(out_buf).strip()
-                            if full_out:
-                                self.ui.write_log(f"Slon: {full_out}")
-                            out_buf = []
-
-                            if full_in and len(full_in) > 5:
-                                threading.Thread(
-                                    target=_update_memory_async,
-                                    args=(full_in, full_out),
-                                    daemon=True
-                                ).start()
-
-                    if response.tool_call:
-                        self.latency_trace.mark("tool_call_received")
-                        fn_responses = []
-                        for fc in response.tool_call.function_calls:
-                            print(f"[SLON] 📞 {fc.name}")
-                            fr = await self._execute_tool(fc)
-                            fn_responses.append(fr)
-                        await self.session.send_tool_response(
-                            function_responses=fn_responses
-                        )
-
-        except Exception as e:
-            print(f"[SLON] ❌ Recv: {e}")
-            traceback.print_exc()
-            raise
+        if self.session is None or self.audio.audio_in_queue is None:
+            raise RuntimeError("live session is not connected")
+        await receive_live_session(
+            session=self.session,
+            audio_in_queue=self.audio.audio_in_queue,
+            ui=self.ui,
+            set_speaking=self.set_speaking,
+            execute_tool=self._execute_tool,
+            update_memory=_update_memory_async,
+            latency_trace=self.latency_trace,
+        )
 
     async def _play_audio(self):
-        print("[SLON] 🔊 Play started")
-        loop = asyncio.get_event_loop()
+        await self.audio.play()
 
-        stream = sd.RawOutputStream(
-            samplerate=RECEIVE_SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype="int16",
-            blocksize=CHUNK_SIZE,
+    def _on_connected(self, session, loop):
+        self.session = session
+        self._loop = loop
+        self.audio.bind(session)
+        self.audio_in_queue = self.audio.audio_in_queue
+        self.out_queue = self.audio.out_queue
+
+    def _on_disconnected(self):
+        self.set_speaking(False)
+        self.session = None
+        self._loop = None
+        self.audio.unbind()
+        self.audio_in_queue = None
+        self.out_queue = None
+
+    def _session_tasks(self):
+        return (
+            self._send_realtime(),
+            self._listen_audio(),
+            self._receive_audio(),
+            self._play_audio(),
         )
-        stream.start()
-        try:
-            while True:
-                chunk = await self.audio_in_queue.get()
-                self.latency_trace.mark("first_audio_output")
-                self.set_speaking(True)
-                await asyncio.to_thread(stream.write, chunk)
-        except Exception as e:
-            print(f"[SLON] ❌ Play: {e}")
-            raise
-        finally:
-            self.set_speaking(False)
-            stream.stop()
-            stream.close()
 
     async def run(self):
         client = genai.Client(
             api_key=_get_api_key(),
-            http_options={"api_version": "v1beta"}
+            http_options={"api_version": "v1beta"},
         )
-
-        while True:
-            try:
-                print("[SLON] 🔌 Connecting...")
-                self.ui.set_state("THINKING")
-                config = self._build_config()
-
-                async with (
-                    client.aio.live.connect(model=LIVE_MODEL, config=config) as session,
-                    asyncio.TaskGroup() as tg,
-                ):
-                    self.session        = session
-                    self._loop          = asyncio.get_event_loop()
-                    self.audio_in_queue = asyncio.Queue()
-                    self.out_queue      = asyncio.Queue(maxsize=10)
-
-                    print("[SLON] ✅ Connected.")
-                    self.ui.set_state("LISTENING")
-                    self.ui.write_log("SYS: Slon online.")
-
-                    tg.create_task(self._send_realtime())
-                    tg.create_task(self._listen_audio())
-                    tg.create_task(self._receive_audio())
-                    tg.create_task(self._play_audio())
-                    
-            except Exception as e:
-                print(f"[SLON] ⚠️ {e}")
-                traceback.print_exc()
-
-            self.set_speaking(False)
-            self.ui.set_state("THINKING")
-            print("[SLON] 🔄 Reconnecting in 3s...")
-            await asyncio.sleep(3)
+        await run_live_lifecycle(
+            client=client,
+            model_id=LIVE_MODEL,
+            build_config=self._build_config,
+            on_connected=self._on_connected,
+            on_disconnected=self._on_disconnected,
+            tasks=self._session_tasks,
+            ui=self.ui,
+        )
 
 JarvisLive = SlonLive
 

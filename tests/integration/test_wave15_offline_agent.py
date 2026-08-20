@@ -16,6 +16,15 @@ from mark.tools.executor import ToolExecutor
 from providers.contracts import ChatMessage, ChatRequest, ChatResponse, ModelInfo, ToolCall
 
 
+OFFLINE_MODEL = ModelInfo(
+    provider_id="offline_provider",
+    model_id="test_model",
+    display_name="Offline test model",
+    text=True,
+    tool_calling=True,
+)
+
+
 @pytest.mark.asyncio
 async def test_offline_agent_multi_turn_tool_execution(tmp_path):
     """Verify multi-turn tool execution across multiple turns without network calls."""
@@ -56,6 +65,7 @@ async def test_offline_agent_multi_turn_tool_execution(tmp_path):
     tool_executor = ToolExecutor(registry, SafetyPolicy())
 
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal=f"Read and summarize {test_file}",
         provider=mock_provider,
         tool_executor=tool_executor,
@@ -119,6 +129,7 @@ async def test_offline_agent_tool_error_self_correction():
         return ToolResult(ok=True, code="ok", message="Fallback content read.")
 
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal="Read configuration file",
         provider=mock_provider,
         tool_executor=mock_tool_executor,
@@ -151,6 +162,7 @@ async def test_offline_agent_steering_interruption_cancel():
     mock_provider = MagicMock()
 
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal="Perform long autonomous operation",
         provider=mock_provider,
         steering_queue=steering_q,
@@ -201,6 +213,7 @@ async def test_offline_agent_steering_guidance_injection():
     )
 
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal="Process data",
         provider=mock_provider,
         tool_executor=lambda name, args: "done",
@@ -230,6 +243,7 @@ async def test_offline_agent_budget_enforcement_turns():
 
     budget = LoopBudget(max_turns=3)
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal="Infinite loop goal",
         provider=mock_provider,
         tool_executor=lambda name, args: "ok",
@@ -257,6 +271,7 @@ async def test_offline_agent_budget_enforcement_tool_calls():
 
     budget = LoopBudget(max_tool_calls=2)
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal="Multi-tool call goal",
         provider=mock_provider,
         tool_executor=lambda name, args: "ok",
@@ -282,6 +297,7 @@ async def test_offline_agent_budget_enforcement_timeout():
     time.sleep(0.06)
 
     result = await execute_agent_loop(
+        model=OFFLINE_MODEL,
         user_goal="Timeout goal",
         provider=mock_provider,
         tool_executor=lambda name, args: "ok",

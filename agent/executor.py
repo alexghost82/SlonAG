@@ -388,11 +388,12 @@ class AgentExecutor:
 
 async def execute_agent_loop(
     user_goal: str,
+    *,
+    model: ModelInfo,
     provider: Any = None,
     tool_executor: Any = None,
     budget: LoopBudget | None = None,
     steering_queue: SteeringQueue | None = None,
-    model: ModelInfo | None = None,
 ) -> AgentLoopResult:
     """Execute iterative multi-turn AgentLoop engine."""
     loop = AgentLoop(
