@@ -312,7 +312,7 @@ class AgentLoop:
                     batch_results = await asyncio.wait_for(
                         asyncio.to_thread(
                             self.tool_executor.execute_many,
-                            [(name, args) for _id, name, args in selected],
+                            selected,
                             **execution_kwargs,
                         ),
                         timeout=self.budget.remaining_seconds(),
@@ -342,7 +342,9 @@ class AgentLoop:
                         raw_res = batch_results[call_index]
                     else:
                         raw_res = await asyncio.wait_for(
-                            self._execute_tool(tool_name, tool_args, user_goal),
+                            self._execute_tool(
+                                tool_id, tool_name, tool_args, user_goal
+                            ),
                             timeout=self.budget.remaining_seconds(),
                         )
                     if isinstance(raw_res, Observation):
@@ -468,7 +470,7 @@ class AgentLoop:
         return response
 
     async def _execute_tool(
-        self, tool_name: str, args: dict, goal: str
+        self, tool_call_id: str, tool_name: str, args: dict, goal: str
     ) -> Any:
         executor = self.tool_executor
         if executor is None:
@@ -491,6 +493,7 @@ class AgentLoop:
                 source=UntrustedSource.USER,
                 intent=goal,
                 cancel_event=self.cancel_event,
+                tool_call_id=tool_call_id,
             )
         elif callable(executor):
             res = executor(tool_name, args)

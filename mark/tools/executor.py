@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 from mark.safety import DecisionKind, SafetyDecision, SafetyPolicy, UntrustedSource
-from mark.tools.contracts import ToolResult
+from mark.tools.contracts import ToolResult, ToolSpec
 from mark.tools.registry import ToolRegistry
 
 
@@ -45,6 +45,7 @@ class ToolExecutor:
         source: UntrustedSource,
         intent: str = "",
         cancel_event: threading.Event | None = None,
+        tool_call_id: str | None = None,
     ) -> ToolResult:
         """Execute one tool call and return a non-throwing structured outcome."""
         started_at = time.monotonic()
@@ -85,7 +86,9 @@ class ToolExecutor:
                 )
             try:
                 approval_started_at = time.monotonic()
-                confirmed = bool(self._confirmer(decision))
+                confirmed = bool(
+                    self._confirmer(replace(decision, tool_call_id=tool_call_id))
+                )
                 approval_finished_at = time.monotonic()
             except Exception:
                 approval_finished_at = time.monotonic()
@@ -152,7 +155,10 @@ class ToolExecutor:
 
     def execute_many(
         self,
-        calls: Sequence[tuple[str, Mapping[str, object]]],
+        calls: Sequence[
+            tuple[str, Mapping[str, object]]
+            | tuple[str, str, Mapping[str, object]]
+        ],
         *,
         source: UntrustedSource,
         intent: str = "",
@@ -161,8 +167,9 @@ class ToolExecutor:
         """Execute a batch in input order, parallelizing only explicitly safe tools."""
         if not calls:
             return ()
-        specs = []
-        for name, _arguments in calls:
+        normalized_calls = tuple(self._normalize_call(call) for call in calls)
+        specs: list[ToolSpec | None] = []
+        for _tool_call_id, name, _arguments in normalized_calls:
             try:
                 specs.append(self._registry.get(name))
             except Exception:
@@ -178,16 +185,17 @@ class ToolExecutor:
         # Duplicate calls are conservatively serialized: they may contend for
         # the same remote or local resource even when the operation is a read.
         identities = [
-            (name, repr(sorted(arguments.items()))) for name, arguments in calls
+            (name, repr(sorted(arguments.items())))
+            for _tool_call_id, name, arguments in normalized_calls
         ]
         independent = len(set(identities)) == len(identities)
         if not safely_parallel or not independent:
             return tuple(
                 self.execute(
                     name, arguments, source=source, intent=intent,
-                    cancel_event=cancel_event,
+                    cancel_event=cancel_event, tool_call_id=tool_call_id,
                 )
-                for name, arguments in calls
+                for tool_call_id, name, arguments in normalized_calls
             )
         with ThreadPoolExecutor(
             max_workers=min(len(calls), 8), thread_name_prefix="slon-tool-batch"
@@ -195,11 +203,23 @@ class ToolExecutor:
             futures = [
                 pool.submit(
                     self.execute, name, arguments, source=source, intent=intent,
-                    cancel_event=cancel_event,
+                    cancel_event=cancel_event, tool_call_id=tool_call_id,
                 )
-                for name, arguments in calls
+                for tool_call_id, name, arguments in normalized_calls
             ]
             return tuple(future.result() for future in futures)
+
+    @staticmethod
+    def _normalize_call(
+        call: tuple[str, Mapping[str, object]]
+        | tuple[str, str, Mapping[str, object]],
+    ) -> tuple[str | None, str, Mapping[str, object]]:
+        """Accept legacy name/args pairs while preserving canonical call IDs."""
+        if len(call) == 2:
+            name, arguments = call
+            return None, name, arguments
+        tool_call_id, name, arguments = call
+        return tool_call_id, name, arguments
 
     @staticmethod
     def _invoke(

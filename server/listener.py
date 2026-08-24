@@ -915,12 +915,14 @@ class DesktopControlListener:
         arguments: Mapping[str, object],
         source: str,
         reason: str,
+        tool_call_id: str | None = None,
     ) -> bool:
         durable_request = None
         if self._gateway is not None:
             durable_request = self._gateway.approvals.request(
                 workspace_id=self._gateway_workspace_id, tool_name=tool_name,
                 reason=reason, timeout=120.0,
+                tool_call_id=tool_call_id,
             )
         approval_id = (
             durable_request.approval_id
@@ -953,7 +955,10 @@ class DesktopControlListener:
             }
         )
         if durable_request is not None:
-            approved = self._gateway.approvals.wait(durable_request, timeout=120.0)
+            gateway = self._gateway
+            if gateway is None:
+                return False
+            approved = gateway.approvals.wait(durable_request, timeout=120.0)
             self._approvals.decide(approval_id, "approve" if approved else "deny")
             return approved
         if not event.wait(timeout=120.0):

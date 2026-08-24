@@ -60,6 +60,10 @@ class SafetyDecision:
     intent: str
     args: Mapping[str, object]
     reason: str = ""
+    # Assigned by the execution boundary from the provider's canonical
+    # ToolCall.id.  Policy evaluation itself never manufactures correlation
+    # identities.
+    tool_call_id: str | None = None
 
 
 def is_trusted_source(source: UntrustedSource) -> bool:

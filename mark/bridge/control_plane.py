@@ -12,7 +12,9 @@ from typing import Any
 EventSink = Callable[[Mapping[str, object]], object]
 CommandHandler = Callable[[], object]
 TextHandler = Callable[[str], object]
-ApprovalHandler = Callable[[str, Mapping[str, object], str, str], bool]
+ApprovalHandler = Callable[
+    [str, Mapping[str, object], str, str, str | None], bool
+]
 
 
 class ControlPlaneUnavailable(RuntimeError):
@@ -182,12 +184,15 @@ class DesktopControlPlane:
         *,
         source: str,
         reason: str,
+        tool_call_id: str | None = None,
     ) -> bool:
         with self._lock:
             handler = self._approval_handler
         if handler is None:
             return False
-        return bool(handler(tool_name, dict(arguments), source, reason))
+        return bool(
+            handler(tool_name, dict(arguments), source, reason, tool_call_id)
+        )
 
     def publish(self, event: str, payload: Mapping[str, object]) -> None:
         envelope = {

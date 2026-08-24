@@ -323,6 +323,18 @@ class GatewayStore:
             ).rowcount
         return changed > 0
 
+    def operation(
+        self, operation_id: str, *, workspace_id: str
+    ) -> Mapping[str, object] | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM gateway_operations WHERE operation_id=? AND workspace_id=?",
+                (operation_id, workspace_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {**dict(row), "payload": json.loads(str(row["payload_json"]))}
+
     def operations(
         self, *, workspace_id: str, kind: str | None = None,
     ) -> list[Mapping[str, object]]:
@@ -426,14 +438,21 @@ class GatewayStore:
         self, *, approval_id: str, workspace_id: str, decision: str,
         device_id: str | None, now: float,
     ) -> bool:
-        if decision not in {"allowed", "denied", "expired", "cancelled"}:
+        if decision not in {
+            "allowed", "denied", "expired", "cancelled", "interrupted"
+        }:
             raise ValueError("invalid approval decision")
+        deadline_clause = (
+            "AND expires_at>?" if decision in {"allowed", "denied"}
+            else ""
+        )
         with self.transaction():
             changed = self._db.execute(
-                """UPDATE gateway_approvals SET status=?,decided_at=?,decision_device_id=?
+                f"""UPDATE gateway_approvals SET status=?,decided_at=?,decision_device_id=?
                 WHERE approval_id=? AND workspace_id=? AND status='pending'
-                  AND expires_at>?""",
-                (decision, now, device_id, approval_id, workspace_id, now),
+                  {deadline_clause}""",
+                (decision, now, device_id, approval_id, workspace_id)
+                + ((now,) if deadline_clause else ()),
             ).rowcount
         return changed == 1
 

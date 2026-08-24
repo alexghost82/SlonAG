@@ -128,6 +128,28 @@ def test_confirmation_precedes_handler() -> None:
     assert policy.events == ["validate", "authorize", "confirm", "handler"]
 
 
+def test_canonical_tool_call_id_reaches_confirmation_for_single_and_batch() -> None:
+    policy = RecordingPolicy(DecisionKind.CONFIRM)
+    correlated: list[str | None] = []
+    executor = build_executor(
+        lambda arguments: arguments,
+        policy,
+        confirmer=lambda decision: correlated.append(decision.tool_call_id) or True,
+    )
+
+    first = executor.execute(
+        "web_search", {"value": "single"}, source=UntrustedSource.USER,
+        tool_call_id="provider-single",
+    )
+    batch = executor.execute_many(
+        (("provider-batch", "web_search", {"value": "batch"}),),
+        source=UntrustedSource.USER,
+    )
+
+    assert first.ok and batch[0].ok
+    assert correlated == ["provider-single", "provider-batch"]
+
+
 def test_model_override_fields_do_not_skip_policy_confirmation() -> None:
     policy = RecordingPolicy(DecisionKind.CONFIRM)
     called = False

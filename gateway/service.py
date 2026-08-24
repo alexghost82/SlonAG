@@ -114,7 +114,10 @@ class SlonGateway:
         self.store.put_operation(
             operation_id=operation_id, kind="job", device_id=context.device_id,
             workspace_id=context.workspace_id, session_id=request.session_id,
-            status="running", payload={"type": "agent.run"}, now=time.time(),
+            status="running", payload={
+                "type": "agent.run", "job_id": operation_id,
+                "request_id": request.request_id, "session_id": request.session_id,
+            }, now=time.time(),
         )
         self._jobs.submit(
             self._run_agent_job, context, request, goal.strip(), model, operation_id
@@ -130,9 +133,12 @@ class SlonGateway:
         from mark.tools import ToolExecutor
 
         def confirm(decision) -> bool:
+            if not decision.tool_call_id:
+                return False
             pending = self.approvals.request(
                 workspace_id=context.workspace_id, session_id=request.session_id,
-                run_id=operation_id, tool_call_id=None, tool_name=decision.tool_name,
+                run_id=operation_id, tool_call_id=decision.tool_call_id,
+                tool_name=decision.tool_name,
                 reason=decision.reason or "Safety confirmation required", timeout=120,
             )
             event = GatewayEnvelope(
@@ -141,12 +147,17 @@ class SlonGateway:
                 payload={
                     "approval_id": pending.approval_id,
                     "job_id": operation_id,
+                    "tool_call_id": pending.tool_call_id,
                     "tool_name": decision.tool_name,
                     "expires_at": pending.expires_at,
                 },
             )
             self.websocket.publish_now(context.workspace_id, event)
-            return self.approvals.wait(pending, timeout=120)
+            allowed = self.approvals.wait(pending, timeout=120)
+            operation = self.store.operation(
+                operation_id, workspace_id=context.workspace_id
+            )
+            return bool(allowed and operation and operation["status"] == "running")
 
         executor = ToolExecutor(
             self.runtime_stack.tool_registry, self.runtime_stack.safety,
@@ -161,12 +172,16 @@ class SlonGateway:
             status = "completed" if result.ok else "failed"
             payload = {
                 "job_id": operation_id, "ok": bool(result.ok),
-                "answer": result.final_answer, "stop_reason": result.stop_reason,
+                "answer": result.final_answer, "stop_reason": result.reason,
             }
-        except BaseException:
+        except BaseException as exc:
             status = "interrupted"
-            payload = {"job_id": operation_id, "ok": False, "code": "interrupted"}
-        self.store.update_operation(operation_id, status, time.time())
+            payload = {
+                "job_id": operation_id, "ok": False, "code": "interrupted",
+                "error_type": type(exc).__name__,
+            }
+        if not self.store.update_operation(operation_id, status, time.time()):
+            return
         self.websocket.publish_now(context.workspace_id, GatewayEnvelope(
             id=str(uuid4()), type="agent.completed", timestamp=utc_timestamp(),
             session_id=request.session_id, request_id=request.request_id,
@@ -179,7 +194,8 @@ class SlonGateway:
         values = self.store.approvals(workspace_id=context.workspace_id)
         return response_envelope(request, "approval.listed", {"approvals": [
             {"id": item["approval_id"], "status": item["status"],
-             "session_id": item["session_id"]}
+             "session_id": item["session_id"], "run_id": item["run_id"],
+             "tool_call_id": item["tool_call_id"], "tool_name": item["tool_name"]}
             for item in values
         ]})
 
@@ -197,8 +213,13 @@ class SlonGateway:
         ):
             from gateway.contracts import GatewayProtocolError
             raise GatewayProtocolError("approval_unavailable", "Approval is unavailable.")
+        approval = self.store.approval(approval_id)
+        if approval is None:  # A successful CAS must still resolve its row.
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("approval_unavailable", "Approval is unavailable.")
         return response_envelope(request, "approval.decided", {
             "approval_id": approval_id, "decision": decision,
+            "tool_call_id": approval["tool_call_id"],
         })
 
     def _issue_upload(

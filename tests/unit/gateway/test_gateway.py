@@ -33,6 +33,16 @@ from gateway.service import SlonGateway
 from gateway.status import read_gateway_status
 from gateway.store import GatewayStore, GatewayStoreError
 from gateway.websocket import GatewayWebSocketRuntime
+from mark.bridge import RuntimeStack
+from mark.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from mark.tools import ToolRegistry
+from mark.tools.contracts import ToolSpec
+from providers.contracts import (
+    ChatResponse,
+    ModelInfo,
+    ToolCall,
+    ToolResultMessage,
+)
 from sessions import ModelPolicy, SessionManager, SessionStore
 from server.listener import DesktopControlListener
 from server.__main__ import main as server_main
@@ -571,6 +581,7 @@ def test_durable_approval_is_scoped_terminal_and_not_resumed_after_restart(
     assert not coordinator.wait(request, timeout=0)
     pending = coordinator.request(
         workspace_id="a", tool_name="open_app", reason="confirm", timeout=30,
+        tool_call_id="pending-call",
     )
     store.close()
     reopened = GatewayStore(path)
@@ -582,6 +593,56 @@ def test_durable_approval_is_scoped_terminal_and_not_resumed_after_restart(
         approval_id=pending.approval_id, workspace_id="a", allow=True,
         device_id="device",
     )
+
+
+def test_approval_expiry_cancellation_shutdown_and_job_cas_are_fail_closed(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    coordinator = DurableApprovalCoordinator(store)
+    expired = coordinator.request(
+        workspace_id="workspace", tool_name="write", reason="confirm",
+        timeout=0.01, session_id="session", run_id="run",
+        tool_call_id="expired-call",
+    )
+    time.sleep(0.02)
+    assert not coordinator.wait(expired, timeout=0)
+    assert store.approval(expired.approval_id)["status"] == "expired"
+    assert not coordinator.decide(
+        approval_id=expired.approval_id, workspace_id="workspace", allow=True,
+        device_id="device",
+    )
+
+    cancelled = coordinator.request(
+        workspace_id="workspace", tool_name="write", reason="confirm", timeout=30,
+        session_id="session", run_id="run", tool_call_id="cancelled-call",
+    )
+    coordinator.cancel(cancelled.approval_id, workspace_id="workspace")
+    assert not coordinator.wait(cancelled, timeout=0)
+    assert store.approval(cancelled.approval_id)["status"] == "cancelled"
+
+    shutdown = coordinator.request(
+        workspace_id="workspace", tool_name="write", reason="confirm", timeout=30,
+        session_id="session", run_id="run", tool_call_id="shutdown-call",
+    )
+    coordinator.close()
+    assert not coordinator.wait(shutdown, timeout=0)
+    assert store.approval(shutdown.approval_id)["status"] == "cancelled"
+
+    store.trust_device(
+        device_id="device", device_name="phone",
+        public_key=base64.b64encode(b"x" * 32).decode(),
+        key_fingerprint="job-device", workspace_id="workspace", created_at=1,
+    )
+    store.put_operation(
+        operation_id="job", kind="job", device_id="device",
+        workspace_id="workspace", session_id="session", status="running",
+        payload={"request_id": "request"}, now=1,
+    )
+    assert store.update_operation("job", "cancelled", 2)
+    assert not store.update_operation("job", "completed", 3)
+    assert store.operation("job", workspace_id="workspace")["status"] == "cancelled"
+    assert store.operation("job", workspace_id="foreign") is None
 
 
 def test_legacy_desktop_waiter_delegates_to_durable_gateway_approval(
@@ -599,7 +660,9 @@ def test_legacy_desktop_waiter_delegates_to_durable_gateway_approval(
     listener = DesktopControlListener(gateway=gateway)
     outcome: list[bool] = []
     worker = threading.Thread(target=lambda: outcome.append(
-        listener._request_tool_approval("open_app", {}, "user", "confirm")
+        listener._request_tool_approval(
+            "open_app", {}, "user", "confirm", "desktop-call"
+        )
     ))
     worker.start()
     deadline = time.time() + 2
@@ -636,7 +699,137 @@ def test_gateway_runtime_status_detects_stale_process(tmp_path: Path) -> None:
         instance_id="instance", state="running", heartbeat_at=time.time() - 30,
         bind_host="192.168.1.20", tls_active=True,
     )
-    assert read_gateway_status(path, stale_after_seconds=5)["state"] == "unavailable"
+    status = read_gateway_status(path, stale_after_seconds=5)
+    assert status["state"] == "unavailable"
+    assert set(status) == {
+        "singleton", "instance_id", "state", "heartbeat_at", "bind_host",
+        "tls_active", "connected_devices", "error_code",
+    }
+    assert not ({"token", "secret", "pairing_code", "private_key"} & set(status))
+
+
+@pytest.mark.asyncio
+async def test_same_websocket_agent_run_approval_and_completion_are_correlated(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(SessionStore(tmp_path / "sessions.sqlite3"))
+    model = ModelInfo(
+        "test", "model", "Test", text=True, tool_calling=True
+    )
+    session = manager.create(
+        title="Gateway", agent_id="agent",
+        model_policy=ModelPolicy("test", "model"), workspace_id="workspace-a",
+    )
+    handler_calls: list[dict[str, object]] = []
+    chat_messages: list[list[str]] = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        name="side_effect", description="effect",
+        input_schema={"type": "object"}, output_schema=None,
+        handler=lambda arguments: handler_calls.append(dict(arguments)) or "done",
+        risk=RiskLevel.CONFIRM,
+    ))
+
+    class ConfirmPolicy:
+        def validate_args(self, _name, arguments):
+            return dict(arguments)
+
+        def authorize(self, name, arguments, **_kwargs):
+            return SafetyDecision(
+                DecisionKind.CONFIRM, name, RiskLevel.CONFIRM,
+                UntrustedSource.USER, "effect", dict(arguments), "confirm",
+            )
+
+    class Router:
+        async def list_models(self, _provider_id):
+            return (model,)
+
+        async def chat(self, request):
+            chat_messages.append([type(item).__name__ for item in request.messages])
+            if any(isinstance(item, ToolResultMessage) for item in request.messages):
+                return ChatResponse("complete", "test", "model")
+            return ChatResponse(
+                "", "test", "model",
+                (ToolCall("provider-call-42", "side_effect", {"value": 42}),),
+            )
+
+    stack = RuntimeStack(
+        provider_id="test", network_mode="offline", router=Router(),
+        safety=ConfirmPolicy(), tool_registry=registry,
+        session_manager=manager,
+    )
+    gateway = SlonGateway(
+        database_path=tmp_path / "gateway.sqlite3",
+        artifact_root=tmp_path / "artifacts", signing_key=b"test-signing-key",
+        session_manager=manager, runtime_stack=stack,
+    )
+    gateway.store.trust_device(
+        device_id="device", device_name="phone",
+        public_key=base64.b64encode(b"x" * 32).decode(),
+        key_fingerprint="device", workspace_id="workspace-a", created_at=time.time(),
+    )
+    connection = await gateway.websocket.connect(device_id="device")
+    run = GatewayEnvelope(
+        "run-event", "agent.run", utc_timestamp(), session.id, "run-request",
+        {"goal": "perform effect"},
+    )
+    accepted = await connection.receive(run.to_json())
+    assert accepted.type == "agent.accepted"
+    job_id = accepted.payload["job_id"]
+
+    requested = None
+    deadline = time.monotonic() + 3
+    while requested is None and time.monotonic() < deadline:
+        for item in connection.drain():
+            if item.envelope.type == "approval.requested":
+                requested = item.envelope
+        if requested is None:
+            await asyncio.sleep(0.01)
+    assert requested is not None
+    assert requested.payload["job_id"] == job_id
+    assert requested.payload["tool_call_id"] == "provider-call-42"
+    approval_id = requested.payload["approval_id"]
+    stored = gateway.store.approval(str(approval_id))
+    assert stored is not None
+    assert stored["workspace_id"] == "workspace-a"
+    assert stored["session_id"] == session.id
+    assert stored["run_id"] == job_id
+    assert stored["tool_call_id"] == "provider-call-42"
+
+    decided = await connection.receive(GatewayEnvelope(
+        "decision-event", "approval.decide", utc_timestamp(), session.id,
+        "decision-request", {"approval_id": approval_id, "decision": "allow"},
+    ).to_json())
+    assert decided.type == "approval.decided"
+    assert decided.payload["tool_call_id"] == "provider-call-42"
+
+    completed = None
+    deadline = time.monotonic() + 3
+    while completed is None and time.monotonic() < deadline:
+        for item in connection.drain():
+            if item.envelope.type == "agent.completed":
+                completed = item.envelope
+        if completed is None:
+            await asyncio.sleep(0.01)
+    assert completed is not None, {
+        "operation": gateway.store.operation(
+            str(job_id), workspace_id="workspace-a"
+        ),
+        "approval": gateway.store.approval(str(approval_id)),
+        "handler_calls": handler_calls,
+        "transcript": manager.get(
+            session.id, workspace_id="workspace-a"
+        ).transcript,
+    }
+    assert completed.session_id == session.id
+    assert completed.payload["job_id"] == job_id
+    assert completed.payload["ok"] is True, completed.payload
+    assert handler_calls == [{"value": 42}]
+    assert chat_messages == [
+        ["UserMessage"],
+        ["UserMessage", "AssistantToolCallMessage", "ToolResultMessage"],
+    ]
+    gateway.close()
 
 
 def test_gateway_schema_rejects_future_version(tmp_path: Path) -> None:

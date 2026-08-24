@@ -14,6 +14,9 @@ from gateway.store import GatewayStore
 class ApprovalRequest:
     approval_id: str
     workspace_id: str
+    session_id: str | None
+    run_id: str | None
+    tool_call_id: str
     tool_name: str
     expires_at: float
 
@@ -29,6 +32,8 @@ class DurableApprovalCoordinator:
         timeout: float, session_id: str | None = None, run_id: str | None = None,
         tool_call_id: str | None = None,
     ) -> ApprovalRequest:
+        if not tool_call_id:
+            raise ValueError("durable approval requires canonical tool_call_id")
         now = time.time()
         approval_id = str(uuid4())
         self.store.create_approval(
@@ -39,7 +44,10 @@ class DurableApprovalCoordinator:
         )
         with self._lock:
             self._waiters[approval_id] = (threading.Event(), [])
-        return ApprovalRequest(approval_id, workspace_id, tool_name, now + timeout)
+        return ApprovalRequest(
+            approval_id, workspace_id, session_id, run_id, tool_call_id,
+            tool_name, now + max(0.01, timeout),
+        )
 
     def wait(self, request: ApprovalRequest, *, timeout: float) -> bool:
         with self._lock:
@@ -54,7 +62,16 @@ class DurableApprovalCoordinator:
             )
         with self._lock:
             self._waiters.pop(request.approval_id, None)
-        return bool(result and result[0])
+        row = self.store.approval(request.approval_id)
+        return bool(
+            result and result[0]
+            and row is not None
+            and row["status"] == "allowed"
+            and row["workspace_id"] == request.workspace_id
+            and row["session_id"] == request.session_id
+            and row["run_id"] == request.run_id
+            and row["tool_call_id"] == request.tool_call_id
+        )
 
     def decide(
         self, *, approval_id: str, workspace_id: str, allow: bool,

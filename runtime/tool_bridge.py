@@ -72,6 +72,7 @@ class LiveToolBridge:
                     decision.args,
                     source="desktop_ui",
                     reason=decision.reason or "SafetyPolicy confirmation required",
+                    tool_call_id=decision.tool_call_id,
                 ))
             except Exception:
                 approved = False
@@ -95,7 +96,9 @@ class LiveToolBridge:
         call_id: str | None = None,
     ) -> ToolResult:
         if not call_id:
-            return await self._execute_once(name, arguments, intent=intent)
+            return await self._execute_once(
+                name, arguments, intent=intent, tool_call_id=None
+            )
 
         async with self._calls_lock:
             existing = self._calls.get(call_id)
@@ -114,7 +117,9 @@ class LiveToolBridge:
             return await asyncio.shield(existing)
 
         try:
-            result = await self._execute_once(name, arguments, intent=intent)
+            result = await self._execute_once(
+                name, arguments, intent=intent, tool_call_id=call_id
+            )
         except asyncio.CancelledError:
             result = ToolResult(
                 ok=False,
@@ -135,6 +140,7 @@ class LiveToolBridge:
         arguments: Mapping[str, object],
         *,
         intent: str,
+        tool_call_id: str | None,
     ) -> ToolResult:
         checked = dict(arguments)
         if name == "file_processor" and not checked.get("file_path"):
@@ -150,6 +156,7 @@ class LiveToolBridge:
                 source=UntrustedSource.USER,
                 intent=intent,
                 cancel_event=cancel_event,
+                tool_call_id=tool_call_id,
             )
         except asyncio.CancelledError:
             cancel_event.set()
