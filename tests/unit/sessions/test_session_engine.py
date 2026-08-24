@@ -460,3 +460,14 @@ async def test_same_tool_call_id_is_isolated_between_sessions(tmp_path: Path) ->
     )
     assert {item["session"] for item in handler_calls} == {"A", "B"}
     assert len(handler_calls) == 2
+
+
+def test_sessions_package_is_the_only_contract_definition() -> None:
+    import sessions
+    import sessions.contracts as contracts
+
+    root = Path(__file__).resolve().parents[3]
+    assert not (root / "session_contracts.py").exists()
+    assert sessions.Session is contracts.Session
+    assert sessions.SessionRun is contracts.SessionRun
+    assert sessions.TranscriptEntry is contracts.TranscriptEntry
