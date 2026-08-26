@@ -150,7 +150,7 @@ def _tool_calls_of(
         name = getattr(raw, "name", None)
         if not isinstance(name, str) or not name:
             raise ProviderError(
-                "Gemini returned an unnamed function call",
+                "Gemini вернул вызов функции без имени",
                 provider_id=PROVIDER_ID,
             )
         arguments = getattr(raw, "args", {})
@@ -159,7 +159,7 @@ def _tool_calls_of(
                 arguments = dict(arguments)
             except (TypeError, ValueError) as exc:
                 raise ProviderError(
-                    "Gemini returned malformed function arguments",
+                    "Gemini вернул некорректные аргументы функции",
                     provider_id=PROVIDER_ID,
                 ) from exc
         calls.append(
@@ -172,7 +172,7 @@ def _tool_calls_of(
     ids = [call.id for call in calls]
     if len(ids) != len(set(ids)):
         raise ProviderError(
-            "Gemini returned duplicate function call ids",
+            "Gemini вернул повторяющиеся идентификаторы вызовов функций",
             provider_id=PROVIDER_ID,
         )
     return tuple(calls)
@@ -197,7 +197,7 @@ class GeminiChatProvider:
             return self._client
         if self._api_key is None:
             raise ProviderAuthError(
-                "Gemini API key is missing",
+                "Ключ API Gemini отсутствует",
                 provider_id=PROVIDER_ID,
             )
         self._client = self._client_factory(self._api_key)
@@ -211,7 +211,7 @@ class GeminiChatProvider:
             return ProviderStatus(
                 provider_id=PROVIDER_ID,
                 ok=False,
-                message="Gemini API key is missing",
+                message="Ключ API Gemini отсутствует",
             )
         return ProviderStatus(provider_id=PROVIDER_ID, ok=True)
 
@@ -249,7 +249,7 @@ class GeminiChatProvider:
                     ):
                         if call.id in seen_call_ids:
                             raise ProviderError(
-                                "Gemini stream returned a duplicate function call id",
+                                "Поток Gemini вернул повторяющийся идентификатор вызова функции",
                                 provider_id=PROVIDER_ID,
                             )
                         seen_call_ids.add(call.id)
@@ -268,7 +268,7 @@ class GeminiChatProvider:
                     ):
                         if call.id in seen_call_ids:
                             raise ProviderError(
-                                "Gemini stream returned a duplicate function call id",
+                                "Поток Gemini вернул повторяющийся идентификатор вызова функции",
                                 provider_id=PROVIDER_ID,
                             )
                         seen_call_ids.add(call.id)

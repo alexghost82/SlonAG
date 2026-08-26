@@ -774,7 +774,7 @@ class FileDropZone(QWidget):
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select a file for Slon", str(Path.home()),
+            self, "Выберите файл для Slon", str(Path.home()),
             "All Files (*.*);;"
             "Images (*.jpg *.jpeg *.png *.gif *.webp *.bmp *.svg);;"
             "Documents (*.pdf *.docx *.txt *.md *.pptx);;"
@@ -835,7 +835,7 @@ class _DropCanvas(QWidget):
         p.setFont(QFont("Courier New", 8))
         p.setPen(QPen(qcol(C.PRI_DIM if not hover else C.TEXT), 1))
         p.drawText(QRectF(0, cy + 8, W, 16), Qt.AlignmentFlag.AlignCenter,
-                   "Drop file here  or  Click to Browse")
+                   "Перетащите файл сюда  или  Нажмите для выбора")
         p.setFont(QFont("Courier New", 7))
         p.setPen(QPen(qcol("#1a4a5a"), 1))
         p.drawText(QRectF(0, cy + 24, W, 14), Qt.AlignmentFlag.AlignCenter,
@@ -848,7 +848,7 @@ class _DropCanvas(QWidget):
         p.drawText(QRectF(0, cy - 24, W, 32), Qt.AlignmentFlag.AlignCenter, "⬇")
         p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         p.setPen(QPen(qcol(C.PRI), 1))
-        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "Release to load")
+        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "Отпустите для загрузки")
 
     def _paint_file(self, p, W, H):
         path = Path(self._z._current_file)
@@ -929,7 +929,7 @@ class SetupOverlay(QWidget):
             return w
 
         layout.addWidget(_lbl("◈  INITIALISATION REQUIRED", 13, True))
-        layout.addWidget(_lbl("Configure S L O N before first boot.", 9, color=C.PRI_DIM))
+        layout.addWidget(_lbl("Настройте S L O Н перед первым запуском.", 9, color=C.PRI_DIM))
         layout.addSpacing(6)
 
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
@@ -1075,11 +1075,11 @@ class MainWindow(QMainWindow):
         self._local_tts_provider = None
         self._local_tts_ready = False
         self._local_tts_enabled = False
-        self._local_tts_message = "Local TTS not initialised"
+        self._local_tts_message = "Локальный TTS не инициализирован"
         self._local_stt_provider = None
         self._local_stt_mic = None
         self._local_stt_ready = False
-        self._local_stt_message = "Local STT not initialised"
+        self._local_stt_message = "Локальный STT не инициализирован"
         self._desktop_listener = None
         self._gateway = None
         self._desktop_tls = False
@@ -1399,7 +1399,7 @@ class MainWindow(QMainWindow):
         self._drop_zone.file_selected.connect(self._on_file_selected)
         lay.addWidget(self._drop_zone)
 
-        self._file_hint = QLabel("No file loaded — drop or click above to upload")
+        self._file_hint = QLabel("Файл не загружен — перетащите или нажмите выше для загрузки")
         self._file_hint.setFont(QFont("Courier New", 7))
         self._file_hint.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
         self._file_hint.setWordWrap(True)
@@ -1465,7 +1465,7 @@ class MainWindow(QMainWindow):
     def _build_input_row(self) -> QHBoxLayout:
         row = QHBoxLayout(); row.setSpacing(5)
         self._input = QLineEdit()
-        self._input.setPlaceholderText("Type a command or question…")
+        self._input.setPlaceholderText("Введите команду или вопрос…")
         self._input.setFont(QFont("Courier New", 9))
         self._input.setFixedHeight(30)
         self._input.setStyleSheet(f"""
@@ -1515,7 +1515,7 @@ class MainWindow(QMainWindow):
         if try_build_local_tts is None:
             self._local_tts_ready = False
             self._local_tts_provider = None
-            self._local_tts_message = "Local TTS module unavailable"
+            self._local_tts_message = "Модуль локального TTS недоступен"
             return
         result = try_build_local_tts(repo_root=BASE_DIR)
         self._local_tts_provider = result.provider
@@ -1536,7 +1536,7 @@ class MainWindow(QMainWindow):
             self._local_stt_ready = False
             self._local_stt_provider = None
             self._local_stt_mic = None
-            self._local_stt_message = "Local STT module unavailable"
+            self._local_stt_message = "Модуль локального STT недоступен"
             self._style_stt_btn()
             return
 
@@ -1855,7 +1855,7 @@ class MainWindow(QMainWindow):
             self._log.append_log(f"SYS: Desktop API start failed — {exc}")
 
     def speak_local(self, text: str) -> None:
-        """Synthesize with Piper when local TTS is enabled; no-op otherwise."""
+        """Синтезирует голос через Piper, если локальный TTS включён; иначе бездействие."""
         if not self._local_tts_enabled or not self._local_tts_ready:
             return
         provider = self._local_tts_provider
@@ -1952,7 +1952,7 @@ class MainWindow(QMainWindow):
             plane.append_log(text)
 
     def _check_config(self) -> bool:
-        """Return True when at least one provider key is configured."""
+        """Возвращает True, если хотя бы один ключ провайдера настроен."""
         try:
             loaded = load_settings()
             provider_id = loaded.provider_id if hasattr(loaded, "provider_id") else DEFAULT_PROVIDER_ID

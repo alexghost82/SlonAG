@@ -144,7 +144,7 @@ class McpIntegration:
             return ToolResult(
                 ok=False,
                 code="mcp_not_initialized",
-                message="MCP server not initialized",
+                message="Сервер MCP не инициализирован",
             )
 
         policy = self.safety_policy or SafetyPolicy()
@@ -161,7 +161,7 @@ class McpIntegration:
             return ToolResult(
                 ok=False,
                 code="safety_denied",
-                message=f"MCP tool blocked by safety policy: {decision.reason}",
+                message=f"Инструмент MCP заблокирован политикой безопасности: {decision.reason}",
             )
 
         if decision.kind in (DecisionKind.CONFIRM, DecisionKind.EXACT_CONFIRM):
@@ -169,8 +169,8 @@ class McpIntegration:
                 return ToolResult(
                     ok=False,
                     code="approval_required",
-                    message=f"Approval required for tool '{qualified_name}'. "
-                            f"Risk level: {decision.risk.name}",
+                    message=f"Требуется согласование для инструмента '{qualified_name}'. "
+                            f"Уровень риска: {decision.risk.name}",
                     data={
                         "approval_required": True,
                         "tool_name": qualified_name,
@@ -188,7 +188,7 @@ class McpIntegration:
             return ToolResult(
                 ok=False,
                 code="cancelled",
-                message="MCP tool call was cancelled",
+                message="Вызов инструмента MCP отменён",
             )
 
         try:
@@ -198,16 +198,16 @@ class McpIntegration:
                 ok=result.ok,
                 code="ok" if result.ok else "mcp_error",
                 message=result.content if result.content else (
-                    result.error or "No content"
+                    result.error or "Нет содержимого"
                 ),
-                data=result.content or result.error or "No content",
+                data=result.content or result.error or "Нет содержимого",
                 warnings=result.warnings,
             )
         except Exception as exc:
             return ToolResult(
                 ok=False,
                 code="mcp_error",
-                message=f"MCP invocation failed: {exc}",
+                message=f"Ошибка вызова MCP: {exc}",
             )
 
     async def discover_resources(self) -> list[Any]:
