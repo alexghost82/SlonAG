@@ -1,4 +1,12 @@
-"""MCP integration with SlonAG AgentLoop, ToolRegistry and SafetyPolicy."""
+"""MCP integration with SlonAG AgentLoop, ToolRegistry and SafetyPolicy.
+
+MCP tools flow through the canonical execution pipeline:
+    AgentLoop -> ToolRegistry.list() -> model tool selection
+    -> SafetyPolicy -> Approval (if side-effect) -> ToolExecutor.handler()
+    -> McpIntegration.invoke_tool() -> MCP server -> result -> ToolResult
+
+MCP tools never bypass SlonAG security boundaries.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +21,7 @@ from mark.mcp.client import McpClient, McpCallResult
 from mark.mcp.types import McpServerConfig, McpToolSpec, McpTransportKind
 from mark.safety.policy import SafetyPolicy, authorize as safety_authorize
 from mark.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from mark.safety.registry import register_mcp_tool
 from mark.tools.contracts import ArtifactRef, ToolResult
 from mark.tools.executor import ToolExecutor
 from mark.tools.registry import ToolRegistry
@@ -22,14 +31,15 @@ from mark.tools.registry import ToolRegistry
 class McpIntegration:
     """Bridges MCP servers into SlonAG's canonical tool execution pipeline.
 
-    MCP tools are registered as ToolSpec entries in the ToolRegistry with the
-    server name as namespace prefix.  Every invocation is routed through the
-    existing SafetyPolicy, DurableApprovalCoordinator and ToolExecutor so that
-    MCP tools never bypass SlonAG security boundaries.
+    MCP tools are registered as ToolSpec entries in a shared ToolRegistry so that
+    the AgentLoop's ``_call_provider`` path naturally discovers them.  Every
+    invocation is routed through the existing SafetyPolicy,
+    DurableApprovalCoordinator and ToolExecutor so that MCP tools never
+    bypass SlonAG security boundaries.
 
     Features:
     - Full MCP lifecycle (init, discovery, invoke, disconnect)
-    - Tool discovery and registration
+    - Tool discovery and registration into a shared registry
     - Resource discovery (read-only passthrough)
     - Prompt discovery (read-only passthrough)
     - Session and workspace isolation
@@ -50,9 +60,11 @@ class McpIntegration:
     tool_executor: ToolExecutor | None = None
     approval_required: bool = False
 
+    # Shared registry (set by caller, or defaults to tool_executor.registry)
+    registry: ToolRegistry | None = None
+
     # Runtime state (owned by McpIntegration)
     client: McpClient | None = None
-    _registry: ToolRegistry | None = None
     _lock: threading.RLock = field(default_factory=threading.RLock)
     _cancelled: threading.Event = field(default_factory=threading.Event)
     _started: bool = False
@@ -65,13 +77,27 @@ class McpIntegration:
         safety_policy: SafetyPolicy | None = None,
         tool_executor: ToolExecutor | None = None,
         approval_required: bool = False,
+        registry: ToolRegistry | None = None,
     ) -> McpIntegration:
         return cls(
             config=config,
             safety_policy=safety_policy,
             tool_executor=tool_executor,
             approval_required=approval_required,
+            registry=registry,
         )
+
+    @property
+    def _registry(self) -> ToolRegistry:
+        """Return the shared ToolRegistry (defaulting to tool_executor.registry)."""
+        if self.registry is not None:
+            return self.registry
+        if self.tool_executor is not None:
+            return self.tool_executor.registry
+        # Fallback: create a standalone registry
+        if not hasattr(self, '_fallback_registry'):
+            self._fallback_registry = ToolRegistry()  # type: ignore[attr-defined]
+        return self._fallback_registry  # type: ignore[attr-defined]
 
     async def start(self) -> None:
         """Initialize the MCP client and discover tools."""
@@ -89,20 +115,20 @@ class McpIntegration:
 
         specs = await self.client.discover_tools()
 
-        # Register each tool in the registry
+        # Register each tool in the shared registry and safety registry
         for spec in specs:
-            if spec.name not in self._get_registry():
-                # Create a ToolSpec-compatible handler
-                self._get_registry().register(
+            existing = self._registry.list()
+            if not any(s.name == spec.name for s in existing):
+                self._registry.register(
                     _build_mcp_tool_spec(spec, self)
+                )
+                # Also register in safety policy's static _REGISTRY
+                register_mcp_tool(
+                    spec.name,
+                    risk=RiskLevel.CONFIRM if spec.side_effect else RiskLevel.READ,
                 )
 
         return specs
-
-    def _get_registry(self) -> ToolRegistry:
-        if self._registry is None:
-            self._registry = ToolRegistry()
-        return self._registry
 
     async def invoke_tool(
         self,
@@ -226,7 +252,6 @@ class McpIntegration:
             if self.client is not None:
                 await self.client.stop()
                 self.client = None
-            self._registry = None
             self._started = False
 
     @property
@@ -245,7 +270,7 @@ def _build_mcp_tool_spec(mcp_spec: McpToolSpec, integration: McpIntegration) -> 
 
     async def handler(**kwargs: Any) -> ToolResult:
         return await integration.invoke_tool(
-            mcp_spec.name,
+            mcp_spec.name,  # already qualified (e.g. "test_echo")
             kwargs,
             source=UntrustedSource.TOOL_RESULT,
         )
@@ -262,7 +287,7 @@ def _build_mcp_tool_spec(mcp_spec: McpToolSpec, integration: McpIntegration) -> 
         handler=handler,
         risk=RiskLevel.READ,
         timeout_seconds=integration.config.tool_timeout_seconds,
-        side_effect=integration.config.tool_timeout_seconds > 0,
+        side_effects=True,
         side_effect_class="reversible",
         cancellable=True,
         capabilities={"mcp", "remote"},

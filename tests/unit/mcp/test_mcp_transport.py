@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import subprocess
 import sys
 import pytest
 
@@ -68,14 +67,12 @@ class TestMcpStdioTransport:
         )
         transport = McpStdioTransport(config)
         async with transport:
-            # Initialize first
             await transport.send_message("initialize", {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
                 "clientInfo": {"name": "slonag", "version": "0.1.0"},
             }, timeout=5.0)
 
-            # Then list tools
             result = await transport.send_message("tools/list", timeout=5.0)
             assert isinstance(result, dict)
             assert "tools" in result
@@ -100,9 +97,8 @@ class TestMcpStdioTransport:
                 "capabilities": {},
                 "clientInfo": {"name": "slonag", "version": "0.1.0"},
             }, timeout=5.0)
-            result = await transport.send_message("nonexistent/method", timeout=5.0)
-            assert isinstance(result, dict)
-            assert "error" in result
+            with pytest.raises(RuntimeError, match="Method not found"):
+                await transport.send_message("nonexistent/method", timeout=5.0)
 
     @pytest.mark.asyncio
     async def test_disconnect_handling(self) -> None:
@@ -133,3 +129,34 @@ class TestMcpStdioTransport:
                     {"name": "slow_operation", "arguments": {"duration_seconds": 30}},
                     timeout=0.5,
                 )
+
+
+class TestMcpTransportDisconnect:
+    """Tests for transport handling server disconnects."""
+
+    @pytest.mark.asyncio
+    async def test_stop_twice(self) -> None:
+        config = McpServerConfig(
+            name="test",
+            transport=McpTransportKind.STDIO,
+            command=sys.executable,
+            args=["-m", "mark.mcp.test_server"],
+        )
+        transport = McpStdioTransport(config)
+        await transport.start()
+        await transport.stop()
+        await transport.stop()  # Should not raise
+
+    @pytest.mark.asyncio
+    async def test_send_after_stop(self) -> None:
+        config = McpServerConfig(
+            name="test",
+            transport=McpTransportKind.STDIO,
+            command=sys.executable,
+            args=["-m", "mark.mcp.test_server"],
+        )
+        transport = McpStdioTransport(config)
+        await transport.start()
+        await transport.stop()
+        with pytest.raises(RuntimeError, match="not connected"):
+            await transport.send_message("tools/list")

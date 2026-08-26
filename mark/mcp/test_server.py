@@ -1,10 +1,10 @@
 """Deterministic test MCP server for testing MCP runtime without external dependencies.
 
 This server speaks the MCP JSON-RPC protocol over stdio and provides:
-- Fixed tool definitions (echo, compute, side_effect, approve_me)
-- Resource discovery
-- Prompt discovery
-- Full lifecycle (initialize, tools/list, tools/call, resources/read)
+- Fixed tool definitions (echo, compute, write_note, slow_operation)
+- Resource discovery and reading
+- Prompt discovery and retrieval
+- Full MCP lifecycle (initialize, tools/list, tools/call, resources/read, prompts/list, prompts/get)
 
 Usage:  python -m mark.mcp.test_server
 """
@@ -16,7 +16,6 @@ import json
 import sys
 from typing import Any
 
-# --- MCP-defined tools ---
 TEST_TOOLS = [
     {
         "name": "echo",
@@ -106,7 +105,7 @@ TEST_PROMPTS = [
     },
 ]
 
-RESOURCE_CONTENTS = {
+RESOURCE_CONTENTS: dict[str, str] = {
     "memo://test/note": "This is test memo content.",
 }
 
@@ -115,24 +114,21 @@ class TestMcpServer:
     """Standalone MCP test server for stdio transport testing."""
 
     def __init__(self) -> None:
-        self._next_id = 0
+        # Force unbuffered I/O
+        sys.stdout.reconfigure(line_buffering=True)
 
     async def run(self) -> None:
         """Run the MCP server loop reading from stdin and writing to stdout."""
-        reader = asyncio.StreamReader()
-        protocol = asyncio.StreamReaderProtocol(reader)
-        await asyncio.get_running_loop().connect_read_pipe(lambda: protocol, sys.stdin.buffer)
-
-        writer: asyncio.StreamWriter = await asyncio.get_running_loop().create_future()
         loop = asyncio.get_running_loop()
-        transport, _ = await loop.create_connection(
-            lambda: asyncio.Protocol(), fd=sys.stdout.fileno()
-        )
-        writer = transport  # type: ignore[assignment]
+        stdin_reader = asyncio.StreamReader()
+        protocol = asyncio.StreamReaderProtocol(stdin_reader)
+        await loop.connect_read_pipe(lambda: protocol, sys.stdin.buffer)
+
+        stdout = sys.stdout.buffer
 
         try:
             while True:
-                line = await reader.readline()
+                line = await stdin_reader.readline()
                 if not line:
                     break
                 text = line.decode("utf-8", errors="replace").strip()
@@ -141,20 +137,35 @@ class TestMcpServer:
                 try:
                     request = json.loads(text)
                 except json.JSONDecodeError:
-                    await self._send_error(writer, None, "Parse error", f"Invalid JSON: {text[:200]}")
+                    self._write(stdout, self._error_response(None, "Parse error", f"Invalid JSON: {text[:200]}"))
                     continue
 
                 result = await self._handle(request)
                 if result is not None:
-                    await self._send_json(writer, result)
+                    self._write(stdout, result)
+
         except asyncio.CancelledError:
+            pass
+        finally:
+            try:
+                stdout.flush()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _write(stdout, data: dict[str, Any]) -> None:
+        payload = json.dumps(data) + "\n"
+        stdout.write(payload.encode("utf-8"))
+        try:
+            stdout.flush()
+        except Exception:
             pass
 
     async def _handle(self, request: dict[str, Any]) -> dict[str, Any] | None:
         method = request.get("method", "")
         req_id = request.get("id")
 
-        handlers = {
+        handlers: dict[str, Any] = {
             "initialize": self._handle_initialize,
             "tools/list": self._handle_tools_list,
             "tools/call": self._handle_tools_call,
@@ -163,30 +174,22 @@ class TestMcpServer:
             "resources/read": self._handle_resource_read,
             "prompts/list": self._handle_prompts_list,
             "prompts/get": self._handle_prompt_get,
+            "notifications/initialized": self._handle_notification_initialized,
         }
 
         handler = handlers.get(method)
         if handler is None:
-            if req_id is not None:
-                return self._error_response(req_id, "Method not found", -32601)
-            return None
+            return self._error_response(req_id, f"Method not found: {method}", -32601)
 
         try:
-            params = request.get("params", {})
-            result = await handler(params)
-            if req_id is not None:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "result": result,
-                }
+            params = request.get("params", {}) or {}
+            resp = await handler(params)
+            return {"jsonrpc": "2.0", "id": req_id, "result": resp}
         except Exception as exc:
-            if req_id is not None:
-                return self._error_response(req_id, str(exc), -32603)
-            return None
-        return None
+            return self._error_response(req_id, str(exc), -32603)
 
-    async def _handle_initialize(self, params: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    async def _handle_initialize(params: dict[str, Any]) -> dict[str, Any]:
         return {
             "protocolVersion": "2025-03-26",
             "capabilities": {
@@ -198,7 +201,8 @@ class TestMcpServer:
             "serverInfo": {"name": "slon-test-mcp", "version": "1.0.0"},
         }
 
-    async def _handle_tools_list(self, params: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    async def _handle_tools_list(params: dict[str, Any]) -> dict[str, Any]:
         return {"tools": TEST_TOOLS}
 
     async def _handle_tools_call(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -247,7 +251,7 @@ class TestMcpServer:
 
         if name == "slow_operation":
             duration = args.get("duration_seconds", 5)
-            await asyncio.sleep(min(duration, 30))  # Cap at 30s
+            await asyncio.sleep(min(duration, 30))
             return {"content": [{"type": "text", "text": "Done"}]}
 
         return {
@@ -255,19 +259,19 @@ class TestMcpServer:
             "isError": True,
         }
 
-    async def _handle_resources_list(self, params: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    async def _handle_resources_list(params: dict[str, Any]) -> dict[str, Any]:
         return {"resources": TEST_RESOURCES}
 
-    async def _handle_resource_templates_list(self, params: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    async def _handle_resource_templates_list(params: dict[str, Any]) -> dict[str, Any]:
         return {"resourceTemplates": TEST_RESOURCE_TEMPLATES}
 
     async def _handle_resource_read(self, params: dict[str, Any]) -> dict[str, Any]:
         uri = params.get("uri", "")
         text = RESOURCE_CONTENTS.get(uri)
         if text is None:
-            return {
-                "contents": [],
-            }
+            return {"contents": []}
         return {
             "contents": [
                 {
@@ -278,7 +282,8 @@ class TestMcpServer:
             ]
         }
 
-    async def _handle_prompts_list(self, params: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    async def _handle_prompts_list(params: dict[str, Any]) -> dict[str, Any]:
         return {"prompts": TEST_PROMPTS}
 
     async def _handle_prompt_get(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -297,37 +302,26 @@ class TestMcpServer:
             }
         return {"messages": []}
 
-    async def _send_json(self, writer: Any, data: dict[str, Any]) -> None:
-        payload = json.dumps(data) + "\n"
-        writer.write(payload.encode("utf-8"))
-        await writer.drain()
+    @staticmethod
+    async def _handle_notification_initialized(params: dict[str, Any]) -> None:
+        pass
 
-    async def _send_error(
-        self, writer: Any, req_id: int | str | None, message: str, code: int = -32600
-    ) -> None:
+    @staticmethod
+    def _error_response(
+        req_id: int | str | None, message: str, code: int = -32600
+    ) -> dict[str, Any]:
         error: dict[str, Any] = {
             "jsonrpc": "2.0",
             "error": {"code": code, "message": message},
         }
         if req_id is not None:
             error["id"] = req_id
-        await self._send_json(writer, error)
-
-    @staticmethod
-    def _error_response(
-        req_id: int | str, message: str, code: int = -32600
-    ) -> dict[str, Any]:
-        return {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "error": {"code": code, "message": message},
-        }
+        return error
 
 
 def main() -> None:
     """Entry point for the test MCP server."""
-    server = TestMcpServer()
-    asyncio.run(server.run())
+    asyncio.run(TestMcpServer().run())
 
 
 if __name__ == "__main__":

@@ -163,6 +163,7 @@ class TestMcpToolInvocation:
             assert result.ok
 
 
+
 class TestMcpResourceDiscovery:
     """Tests for MCP resource discovery."""
 
@@ -285,9 +286,9 @@ class TestMcpToolFiltering:
         client = McpClient(config)
         async with client:
             await client.discover_tools()
-            result = await client.invoke_tool("test_echo", {"message": "ok"})
+            result = await client.invoke_tool("filtered_echo", {"message": "ok"})
             assert result.ok
-            result2 = await client.invoke_tool("test_compute", {"operation": "add", "a": 1, "b": 2})
+            result2 = await client.invoke_tool("filtered_compute", {"operation": "add", "a": 1, "b": 2})
             assert not result2.ok
             assert "allowed" in result2.error.lower()
 
@@ -303,6 +304,6 @@ class TestMcpToolFiltering:
         client = McpClient(config)
         async with client:
             await client.discover_tools()
-            result = await client.invoke_tool("test_compute", {"operation": "add", "a": 1, "b": 2})
+            result = await client.invoke_tool("filtered_compute", {"operation": "add", "a": 1, "b": 2})
             assert not result.ok
             assert "denied" in result.error.lower()

@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from mark.safety.types import RiskLevel
+
 
 class McpTransportKind(StrEnum):
     """Supported MCP transport mechanisms."""
@@ -20,6 +22,7 @@ class McpToolSpec:
     name: str
     description: str
     input_schema: dict[str, Any]
+    risk: RiskLevel = RiskLevel.READ
     side_effect: bool = True
     side_effect_class: str = "reversible"
 

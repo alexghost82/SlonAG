@@ -65,6 +65,7 @@ class McpClient:
         self._max_response_chars = max_tool_response_chars
         self._initialized = False
         self._tools: dict[str, McpToolSpec] = {}
+        self._unqualified_tools: dict[str, str] = {}
         self._resources: list[McpResource] = []
         self._resource_templates: list[McpResourceTemplate] = []
         self._prompts: list[McpPrompt] = []
@@ -176,6 +177,11 @@ class McpClient:
                 )
                 tools[qualified_name] = spec
             self._tools = tools
+            # Build reverse index: unqualified_name -> qualified_name
+            self._unqualified_tools = {
+                self._unqualified_name(q): q
+                for q in tools
+            }
             return list(tools.values())
         except Exception as exc:
             self._tools = {}
@@ -296,12 +302,13 @@ class McpClient:
                 error=f"Tool '{original_name}' is not in allowed list",
             )
 
-        if original_name not in self._tools:
+        if original_name not in self._unqualified_tools:
             return McpCallResult(
                 ok=False,
                 error=f"Unknown MCP tool: '{original_name}'",
             )
 
+        qualified_name = self._unqualified_tools[original_name]
         try:
             result = await self._transport.send_message(
                 "tools/call",
@@ -400,7 +407,10 @@ class McpClient:
         """Return tools in the format expected by provider tool_calling.
 
         Returns list of dicts with keys: name, description, input_schema.
+        Auto-discovers tools if not already discovered.
         """
+        if not self._tools and self._initialized:
+            await self.discover_tools()
         specs = self.tools
         return [
             {

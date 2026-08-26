@@ -400,6 +400,13 @@ def validate_args(tool_name: str, args: object) -> dict[str, object]:
     return checked
 
 
+
+
+def register_mcp_tool(tool_name: str, *, risk: RiskLevel = RiskLevel.READ) -> None:
+    """Register a dynamically-discovered MCP tool in the safety registry."""
+    _REGISTRY[tool_name] = SafetyRule(risk=risk)
+
+
 __all__ = [
     "OVERRIDE_KEYS",
     "ArgSchema",
@@ -410,4 +417,5 @@ __all__ = [
     "risk_for",
     "tool_spec",
     "validate_args",
+    "register_mcp_tool",
 ]
