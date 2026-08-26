@@ -55,6 +55,9 @@ def test_all_required_handlers_are_exposed() -> None:
         "code_helper",
         "dev_agent",
         "agent_task",
+        "vision_analyze",
+        "stt_listen",
+        "tts_speak",
     }
 
 
