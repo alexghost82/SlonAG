@@ -91,7 +91,7 @@ async def test_missing_key_validate_is_not_ok_and_skips_client() -> None:
     status = await provider.validate()
     assert status.ok is False
     assert status.provider_id == "gemini"
-    assert "missing" in status.message.lower()
+    assert "отсутствует" in status.message.lower()
 
 
 async def test_blank_key_is_treated_as_missing() -> None:
@@ -191,7 +191,7 @@ async def test_stream_rejects_duplicate_native_function_call_ids() -> None:
         (ToolChunk("first"), ToolChunk("second"))
     )
     provider = GeminiChatProvider(api_key="test-key-not-real", client=client)
-    with pytest.raises(ProviderError, match="duplicate"):
+    with pytest.raises(ProviderError, match="повторяющийся"):
         async for _event in provider.stream(_request(_text_model())):
             pass
 
@@ -210,7 +210,7 @@ async def test_list_models_uses_gemini_provider_id_and_honest_flags() -> None:
 
 async def test_chat_without_key_raises_auth_error_after_capability_check() -> None:
     provider = GeminiChatProvider(api_key=None, client_factory=ExplodingFactory())
-    with pytest.raises(ProviderAuthError, match="missing"):
+    with pytest.raises(ProviderAuthError, match="отсутствует"):
         await provider.chat(_request(_text_model()))
 
 
