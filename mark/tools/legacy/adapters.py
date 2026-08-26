@@ -155,6 +155,23 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
     return normalize_legacy_result(f"Task started (ID: {task_id}).")
 
 
+
+# Wave 22: shell_exec — bounded subprocess executor
+shell_exec_handler = _action_handler("actions.shell_exec", "shell_exec")
+
+# cmd_control is deprecated/broken; delegate to shell_exec for backward compat.
+def _cmd_control_deprecated_handler(args: Mapping[str, object]) -> ToolResult:
+    """Deprecated shim: route broken cmd_control to shell_exec."""
+    cmd = args.get("command", args.get("cmd", ""))
+    if isinstance(cmd, str) and cmd.strip():
+        return shell_exec_handler({"command": cmd, "cwd": args.get("cwd")})
+    return ToolResult(
+        ok=False,
+        code="missing_field",
+        message="cmd_control is deprecated. Use 'shell_exec' instead.",
+    )
+
+
 LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
     "read_file": read_file_handler,
     "open_app": open_app_handler,
@@ -164,7 +181,7 @@ LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
     "desktop_control": desktop_control_handler,
     "computer_control": computer_control_handler,
     "computer_settings": computer_settings_handler,
-    "cmd_control": cmd_control_handler,
+    "cmd_control": _cmd_control_deprecated_handler,
     "screen_process": screen_process_handler,
     "reminder": reminder_handler,
     "weather_report": weather_report_handler,
@@ -175,6 +192,7 @@ LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
     "send_message": send_message_handler,
     "code_helper": code_helper_handler,
     "dev_agent": dev_agent_handler,
+    "shell_exec": shell_exec_handler,  # Wave 22: canonical shell executor
     "agent_task": agent_task_handler,
 }
 

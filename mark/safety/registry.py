@@ -268,6 +268,14 @@ _REGISTRY: dict[str, SafetyRule] = {
         RiskLevel.EXACT_CONFIRM,
         schema=ArgSchema(types=_types(command="str", cwd="str")),
     ),
+    "shell_exec": SafetyRule(
+        RiskLevel.EXACT_CONFIRM,
+        schema=ArgSchema(
+            required=("command",),
+            types=_types(command="str", cwd="str", timeout="float", env_allowlist="list"),
+        ),
+    ),
+
     "code_helper": SafetyRule(
         RiskLevel.EXACT_CONFIRM,
         schema=ArgSchema(
