@@ -171,8 +171,8 @@ class McpIntegration:
                     code="approval_required",
                     message=f"Approval required for tool '{qualified_name}'. "
                             f"Risk level: {decision.risk.name}",
-                    approval_required=True,
-                    approval_info={
+                    data={
+                        "approval_required": True,
                         "tool_name": qualified_name,
                         "arguments": arguments,
                         "risk": decision.risk.name,
@@ -200,10 +200,7 @@ class McpIntegration:
                 message=result.content if result.content else (
                     result.error or "No content"
                 ),
-                data={"mcp_result": {
-                    "ok": result.ok,
-                    "warnings": list(result.warnings),
-                }},
+                data=result.content or result.error or "No content",
                 warnings=result.warnings,
             )
         except Exception as exc:
@@ -258,6 +255,22 @@ class McpIntegration:
     def available_tools(self) -> Mapping[str, McpToolSpec]:
         """Get the registered MCP tools."""
         return self.client.tools if self.client else {}
+
+
+    @property
+    def resources(self) -> list["McpResource"]:
+        """Get discovered MCP resources."""
+        return self.client.resources if self.client else []
+
+    @property
+    def resource_templates(self) -> list["McpResourceTemplate"]:
+        """Get discovered MCP resource templates."""
+        return self.client.resource_templates if self.client else []
+
+    @property
+    def prompts(self) -> list["McpPrompt"]:
+        """Get discovered MCP prompts."""
+        return self.client.prompts if self.client else []
 
     def has_tools(self) -> bool:
         """Check if any tools are registered."""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import queue
 import threading
 import time
@@ -102,6 +104,8 @@ class ToolExecutor:
                     approval_finished_at=approval_finished_at,
                 )
             if not confirmed:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise asyncio.CancelledError("Execution was cancelled during approval.")
                 return replace(
                     self._error(
                         "confirmation_declined", "Confirmation was declined.", started_at
@@ -220,6 +224,178 @@ class ToolExecutor:
             return None, name, arguments
         tool_call_id, name, arguments = call
         return tool_call_id, name, arguments
+
+    async def execute_async(
+        self,
+        name: str,
+        arguments: Mapping[str, object],
+        *,
+        source: UntrustedSource,
+        intent: str = "",
+        cancel_event: threading.Event | None = None,
+        tool_call_id: str | None = None,
+    ) -> ToolResult:
+        """Async execute for use with async tool handlers (e.g., MCP tools)."""
+        started_at = time.monotonic()
+        approval_started_at: float | None = None
+        approval_finished_at: float | None = None
+
+        if cancel_event is not None and cancel_event.is_set():
+            return self._error("cancelled", "Tool execution was cancelled.", started_at)
+
+        try:
+            spec = self._registry.get(name)
+        except Exception:
+            return self._error("unknown_tool", "Unknown tool.", started_at)
+
+        try:
+            checked = self._safety_policy.validate_args(name, arguments)
+        except Exception:
+            return self._error(
+                "invalid_args", "Tool arguments failed validation.", started_at
+            )
+
+        try:
+            decision = self._safety_policy.authorize(
+                name, checked, source=source, intent=intent
+            )
+        except Exception:
+            return self._error(
+                "policy_error", "Safety policy could not authorize the tool.", started_at
+            )
+
+        if decision.kind is DecisionKind.DENY:
+            return self._error("denied", "Tool is refused by policy.", started_at)
+
+        if decision.kind in _CONFIRMATION_KINDS:
+            if self._confirmer is None:
+                return self._error(
+                    "confirmation_required", "Confirmation is required.", started_at
+                )
+            try:
+                approval_started_at = time.monotonic()
+                # Wrap confirmer in thread so asyncio.CancelledError can interrupt it
+                confirmed = await asyncio.to_thread(
+                    lambda: bool(
+                        self._confirmer(replace(decision, tool_call_id=tool_call_id))
+                    )
+                )
+                approval_finished_at = time.monotonic()
+            except Exception:
+                approval_finished_at = time.monotonic()
+                return replace(
+                    self._error(
+                        "confirmation_error",
+                        "Confirmation could not be obtained.",
+                        started_at,
+                    ),
+                    approval_started_at=approval_started_at,
+                    approval_finished_at=approval_finished_at,
+                )
+            if not confirmed:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise asyncio.CancelledError("Execution was cancelled during approval.")
+                return replace(
+                    self._error(
+                        "confirmation_declined", "Confirmation was declined.", started_at
+                    ),
+                    approval_started_at=approval_started_at,
+                    approval_finished_at=approval_finished_at,
+                )
+
+        if cancel_event is not None and cancel_event.is_set():
+            return self._error("cancelled", "Tool execution was cancelled.", started_at)
+
+        handler_started_at = time.monotonic()
+        try:
+            # Detect handler signature: MCP tools use **kwargs, builtin use single dict arg
+            sig = inspect.signature(spec.handler)
+            has_var_keyword = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in sig.parameters.values()
+            )
+            if has_var_keyword:
+                raw_result = spec.handler(**arguments)
+            else:
+                raw_result = spec.handler(arguments)
+            # Await if the handler is a coroutine
+            if inspect.iscoroutine(raw_result):
+                outcome = await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
+            else:
+                outcome = raw_result
+        except asyncio.TimeoutError:
+            warning = (
+                "The handler did not finish before the deadline; an already running "
+                "legacy operation may continue."
+            )
+            return ToolResult(
+                ok=False,
+                code="timeout",
+                message="Tool execution timed out.",
+                warnings=(warning,),
+                started_at=started_at,
+                finished_at=time.monotonic(),
+                approval_started_at=approval_started_at,
+                approval_finished_at=approval_finished_at,
+                handler_started_at=handler_started_at,
+                retryable=spec.idempotent,
+            )
+        except Exception:
+            return ToolResult(
+                ok=False,
+                code="handler_error",
+                message="Tool handler failed.",
+                started_at=started_at,
+                finished_at=time.monotonic(),
+                approval_started_at=approval_started_at,
+                approval_finished_at=approval_finished_at,
+                handler_started_at=handler_started_at,
+                retryable=False,
+            )
+
+        return replace(
+            self._normalize(outcome, started_at),
+            started_at=started_at,
+            approval_started_at=approval_started_at,
+            approval_finished_at=approval_finished_at,
+            handler_started_at=handler_started_at,
+            retryable=True,
+        )
+
+
+    async def execute_many_async(
+        self,
+        calls: Sequence[
+            tuple[str, Mapping[str, object]]
+            | tuple[str, str, Mapping[str, object]]
+        ],
+        *,
+        source: UntrustedSource,
+        intent: str = "",
+        cancel_event: threading.Event | None = None,
+    ) -> tuple[ToolResult, ...]:
+        """Async batch execute for async-capable executors (e.g., MCP tools).
+
+        Runs each call through execute_async so async handlers (MCP tools)
+        are properly awaited in the event loop thread.
+        """
+        if not calls:
+            return ()
+        normalized = tuple(self._normalize_call(call) for call in calls)
+
+        async def _run_one(
+            tool_call_id: str | None, name: str, arguments: Mapping[str, object]
+        ) -> ToolResult:
+            return await self.execute_async(
+                name, arguments, source=source, intent=intent,
+                cancel_event=cancel_event, tool_call_id=tool_call_id,
+            )
+
+        results = await asyncio.gather(
+            *(_run_one(tid, name, args) for tid, name, args in normalized)
+        )
+        return results
+
 
     @staticmethod
     def _invoke(

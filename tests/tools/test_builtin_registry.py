@@ -77,15 +77,17 @@ def test_builtin_schema_is_derived_from_safety_validation_knowledge() -> None:
 
 
 def test_safety_only_tools_are_not_invented_without_handlers() -> None:
-    safety_only = registered_tools() - EXPECTED_TOOLS
+    # Exclude MCP-registered tools (they use a dynamic registration path)
+    mcp_prefixes = tuple(f'test_mcp_{n}' for n in ('echo', 'compute', 'write_note', 'slow_operation'))
+    all_tools = registered_tools() - EXPECTED_TOOLS - frozenset(mcp_prefixes)
 
-    assert safety_only == {
+    assert all_tools == {
         "save_memory",
         "shutdown_slon",
         "shutdown_jarvis",
         "generated_code",
     }
-    assert not safety_only.intersection(build_builtin_registry().names())
+    assert not all_tools.intersection(build_builtin_registry().names())
 
 
 def test_tools_with_nested_side_effects_require_confirmation() -> None:

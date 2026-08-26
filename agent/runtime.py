@@ -296,7 +296,33 @@ class AgentLoop:
                 0, self.budget.max_tool_calls - self.budget.tool_call_count
             )
             batch_results: tuple[object, ...] | None = None
-            if hasattr(self.tool_executor, "execute_many") and remaining_calls:
+            if hasattr(self.tool_executor, "execute_many_async") and remaining_calls:
+                from mark.safety import UntrustedSource
+
+                selected = parsed_calls[:remaining_calls]
+                try:
+                    trace.mark("tool_call_received")
+                    trace.mark("tool_execution_start")
+                    execution_kwargs = {
+                        "source": UntrustedSource.USER,
+                        "intent": user_goal,
+                    }
+                    if self.cancel_event is not None:
+                        execution_kwargs["cancel_event"] = self.cancel_event
+                    batch_results = await asyncio.wait_for(
+                        self.tool_executor.execute_many_async(
+                            selected,
+                            **execution_kwargs,
+                        ),
+                        timeout=self.budget.remaining_seconds(),
+                    )
+                except TimeoutError:
+                    return AgentLoopResult(
+                        False,
+                        steps=steps,
+                        reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded",
+                    )
+            elif hasattr(self.tool_executor, "execute_many") and remaining_calls:
                 from mark.safety import UntrustedSource
 
                 selected = parsed_calls[:remaining_calls]
@@ -483,7 +509,18 @@ class AgentLoop:
             except Exception:
                 raise RuntimeError("No tool_executor provided and default cannot be built.")
 
-        if hasattr(executor, "execute"):
+        if hasattr(executor, "execute_async"):
+            from mark.safety import UntrustedSource
+
+            res = await executor.execute_async(
+                tool_name,
+                args,
+                source=UntrustedSource.USER,
+                intent=goal,
+                cancel_event=self.cancel_event,
+                tool_call_id=tool_call_id,
+            )
+        elif hasattr(executor, "execute"):
             from mark.safety import UntrustedSource
 
             res = await asyncio.to_thread(
