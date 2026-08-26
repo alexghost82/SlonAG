@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from mark.mcp.client import McpClient
 from mark.mcp.integration import McpIntegration
+from mark.mcp.streamable_http_transport import McpStreamableHttpTransport
 from mark.mcp.transport import McpStdioTransport
 
 __all__ = [
     "McpClient",
     "McpIntegration",
     "McpStdioTransport",
+    "McpStreamableHttpTransport",
 ]

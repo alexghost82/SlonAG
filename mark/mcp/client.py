@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mark.mcp.transport import McpStdioTransport
+from mark.mcp.streamable_http_transport import McpStreamableHttpTransport
 from mark.mcp.types import (
     McpPrompt,
     McpResource,
@@ -48,6 +49,7 @@ class McpClient:
     - Malformed response handling
     - Server disconnect handling
     - Secrets handling (env vars, not embedded in messages)
+    - Streamable HTTP transport
     """
 
     def __init__(
@@ -59,7 +61,7 @@ class McpClient:
         max_tool_response_chars: int = 8192,
     ) -> None:
         self.config = config
-        self._transport: McpStdioTransport | None = None
+        self._transport: McpStdioTransport | McpStreamableHttpTransport | None = None
         self._session_id = session_id
         self._workspace_id = workspace_id
         self._max_response_chars = max_tool_response_chars
@@ -97,7 +99,7 @@ class McpClient:
         """Start transport and perform MCP initialization handshake."""
         if self._transport is not None:
             await self._transport.stop()
-        self._transport = McpStdioTransport(self.config)
+        self._transport = self._create_transport()
         await self._transport.start()
 
         try:
@@ -106,10 +108,19 @@ class McpClient:
             await self.stop()
             raise
 
+    def _create_transport(self) -> McpStdioTransport | McpStreamableHttpTransport:
+        """Create the appropriate transport based on config."""
+        if self.config.transport == McpTransportKind.STREAMABLE_HTTP:
+            return McpStreamableHttpTransport(
+                url=self.config.url,
+            )
+        else:
+            return McpStdioTransport(self.config)
+
     async def _initialize(self) -> None:
         """Perform MCP initialize handshake."""
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "initialize",
                 {
                     "protocolVersion": "2025-03-26",
@@ -137,7 +148,7 @@ class McpClient:
 
             # Send initialized notification
             try:
-                await self._transport.send_message("notifications/initialized")
+                await self._transport.send_message("notifications/initialized")  # type: ignore[union-attr]
             except Exception:
                 pass  # Some servers don't expect this
 
@@ -149,7 +160,7 @@ class McpClient:
     async def discover_tools(self) -> list[McpToolSpec]:
         """List all tools exposed by the MCP server."""
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "tools/list", timeout=self.config.init_timeout_seconds
             )
             items = result.get("tools", []) if isinstance(result, dict) else []
@@ -195,7 +206,7 @@ class McpClient:
     async def discover_resources(self) -> list[McpResource]:
         """List all resources exposed by the MCP server."""
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "resources/list", timeout=self.config.init_timeout_seconds
             )
             items = result.get("resources", []) if isinstance(result, dict) else []
@@ -217,7 +228,7 @@ class McpClient:
     async def discover_resource_templates(self) -> list[McpResourceTemplate]:
         """List all resource templates exposed by the MCP server."""
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "resources/templates/list", timeout=self.config.init_timeout_seconds
             )
             items = result.get("resourceTemplates", []) if isinstance(result, dict) else []
@@ -239,7 +250,7 @@ class McpClient:
     async def discover_prompts(self) -> list[McpPrompt]:
         """List all prompts exposed by the MCP server."""
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "prompts/list", timeout=self.config.init_timeout_seconds
             )
             items = result.get("prompts", []) if isinstance(result, dict) else []
@@ -260,7 +271,7 @@ class McpClient:
     async def read_resource(self, uri: str) -> McpCallResult:
         """Read a resource by URI."""
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "resources/read",
                 {"uri": uri},
                 timeout=self.config.tool_timeout_seconds,
@@ -310,7 +321,7 @@ class McpClient:
 
         qualified_name = self._unqualified_tools[original_name]
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "tools/call",
                 {
                     "name": original_name,
@@ -374,7 +385,7 @@ class McpClient:
             return McpCallResult(ok=False, error=f"Unknown prompt: '{original_name}'")
 
         try:
-            result = await self._transport.send_message(
+            result = await self._transport.send_message(  # type: ignore[union-attr]
                 "prompts/get",
                 {"name": original_name, "arguments": arguments or {}},
                 timeout=self.config.tool_timeout_seconds,

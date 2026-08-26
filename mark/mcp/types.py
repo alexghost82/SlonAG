@@ -13,6 +13,7 @@ class McpTransportKind(StrEnum):
     """Supported MCP transport mechanisms."""
 
     STDIO = "stdio"
+    STREAMABLE_HTTP = "streamable_http"
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,7 @@ class McpServerConfig:
     transport: McpTransportKind = McpTransportKind.STDIO
     command: str = ""
     args: tuple[str, ...] = ()
+    url: str = ""
     env: dict[str, str] = field(default_factory=dict)
     tool_timeout_seconds: float = 60.0
     init_timeout_seconds: float = 30.0
@@ -79,3 +81,5 @@ class McpServerConfig:
             )
         if self.max_concurrent < 1:
             raise ValueError("max_concurrent must be >= 1")
+        if self.transport == McpTransportKind.STREAMABLE_HTTP and not self.url:
+            raise ValueError("STREAMABLE_HTTP transport requires a URL")
