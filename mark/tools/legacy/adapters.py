@@ -172,6 +172,258 @@ def _cmd_control_deprecated_handler(args: Mapping[str, object]) -> ToolResult:
     )
 
 
+# === Wave 24: Vision + STT + TTS tool handlers ===
+
+def vision_analyze(args: Mapping[str, object]) -> ToolResult:
+    """Analyze an image (base64-encoded) using the vision engine."""
+    import base64
+
+    image_b64 = args.get("image_base64", "")
+    prompt = args.get("prompt", "")
+    kind = args.get("kind", "describe")
+
+    if not image_b64 or not isinstance(image_b64, str):
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="image_base64 is required and must be a string.",
+        )
+    if not prompt:
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="prompt is required and must be non-empty.",
+        )
+
+    try:
+        image_bytes = base64.b64decode(image_b64)
+    except Exception:
+        return ToolResult(
+            ok=False, code="invalid_image",
+            message="image_base64 is not valid base64.",
+        )
+
+    if len(image_bytes) == 0:
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="image_base64 decodes to empty data.",
+        )
+
+    try:
+        from mark.vision.provider import LocalVisionProvider
+        from mark.vision.engine import build_engine as build_vision_engine
+        from providers.contracts import VisionRequest, ModelInfo
+        from providers.errors import ProviderError
+
+        try:
+            engine = build_vision_engine()
+        except Exception:
+            return ToolResult(
+                ok=False, code="vision_unavailable",
+                message="Vision engine не доступен. Установите vision модель.",
+            )
+
+        repo_root = Path.cwd()
+        temp_dir = str(repo_root / "tmp" / "vision-snapshots")
+        (Path(temp_dir) / "vision-snapshots").mkdir(parents=True, exist_ok=True)
+
+        provider = LocalVisionProvider(
+            engine=engine,
+            allow_cloud=False,
+            temp_dir=temp_dir,
+            privacy_profile="fully_local",
+        )
+
+        request = VisionRequest(
+            model=ModelInfo(
+                provider_id="vision_local",
+                model_id="local-vision",
+                display_name="Local Vision",
+                text=True,
+            ),
+            image=image_bytes,
+            prompt=prompt,
+            kind=kind,
+        )
+
+        response = provider.analyze(request)
+        from mark.vision.provider import VisionResponse
+        if isinstance(response, VisionResponse):
+            return ToolResult(
+                ok=True, code="vision_ok",
+                message=f"Vision analysis ({kind}): {response.text[:500]}",
+            )
+        return ToolResult(
+            ok=False, code="vision_error",
+            message=f"Vision analysis failed: {response}",
+        )
+    except ProviderError as exc:
+        return ToolResult(
+            ok=False, code="vision_error",
+            message=str(exc),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return ToolResult(
+            ok=False, code="vision_error",
+            message=f"Vision tool error: {exc}",
+        )
+
+
+def stt_listen(args: Mapping[str, object]) -> ToolResult:
+    """Transcribe audio (base64-encoded WAV) to text using local STT."""
+    import base64
+
+    audio_b64 = args.get("audio_base64", "")
+    language = args.get("language", "ru")
+
+    if not audio_b64 or not isinstance(audio_b64, str):
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="audio_base64 is required and must be a string.",
+        )
+
+    try:
+        audio_bytes = base64.b64decode(audio_b64)
+    except Exception:
+        return ToolResult(
+            ok=False, code="invalid_audio",
+            message="audio_base64 is not valid base64.",
+        )
+
+    if len(audio_bytes) == 0:
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="audio_base64 decodes to empty data.",
+        )
+
+    try:
+        import subprocess
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio_bytes)
+            wav_path = f.name
+
+        try:
+            result = subprocess.run(
+                ["whisper", wav_path, "--model", "base", "--lang", language[:2] or "ru",
+                 "--output_format", "txt"],
+                capture_output=True, text=True, timeout=30.0,
+            )
+            if result.returncode == 0:
+                text = result.stdout.strip()
+                if text:
+                    return ToolResult(ok=True, code="stt_ok", message=text[:1000])
+        except FileNotFoundError:
+            pass
+
+        import wave
+        try:
+            with wave.open(wav_path, "rb") as wf:
+                framerate = wf.getframerate()
+                frames = wf.getnframes()
+                duration = frames / framerate if framerate > 0 else 0
+            if duration > 0.5:
+                return ToolResult(
+                    ok=True, code="stt_no_model",
+                    message=f"Аудио обнаружено ({duration:.1f}с), но STT модель недоступна.",
+                )
+        except Exception:
+            pass
+
+        return ToolResult(
+            ok=False, code="stt_no_model",
+            message="STT модель недоступна. Установите whisper.",
+        )
+    except subprocess.TimeoutExpired:
+        return ToolResult(
+            ok=False, code="stt_timeout",
+            message="STT превысил лимит времени (30с).",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return ToolResult(
+            ok=False, code="stt_error",
+            message=f"STT ошибка: {exc}",
+        )
+    finally:
+        try:
+            import os
+            os.unlink(wav_path)
+        except Exception:
+            pass
+
+
+def tts_speak(args: Mapping[str, object]) -> ToolResult:
+    """Convert text to speech using local TTS."""
+    text = args.get("text", "")
+    voice = args.get("voice", "ru")
+
+    if not text or not isinstance(text, str):
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="text is required and must be a non-empty string.",
+        )
+
+    try:
+        import subprocess
+        import tempfile
+
+        repo_root = Path.cwd()
+
+        # Try Piper TTS first
+        piper_bin = repo_root / "models" / "tts" / "piper" / "piper"
+        if piper_bin.exists():
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                wav_path = f.name
+            try:
+                result = subprocess.run(
+                    [str(piper_bin), "-f", wav_path],
+                    input=text.encode(), capture_output=True, timeout=30.0,
+                )
+                if result.returncode == 0 and Path(wav_path).exists():
+                    return ToolResult(
+                        ok=True, code="tts_ok",
+                        message=f"TTS генерация завершена ({Path(wav_path).stat().st_size} байт).",
+                    )
+            except FileNotFoundError:
+                pass
+            finally:
+                try:
+                    import os
+                    os.unlink(wav_path)
+                except Exception:
+                    pass
+
+        # Fallback: espeak
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                wav_path = f.name
+
+            result = subprocess.run(
+                ["espeak", "-w", wav_path, "-v", voice, text],
+                capture_output=True, timeout=10.0,
+            )
+            if result.returncode == 0 and Path(wav_path).exists():
+                return ToolResult(
+                    ok=True, code="tts_ok",
+                    message=f"TTS gen ok (espeak, {Path(wav_path).stat().st_size} bytes).",
+                )
+        except FileNotFoundError:
+            pass
+
+        return ToolResult(
+            ok=False, code="tts_unavailable",
+            message="TTS недоступна. Установите Piper или eSpeak.",
+        )
+    except subprocess.TimeoutExpired:
+        return ToolResult(
+            ok=False, code="tts_timeout",
+            message="TTS превысил лимит времени (30с).",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return ToolResult(
+            ok=False, code="tts_error",
+            message=f"TTS ошибка: {exc}",
+        )
+
 LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
     "read_file": read_file_handler,
     "open_app": open_app_handler,
@@ -194,6 +446,9 @@ LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
     "dev_agent": dev_agent_handler,
     "shell_exec": shell_exec_handler,  # Wave 22: canonical shell executor
     "agent_task": agent_task_handler,
+    "vision_analyze": vision_analyze,
+    "stt_listen": stt_listen,
+    "tts_speak": tts_speak,
 }
 
 

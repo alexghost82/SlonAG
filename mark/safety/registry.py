@@ -275,6 +275,27 @@ _REGISTRY: dict[str, SafetyRule] = {
             types=_types(command="str", cwd="str", timeout="float", env_allowlist="list"),
         ),
     ),
+    "vision_analyze": SafetyRule(
+        RiskLevel.CONFIRM,
+        schema=ArgSchema(
+            required=("image_base64", "prompt"),
+            types=_types(image_base64="str", prompt="str", kind="str"),
+        ),
+    ),
+    "stt_listen": SafetyRule(
+        RiskLevel.READ,
+        schema=ArgSchema(
+            required=("audio_base64",),
+            types=_types(audio_base64="str", language="str"),
+        ),
+    ),
+    "tts_speak": SafetyRule(
+        RiskLevel.READ,
+        schema=ArgSchema(
+            required=("text",),
+            types=_types(text="str", voice="str"),
+        ),
+    ),
 
     "code_helper": SafetyRule(
         RiskLevel.EXACT_CONFIRM,
