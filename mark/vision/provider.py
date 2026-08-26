@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
