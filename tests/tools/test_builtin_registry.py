@@ -31,6 +31,9 @@ EXPECTED_TOOLS = frozenset(
         "code_helper",
         "dev_agent",
         "agent_task",
+        "vision_analyze",
+        "stt_listen",
+        "tts_speak",
     }
 )
 
