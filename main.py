@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import queue
 import uuid
 import sys
 from pathlib import Path
@@ -730,21 +731,81 @@ def _run_chat_agent(ui, settings, stack=None):
         tool_executor=tool_executor,
     )
 
+    # Thread-safe queue for user input from UI
+    input_queue: "queue.Queue[str | None]" = queue.Queue()
+    history: list = []  # multi-turn conversation history
+    _running = [True]  # mutable container for closure
+
+    def _on_command(text: str):
+        if _running[0]:
+            input_queue.put_nowait(text)
+
+    ui.on_text_command = _on_command
+
     async def _chat_loop():
-        # Simple chat loop: prompt, get response, execute tools, loop.
-        prompt = ""
+        """Async loop that processes user commands through AgentLoop."""
+        ui.write_log(f"SYS: provider={provider_id} ready")
         try:
-            while not ui._closed:
-                # Wait for text command from UI callback
-                await asyncio.sleep(0.5)
+            while _running[0]:
+                try:
+                    # Wait for user input (blocks up to 500ms)
+                    user_input = input_queue.get(timeout=0.5)
+                    if user_input is None:
+                        break  # shutdown signal
+
+                    user_input = user_input.strip()
+                    if not user_input:
+                        continue
+
+                    ui.write_log(f"Вы: {user_input}")
+
+                    # Run AgentLoop turn with history
+                    def _on_message(msg):
+                        """Display agent messages back to UI."""
+                        try:
+                            if hasattr(msg, 'content'):
+                                text = msg.content if msg.content else ""
+                                if text:
+                                    ui.write_log(text)
+                            elif hasattr(msg, 'text'):
+                                if msg.text:
+                                    ui.write_log(msg.text)
+                        except Exception:
+                            pass
+
+                    result = await agent_loop.run(
+                        user_goal=user_input,
+                        history=history,
+                        on_message=_on_message,
+                    )
+
+                    # Update history with agent response for multi-turn
+                    try:
+                        if result.steps:
+                            last_step = result.steps[-1]
+                            if last_step.tool_name and last_step.observation:
+                                history = history + [
+                                    {"role": "assistant", "content": last_step.tool_name or ""},
+                                    {"role": "tool", "content": str(last_step.observation)},
+                                ]
+                    except Exception:
+                        pass
+
+                except queue.Empty:
+                    continue
+                except Exception as exc:
+                    ui.write_log(f"ERR: {exc}")
+                    print(f"[Main] agent loop error: {exc}", exc_info=True)
+
         except asyncio.CancelledError:
-            pass
+            _running[0] = False
+        finally:
+            _running[0] = False
 
     print(f"[Main] Using provider={provider_id} model={model_id or model_info.model_id}")
     ui.write_log(f"SYS: provider={provider_id}")
     asyncio.create_task(_chat_loop())
     return True
-
 
 def main():
     ui = SlonUI("face.png")
