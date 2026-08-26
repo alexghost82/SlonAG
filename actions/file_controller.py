@@ -336,7 +336,7 @@ def _do_copy(src: Path, dst: Path) -> str:
 
 def _do_rename(target: Path, new_name: str, hooks: _Hooks) -> str:
     if not new_name or not str(new_name).strip():
-        return "New name is empty."
+        return "Новое имя пусто."
     new_path = (target.parent / new_name).resolve()
     _assert_allowed(new_path, new_name, hooks.allowlist)
     if not target.exists():
@@ -408,7 +408,7 @@ def _do_largest(search_path: Path, count: int, roots: Sequence[Path]) -> str:
     files.sort(reverse=True)
     top = files[:count]
     if not top:
-        return "No files found."
+        return "Файлы не найдены."
     lines = [f"Top {len(top)} largest files in {search_path.name}/:\n"]
     for size, path in top:
         lines.append(f"  {_format_size(size):>10}  {path.name}  ({path.parent})")
@@ -493,7 +493,7 @@ def _do_organize_desktop(hooks: _Hooks) -> str:
 
 def _do_undo(hooks: _Hooks) -> str:
     if not hooks.undo_stack:
-        return "Nothing to undo."
+        return "Нечего отменять."
     entry = hooks.undo_stack[-1]
     src = entry["src"]
     dst = entry["dst"]
@@ -503,9 +503,9 @@ def _do_undo(hooks: _Hooks) -> str:
     except _PathDenied as exc:
         return exc.message
     if not dst.exists():
-        return "Cannot undo: previous path is no longer available."
+        return "Отмена невозможна: предыдущий путь недоступен."
     if src.exists():
-        return "Cannot undo: original path is occupied."
+        return "Отмена невозможна: оригинальный путь занят."
     src.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(dst), str(src))
     hooks.undo_stack.pop()
@@ -628,9 +628,9 @@ def file_controller(
 
     if decision.kind in _NEEDS_CONFIRM:
         if hooks.confirmer is None:
-            return "Confirmation required."
+            return "Требуется подтверждение."
         if not hooks.confirmer(decision):
-            return "Confirmation declined."
+            return "Подтверждение отклонено."
 
     try:
         return _run_action(checked, hooks)
@@ -639,7 +639,7 @@ def file_controller(
     except RuntimeError as exc:
         return str(exc)
     except PermissionError:
-        return "Permission denied."
+        return "Доступ запрещён."
     except Exception as exc:
         return f"File controller error: {exc}"
 

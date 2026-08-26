@@ -58,14 +58,14 @@ def reminder(
     try:
         checked = validate_args("reminder", parameters)
     except ArgValidationError:
-        return "Those reminder arguments are not valid."
+        return "Неверный формат аргументов напоминания."
 
     try:
         backend = _normalize_os(os_name)
         path = Path(store_path) if store_path is not None else _default_store_path()
         op = _resolve_op(checked)
         if op not in _OPS:
-            return "Unknown reminder action."
+            return "Неизвестное действие напоминания."
 
         if op in _MUTATING:
             blocked = _authorize_mutation(checked, source=source, confirmer=confirmer)
@@ -88,9 +88,9 @@ def reminder(
             replacing=op == "update",
         )
     except ValueError:
-        return "I couldn't understand that date or time format."
+        return "Не удалось распознать формат даты или времени."
     except Exception as exc:
-        return f"Something went wrong while scheduling the reminder: {str(exc)[:80]}"
+        return f"Не удалось запланировать напоминание: {str(exc)[:80]}"
 
 
 def build_windows_task_xml(
@@ -182,14 +182,14 @@ def _authorize_mutation(
         DecisionKind.BIOMETRIC,
     }
     if needs_confirm and confirmer is not None and not confirmer(decision):
-        return "Reminder change was not confirmed."
+        return "Изменение напоминания не подтверждено."
     return None
 
 
 def _list_reminders(store_path: Path) -> str:
     items = _load_store(store_path)
     if not items:
-        return "No reminders."
+        return "Нет напоминаний."
     lines = ["Reminders:"]
     for item in items:
         lines.append(
@@ -207,11 +207,11 @@ def _cancel_reminder(
 ) -> str:
     reminder_id = _require_id(parameters)
     if reminder_id is None:
-        return "I need a reminder id to cancel."
+        return "Необходим ID напоминания для отмены."
     items = _load_store(store_path)
     found = next((item for item in items if item["id"] == reminder_id), None)
     if found is None:
-        return "I couldn't find that reminder."
+        return "Напоминание с таким ID не найдено."
     _unschedule(backend, found, scheduler)
     _save_store(store_path, [item for item in items if item["id"] != reminder_id])
     _log(player, f"[reminder] cancelled {reminder_id}")
@@ -233,10 +233,10 @@ def _upsert_reminder(
     if replacing:
         reminder_id = _require_id(parameters)
         if reminder_id is None:
-            return "I need a reminder id to update."
+            return "Необходим ID напоминания для обновления."
         existing = next((item for item in items if item["id"] == reminder_id), None)
         if existing is None:
-            return "I couldn't find that reminder."
+            return "Напоминание с таким ID не найдено."
         date_str = _optional_str(parameters, "date") or existing["date"]
         time_str = _optional_str(parameters, "time") or existing["time"]
         message = _optional_str(parameters, "message")
@@ -248,15 +248,15 @@ def _upsert_reminder(
         date_str = _optional_str(parameters, "date")
         time_str = _optional_str(parameters, "time")
         if not date_str or not time_str:
-            return "I need both a date and a time to set a reminder."
-        message = _optional_str(parameters, "message") or "Reminder"
+            return "Укажите дату и время для напоминания."
+        message = _optional_str(parameters, "message") or "Напоминание"
         reminder_id = uuid.uuid4().hex[:8]
         task_name = f"MARKReminder_{reminder_id}"
 
     target_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
     clock = now if now is not None else datetime.now()
     if target_dt <= clock:
-        return "That time is already in the past."
+        return "Это время уже прошло."
 
     record = {
         "id": reminder_id,
@@ -279,13 +279,13 @@ def _upsert_reminder(
             items_restored = _load_store(path)
             items_restored.append(existing)
             _save_store(path, items_restored)
-        return "I couldn't schedule the reminder due to a system error."
+        return "Не удалось запланировать напоминание из-за системной ошибки."
 
     _log(player, f"[reminder] set for {date_str} {time_str}")
     stamped = target_dt.strftime("%B %d at %I:%M %p")
     if replacing:
         return f"Reminder {reminder_id} updated for {stamped}."
-    return f"Reminder set for {stamped} (id: {reminder_id})."
+    return f"Напоминание установлено на {stamped} (id: {reminder_id})."
 
 
 def _schedule(
@@ -408,8 +408,8 @@ def _notify_from_store(store_path: Path, reminder_id: str) -> str:
     """Read the JSON payload and return the stored message. No generated script."""
     for item in _load_store(store_path):
         if item.get("id") == reminder_id:
-            return str(item.get("message") or "Reminder")
-    return "Reminder"
+            return str(item.get("message") or "Напоминание")
+    return "Напоминание"
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -289,9 +289,9 @@ class _BrowserThread:
             elif selector:
                 await page.click(selector, timeout=8000)
                 return f"Clicked: {selector}"
-            return "No selector or text provided."
+            return "Селектор или текст не указаны."
         except PlaywrightTimeout:
-            return "Element not found or not clickable."
+            return "Элемент не найден или недоступен для клика."
         except Exception as e:
             return f"Click error: {e}"
 
@@ -302,7 +302,7 @@ class _BrowserThread:
             if clear_first:
                 await element.clear()
             await element.type(text, delay=50)
-            return "Text typed."
+            return "Текст введён."
         except Exception as e:
             return f"Type error: {e}"
 
@@ -342,7 +342,7 @@ class _BrowserThread:
                 results.append(f"✓ {selector}")
             except Exception as e:
                 results.append(f"✗ {selector}: {e}")
-        return "Form filled: " + ", ".join(results)
+        return "Форма заполнена: " + ", ".join(results)
 
     async def _smart_click(self, description: str) -> str:
         page       = await self._get_page()
@@ -405,7 +405,7 @@ class _BrowserThread:
             await self._playwright.stop()
             self._playwright = None
 
-        return "Browser closed."
+        return "Браузер закрыт."
 
 
 # ── Singleton browser thread ─────────────────────────────────────────────────

@@ -71,11 +71,11 @@ class MemoryPolicy:
     def reject_reason(self, key: str, value: str) -> str | None:
         """Return a secret-free reason, or None when the pair is allowed."""
         if _key_has_marker(key, self._key_markers):
-            return "Memory refused a secret-like key."
+            return "Память отказала в сохранении: похоже на секрет."
         if _value_looks_secret(value):
-            return "Memory refused a secret-like value."
+            return "Память отказала в сохранении: похоже на секретное значение."
         if _looks_like_card(value):
-            return "Memory refused a payment-card-like value."
+            return "Память отказала в сохранении: похоже на данные платёжной карты."
         return None
 
 

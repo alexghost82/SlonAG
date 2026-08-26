@@ -21,13 +21,13 @@ ERROR_CODES = frozenset(
 )
 
 _MESSAGES: dict[str, str] = {
-    CODE_OK: "Safety policy accepted the request.",
-    CODE_UNKNOWN_TOOL: "Unknown tool.",
-    CODE_INVALID_ARGS: "Tool arguments failed validation.",
-    CODE_UNSAFE_URL: "URL is not allowed.",
+    CODE_OK: "Политика безопасности приняла запрос.",
+    CODE_UNKNOWN_TOOL: "Неизвестный инструмент.",
+    CODE_INVALID_ARGS: "Аргументы инструмента не прошли проверку.",
+    CODE_UNSAFE_URL: "URL запрещён.",
 }
 
-_UNKNOWN = "Safety policy rejected the request."
+_UNKNOWN = "Политика безопасности отклонила запрос."
 
 
 def safety_message(code: str) -> str:
@@ -50,7 +50,7 @@ class UnknownToolError(SafetyPolicyError):
         self.tool_name = tool_name
         super().__init__(
             CODE_UNKNOWN_TOOL,
-            message if message is not None else "Unknown tool.",
+            message if message is not None else "Неизвестный инструмент.",
         )
 
 

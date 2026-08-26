@@ -609,7 +609,7 @@ def computer_settings(
     action = raw_action.lower().strip().replace(" ", "_").replace("-", "_")
 
     if not action:
-        return "No action could be determined."
+        return "Не удалось определить действие."
 
     print(f"[Settings] Action: {action}  Value: {value}  OS: {_OS}")
     if player:
@@ -633,7 +633,7 @@ def computer_settings(
     if action in ("type_text", "write_on_screen", "type", "write"):
         text = str(value or params.get("text", "")).strip()
         if not text:
-            return "No text provided to type."
+            return "Текст для ввода не указан."
         enter_after = str(params.get("press_enter", "false")).lower() in ("true", "1", "yes")
         type_text(text, press_enter_after=enter_after)
         return f"Typed: {text[:80]}"
@@ -641,7 +641,7 @@ def computer_settings(
     if action == "press_key":
         key = str(value or params.get("key", "")).strip()
         if not key:
-            return "No key specified."
+            return "Кнопка не указана."
         press_key(key)
         return f"Pressed: {key}"
 
@@ -654,11 +654,11 @@ def computer_settings(
 
     if action == "scroll_up":
         scroll_up(int(value or 500))
-        return "Scrolled up."
+        return "Прокручено вверх."
 
     if action == "scroll_down":
         scroll_down(int(value or 500))
-        return "Scrolled down."
+        return "Прокручено вниз."
 
     func = ACTION_MAP.get(action)
     if not func:

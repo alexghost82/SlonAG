@@ -153,7 +153,7 @@ def test_delete_without_confirm_does_not_remove(tmp_path: Path) -> None:
     )
     assert target.exists()
     assert trashed == []
-    assert "Confirmation declined." in declined
+    assert "Подтверждение отклонено." in declined
 
     missing = _run(
         tmp_path,
@@ -162,7 +162,7 @@ def test_delete_without_confirm_does_not_remove(tmp_path: Path) -> None:
     )
     assert target.exists()
     assert trashed == []
-    assert "Confirmation required." in missing
+    assert "Требуется подтверждение." in missing
 
 
 def test_delete_with_confirm_uses_trash_not_permanent(
@@ -208,20 +208,20 @@ def test_write_move_rename_require_confirm(tmp_path: Path) -> None:
     dest_dir = tmp_path / "dest"
     dest_dir.mkdir()
 
-    assert "Confirmation required." in _run(
+    assert "Требуется подтверждение." in _run(
         tmp_path,
         {"action": "write", "path": str(tmp_path / "new.txt"), "content": "x"},
     )
     assert not (tmp_path / "new.txt").exists()
 
-    assert "Confirmation required." in _run(
+    assert "Требуется подтверждение." in _run(
         tmp_path,
         {"action": "move", "path": str(source), "destination": str(dest_dir)},
     )
     assert source.exists()
     assert not (dest_dir / "a.txt").exists()
 
-    assert "Confirmation required." in _run(
+    assert "Требуется подтверждение." in _run(
         tmp_path,
         {"action": "rename", "path": str(source), "new_name": "b.txt"},
     )

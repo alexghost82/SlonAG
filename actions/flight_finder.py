@@ -283,9 +283,9 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
     save        = bool(params.get("save", False))
 
     if not origin or not destination:
-        return "Please provide both origin and destination, sir."
+        return "Укажите пункт отправления и назначения."
     if not date_raw:
-        return "Please provide a departure date, sir."
+        return "Укажите дату отправления."
 
     # Normalise cabin value
     if cabin not in _CABIN_CODE:
@@ -312,7 +312,7 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
         )
 
         if not raw_text:
-            return "Could not retrieve flight data, sir. The page may not have loaded."
+            return "Не удалось получить данные о рейсах. Возможно, страница не загрузилась."
 
         if speak:
             speak("Analysing the results now, sir.")

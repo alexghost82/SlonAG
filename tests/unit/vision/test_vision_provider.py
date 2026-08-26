@@ -97,7 +97,7 @@ async def test_offline_and_fully_local_do_not_call_cloud(
 ) -> None:
     engine = CloudEngine()
     provider = _provider(engine, tmp_path, **kwargs)
-    with pytest.raises(ProviderError, match="cloud") as exc_info:
+    with pytest.raises(ProviderError, match="не разрешено") as exc_info:
         await provider.analyze(_request())
     assert engine.calls == []
     assert exc_info.value.provider_id == PROVIDER_ID
@@ -165,7 +165,7 @@ async def test_unknown_explicit_kind_is_rejected(tmp_path: Path) -> None:
         prompt="разбери",
         kind="screenshot",
     )
-    with pytest.raises(ProviderError, match="unsupported vision kind"):
+    with pytest.raises(ProviderError, match="Неподдерживаемый тип vision"):
         await provider.analyze(request)
     assert engine.calls == []
 

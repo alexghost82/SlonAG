@@ -108,7 +108,7 @@ def web_search(
     aspect = params.get("aspect", "general").strip() or "general"
 
     if not query and not items:
-        return "Please provide a search query, sir."
+        return "Введите запрос для поиска."
 
     if items and mode != "compare":
         mode = "compare"

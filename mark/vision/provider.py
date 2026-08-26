@@ -73,7 +73,7 @@ def resolve_kind(request: VisionRequest | VisionTaskRequest) -> str:
     if raw is not None:
         if not isinstance(raw, str) or raw not in VISION_KINDS:
             raise ProviderError(
-                f"unsupported vision kind {raw!r}",
+                f"Неподдерживаемый тип vision: {raw!r}",
                 provider_id=PROVIDER_ID,
             )
         return raw
@@ -138,7 +138,7 @@ class LocalVisionProvider:
     def _refuse_cloud_if_needed(self) -> None:
         if engine_is_cloud(self._engine) and self._cloud_blocked():
             raise ProviderError(
-                "cloud vision engine is not allowed when "
+                "загруженное vision-модель не разрешено, когда "
                 f"{self._restriction_reason()}",
                 provider_id=PROVIDER_ID,
             )
@@ -155,7 +155,7 @@ class LocalVisionProvider:
         try:
             if not path.resolve().is_relative_to(root):
                 raise ProviderError(
-                    "temp snapshot escaped temp_dir",
+                    "snapshot temp path escaped temp_dir",
                     provider_id=PROVIDER_ID,
                 )
             with os.fdopen(fd, "wb") as handle:

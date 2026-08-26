@@ -114,7 +114,7 @@ class MemoryHandler:
         def _delete() -> RouteResponse:
             deleted = self.store.delete(resolved_id)
             if not deleted:
-                return error_response(404, CODE_NOT_FOUND, "Memory entry not found.")
+                return error_response(404, CODE_NOT_FOUND, "Запись памяти не найдена.")
             return RouteResponse(
                 status_code=200,
                 body=sanitize_body(

@@ -146,7 +146,7 @@ def _legacy_result(tool: str, result: ToolResult) -> str:
     if result.message:
         return result.message
     if result.data is None:
-        return "Done."
+        return "Готово."
     if isinstance(result.data, str):
         return result.data
     return str(result.data)
@@ -245,8 +245,8 @@ class AgentExecutor:
             for step in steps:
                 if cancel_flag and cancel_flag.is_set():
                     if speak:
-                        speak("Task cancelled, sir.")
-                    return "Task cancelled."
+                        speak("Задача отменена.")
+                    return "Задача отменена."
 
                 step_num = step.get("step", "?")
                 tool = step.get("tool") or ""
@@ -313,7 +313,7 @@ class AgentExecutor:
                                         step, error_msg, fix_suggestion
                                     )
                                     if speak:
-                                        speak("Trying an alternative approach, sir.")
+                                        speak("Пробую альтернативный подход.")
                                     res = self._call_tool(
                                         fixed_step["tool"],
                                         fixed_step["parameters"],
@@ -350,7 +350,7 @@ class AgentExecutor:
                 return msg
 
             if speak:
-                speak("Adjusting my approach, sir.")
+                speak("Корректирую подход.")
 
             replan_attempts += 1
             plan = replan(goal, completed_steps, failed_step, failed_error)

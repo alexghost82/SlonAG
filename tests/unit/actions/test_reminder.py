@@ -93,7 +93,7 @@ def test_no_shell_true_in_source() -> None:
 
 def test_user_message_is_not_written_to_python_file(tmp_path: Path) -> None:
     result, _sched = _create(tmp_path)
-    assert "Reminder set" in result
+    assert "Напоминание" in result
     assert INJECTED_MESSAGE not in result
 
     generated = list(tmp_path.rglob("*.py")) + list(tmp_path.rglob("*.pyw"))
@@ -158,7 +158,7 @@ def test_list_update_cancel_use_json_store(tmp_path: Path) -> None:
         os_name="windows",
         scheduler=sched,
     )
-    assert empty == "No reminders."
+    assert empty == "Нет напоминаний."
 
 
 def test_macos_backend_uses_injected_scheduler(
@@ -170,7 +170,7 @@ def test_macos_backend_uses_injected_scheduler(
     monkeypatch.setattr(subprocess, "run", _blocked)
     monkeypatch.setattr(subprocess, "Popen", _blocked)
     result, sched = _create(tmp_path, os_name="macos")
-    assert "Reminder set" in result
+    assert "Напоминание" in result
     assert sched.calls
     assert sched.calls[0][0] == "osascript"
     assert "--schedule" in sched.calls[0]
@@ -186,7 +186,7 @@ def test_linux_backend_uses_injected_scheduler(
     monkeypatch.setattr(subprocess, "run", _blocked)
     monkeypatch.setattr(subprocess, "Popen", _blocked)
     result, sched = _create(tmp_path, os_name="linux")
-    assert "Reminder set" in result
+    assert "Напоминание" in result
     assert sched.calls
     assert sched.calls[0][0] == "at"
     assert "-t" in sched.calls[0]
@@ -209,12 +209,12 @@ def test_untrusted_source_does_not_create(tmp_path: Path) -> None:
 
 def test_rejected_confirm_does_not_mutate(tmp_path: Path) -> None:
     result, sched = _create(tmp_path, confirmer=lambda _decision: False)
-    assert "not confirmed" in result.lower()
+    assert "не подтверждено" in result.lower()
     assert not (tmp_path / "reminders.json").exists()
     assert sched.calls == []
 
 
 def test_legacy_date_time_message_creates(tmp_path: Path) -> None:
     result, _sched = _create(tmp_path)
-    assert "Reminder set" in result
+    assert "Напоминание" in result
     assert len(_store(tmp_path)["reminders"]) == 1
