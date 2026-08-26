@@ -22,6 +22,7 @@ from gateway.router import (
 )
 from gateway.store import GatewayStore
 from gateway.websocket import GatewayWebSocketRuntime
+from mark.automation.engine import AutomationEngine, AutomationRecord, TriggerType
 
 
 class SlonGateway:
@@ -30,6 +31,7 @@ class SlonGateway:
     def __init__(
         self, *, database_path: str | Path, artifact_root: str | Path,
         signing_key: bytes, session_manager=None, runtime_stack=None,
+        automation_engine: AutomationEngine | None = None,
         approval_handler: Callable[[GatewayContext, GatewayEnvelope], Any] | None = None,
         agent_runner: Callable[[GatewayContext, GatewayEnvelope], Awaitable[GatewayEnvelope]] | None = None,
     ) -> None:
@@ -64,10 +66,18 @@ class SlonGateway:
         )
         self.runtime_stack = runtime_stack
         self.session_manager = session_manager
+        self._automation = None
         self._jobs = ThreadPoolExecutor(max_workers=4, thread_name_prefix="slon-gateway-job")
         if session_manager is not None and runtime_stack is not None:
             if agent_runner is None:
                 self.router.register("agent.run", self._agent_run)
+        if automation_engine is not None:
+            self._automation = automation_engine
+            self.router.register("automation.list", self._automation_list)
+            self.router.register("automation.create", self._automation_create)
+            self.router.register("automation.cancel", self._automation_cancel)
+            self.router.register("automation.delete", self._automation_delete)
+            self.router.register("automation.list_all", self._automation_list_all)
 
     def _health(
         self, context: GatewayContext, request: GatewayEnvelope
@@ -85,7 +95,69 @@ class SlonGateway:
     def _automation_list(
         self, context: GatewayContext, request: GatewayEnvelope
     ) -> GatewayEnvelope:
-        return response_envelope(request, "automation.listed", {"automations": []})
+        if self._automation is None:
+            return response_envelope(request, "automation.listed", {"automations": [], "code": "automation_unavailable"})
+        records = self._automation.list(workspace_id=context.workspace_id)
+        return response_envelope(request, "automation.listed", {"automations": [{
+            "id": r.id, "name": r.name, "trigger_type": r.trigger_type,
+            "goal": r.goal, "status": r.status, "run_count": r.run_count,
+            "last_run_at": r.last_run_at, "next_run_at": r.next_run_at,
+            "enabled": r.enabled, "recovery_attempts": r.recovery_attempts,
+        } for r in records]})
+
+    def _automation_list_all(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        if self._automation is None:
+            return response_envelope(request, "automation.listed", {"automations": [], "code": "automation_unavailable"})
+        records = self._automation.list()
+        return response_envelope(request, "automation.listed", {"automations": [{
+            "id": r.id, "name": r.name, "trigger_type": r.trigger_type,
+            "goal": r.goal, "status": r.status, "run_count": r.run_count,
+            "workspace_id": r.workspace_id, "enabled": r.enabled,
+        } for r in records]})
+
+    def _automation_create(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        if self._automation is None:
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("automation_unavailable", "Automation engine not configured.")
+        payload = request.payload or {}
+        name = payload.get("name", "")
+        goal = payload.get("goal", "")
+        trigger_type = payload.get("trigger_type", "one_shot")
+        if not name or not goal:
+            from gateway.contracts import GatewayProtocolError
+            raise GatewayProtocolError("invalid_payload", "name and goal are required.")
+        record = self._automation.create(
+            name=name,
+            trigger_type=TriggerType(trigger_type),
+            payload=payload.get("config", {}),
+            goal=goal,
+            workspace_id=context.workspace_id,
+        )
+        return response_envelope(request, "automation.created", {
+            "id": record.id, "name": record.name, "status": record.status,
+        })
+
+    def _automation_cancel(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        if self._automation is None:
+            return response_envelope(request, "automation.cancelled", {"id": "", "success": False})
+        record_id = request.payload.get("id", "")
+        success = self._automation.cancel(record_id)
+        return response_envelope(request, "automation.cancelled", {"id": record_id, "success": success})
+
+    def _automation_delete(
+        self, context: GatewayContext, request: GatewayEnvelope
+    ) -> GatewayEnvelope:
+        if self._automation is None:
+            return response_envelope(request, "automation.deleted", {"id": "", "success": False})
+        record_id = request.payload.get("id", "")
+        success = self._automation.delete(record_id)
+        return response_envelope(request, "automation.deleted", {"id": record_id, "success": success})
 
     async def _agent_run(
         self, context: GatewayContext, request: GatewayEnvelope

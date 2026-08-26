@@ -135,6 +135,31 @@ class MemoryDatabase:
                 (record_id, payload),
             )
 
+    def find_similar(self, vector: Sequence[float], *, top_k: int = 5) -> list[MemoryRow]:
+        """Return rows ranked by cosine similarity to the query vector.
+        Each returned MemoryRow gets a transient _similarity attribute."""
+        rows = self._connection.execute(
+            """
+            SELECT r.id, r.type, r.key, r.value, r.source, r.created_at, r.updated_at
+            FROM memory_records r
+            JOIN memory_embeddings e ON r.id = e.record_id
+            """
+        ).fetchall()
+        if not rows:
+            return []
+        scored: list[tuple[MemoryRow, float]] = []
+        for row in rows:
+            sql_row = _row_from_sql(row)
+            stored = json.loads(row['vector'])
+            sim = _cosine_similarity(vector, stored)
+            scored.append((sql_row, sim))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        results: list[MemoryRow] = []
+        for sql_row, sim in scored[:top_k]:
+            sql_row._similarity = sim  # type: ignore[attr-defined]
+            results.append(sql_row)
+        return results
+
 
 def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
     return MemoryRow(
@@ -149,3 +174,20 @@ def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
 
 
 __all__ = ["MemoryDatabase", "MemoryRow"]
+
+
+def _dot_product(a: list[float], b: list[float]) -> float:
+    return sum(x * y for x, y in zip(a, b))
+
+
+def _magnitude(v: list[float]) -> float:
+    import math
+    return math.sqrt(sum(x * x for x in v))
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    mag_a = _magnitude(a)
+    mag_b = _magnitude(b)
+    if mag_a == 0.0 or mag_b == 0.0:
+        return 0.0
+    return _dot_product(a, b) / (mag_a * mag_b)

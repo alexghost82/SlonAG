@@ -187,3 +187,193 @@ class LocalVisionProvider:
         finally:
             if snapshot is not None:
                 snapshot.unlink(missing_ok=True)
+
+
+class RTSPSnapshot:
+    """A captured frame from an RTSP stream with metadata."""
+
+    def __init__(
+        self,
+        index: int,
+        image: bytes,
+        timestamp: float,
+        stream_url: str,
+        width: int = 0,
+        height: int = 0,
+    ) -> None:
+        self.index = index
+        self.image = image
+        self.timestamp = timestamp
+        self.stream_url = stream_url
+        self.width = width
+        self.height = height
+
+
+class RTSPClient:
+    """Minimal RTSP client that captures snapshots from a stream.
+    
+    Uses subprocess to call ffmpeg for reliable RTSP capture.
+    """
+
+    def __init__(self, stream_url: str) -> None:
+        self.stream_url = stream_url
+        self._running = False
+        self._frame_index = 0
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._on_frame: Callable[[RTSPSnapshot], None] | None = None
+
+    def set_frame_callback(self, callback: Callable[[RTSPSnapshot], None]) -> None:
+        self._on_frame = callback
+
+    def start_capture(self) -> None:
+        """Start capturing frames in background thread."""
+        if self._running:
+            return
+        self._running = True
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._capture_loop, daemon=True, name="rtsp-capture")
+        self._thread.start()
+
+    def stop_capture(self) -> None:
+        self._stop_event.set()
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+            self._thread = None
+
+    def _capture_loop(self) -> None:
+        """Capture frames using ffmpeg subprocess."""
+        while not self._stop_event.is_set():
+            try:
+                result = self._capture_frame()
+                if result is not None:
+                    snap = RTSPSnapshot(
+                        index=self._frame_index,
+                        image=result["data"],
+                        timestamp=time.time(),
+                        stream_url=self.stream_url,
+                        width=result.get("width", 0),
+                        height=result.get("height", 0),
+                    )
+                    self._frame_index += 1
+                    if self._on_frame is not None:
+                        self._on_frame(snap)
+                self._stop_event.wait(timeout=0.5)
+            except Exception:
+                self._stop_event.wait(timeout=1.0)
+
+    def _capture_frame(self) -> dict[str, object] | None:
+        """Capture a single frame using ffmpeg."""
+        try:
+            import subprocess
+            proc = subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-y",
+                    "-fflags", "nobuffer",
+                    "-rtsp_transport", "tcp",
+                    "-i", self.stream_url,
+                    "-frames:v", "1",
+                    "-f", "image2pipe",
+                    "-vcodec", "mjpeg",
+                    "pipe:1",
+                ],
+                capture_output=True,
+                timeout=10.0,
+            )
+            if proc.returncode == 0 and proc.stdout:
+                return {"data": proc.stdout, "width": 0, "height": 0}
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        return None
+
+    def capture_once(self) -> RTSPSnapshot | None:
+        """Capture a single frame without background threading."""
+        result = self._capture_frame()
+        if result is None:
+            return None
+        snap = RTSPSnapshot(
+            index=self._frame_index,
+            image=result["data"],
+            timestamp=time.time(),
+            stream_url=self.stream_url,
+            width=result.get("width", 0),
+            height=result.get("height", 0),
+        )
+        self._frame_index += 1
+        return snap
+
+
+class VisionResult:
+    """Structured vision analysis result with metadata."""
+
+    def __init__(
+        self,
+        objects: list[dict[str, object]] | None = None,
+        text: str = "",
+        description: str = "",
+        confidence: float = 0.0,
+        frame_index: int = 0,
+        source: str = "unknown",
+        person_count: int = 0,
+        trajectory_ids: list[str] | None = None,
+    ) -> None:
+        self.objects = objects or []
+        self.text = text
+        self.description = description
+        self.confidence = confidence
+        self.frame_index = frame_index
+        self.source = source
+        self.person_count = person_count
+        self.trajectory_ids = trajectory_ids or []
+
+
+@dataclass
+class TrackingState:
+    """Persistent tracking state for objects across frames."""
+
+    track_id: str
+    first_seen: float
+    last_seen: float
+    appearances: list[dict[str, object]] = field(default_factory=list)
+    is_present: bool = True
+
+    @property
+    def age(self) -> float:
+        return self.last_seen - self.first_seen
+
+
+class TemporalVisionResult(VisionResult):
+    """Vision result with temporal awareness across multiple frames."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.tracking: dict[str, TrackingState] = {}
+
+    def update_tracking(
+        self, track_id: str, appearance: dict[str, object],
+    ) -> None:
+        if track_id in self.tracking:
+            state = self.tracking[track_id]
+            state.last_seen = time.time()
+            state.appearances.append(appearance)
+        else:
+            self.tracking[track_id] = TrackingState(
+                track_id=track_id,
+                first_seen=time.time(),
+                last_seen=time.time(),
+                appearances=[appearance],
+            )
+
+    def get_present_objects(self) -> list[str]:
+        """Return track IDs that are still present (seen within last 10s)."""
+        now = time.time()
+        return [
+            tid for tid, state in self.tracking.items()
+            if now - state.last_seen < 10.0
+        ]
+
+    def get_appearances(self, track_id: str) -> list[dict[str, object]]:
+        return self.tracking.get(track_id, TrackingState(
+            track_id=track_id, first_seen=0, last_seen=0
+        )).appearances

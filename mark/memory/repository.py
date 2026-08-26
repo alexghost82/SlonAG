@@ -189,6 +189,60 @@ class MemoryStore:
 
         return _migrate(old, self)
 
+
+    def search(
+        self,
+        query: str,
+        *,
+        record_type: RecordType | str | None = None,
+        top_k: int = 5,
+        min_score: float = 0.0,
+    ) -> list[MemoryRecord]:
+        """Semantic search: embed query, rank stored records, return top_k matches."""
+        if not self._enabled:
+            return []
+        if self._embeddings.must_stay_local() and self._embeddings.embedder is None:
+            # No embedder available: fall back to keyword search
+            return self._keyword_search(query, record_type=record_type, top_k=top_k)
+        vector = self._embeddings.embed(query)
+        if vector is None:
+            return self._keyword_search(query, record_type=record_type, top_k=top_k)
+        filtered_type = _coerce_type(record_type) if record_type is not None else None
+        type_name = filtered_type.value if filtered_type is not None else None
+        results = self._db().find_similar(vector, top_k=top_k)
+        if type_name is not None:
+            results = [r for r in results if r.type == type_name]
+        if min_score > 0.0:
+            results = [r for r in results if r._similarity >= min_score]  # type: ignore[attr-defined]
+        return [_from_row(r) for r in results]
+
+    def _keyword_search(
+        self,
+        query: str,
+        *,
+        record_type: RecordType | str | None = None,
+        top_k: int = 5,
+    ) -> list[MemoryRecord]:
+        """Fallback: simple keyword matching on key/value."""
+        q = query.lower()
+        all_records = self.list(record_type)
+        scored: list[tuple[MemoryRecord, int]] = []
+        for rec in all_records:
+            score = 0
+            if q in rec.key.lower():
+                score += 3
+            if q in rec.value.lower():
+                score += 1
+            for word in q.split():
+                if word in rec.key.lower():
+                    score += 1
+                if word in rec.value.lower():
+                    score += 1
+            if score > 0:
+                scored.append((rec, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [r for r, _ in scored[:top_k]]
+
     def close(self) -> None:
         if self._database is not None:
             self._database.close()
