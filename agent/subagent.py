@@ -160,7 +160,7 @@ class SubagentRuntime:
         if depth >= self._max_delegation_depth:
             return SubagentResult(
                 ok=False,
-                error=f"Maximum delegation depth ({self._max_delegation_depth}) reached",
+                error=f"Достигнута максимальная глубина делегирования ({self._max_delegation_depth})",
                 reason="Max depth exceeded",
             )
 
@@ -168,7 +168,7 @@ class SubagentRuntime:
         if len(self._active) >= self._max_concurrency:
             return SubagentResult(
                 ok=False,
-                error="Concurrency limit reached",
+                error="Достигнут предел параллельных подзадач",
                 reason="Max concurrency exceeded",
             )
 
@@ -222,7 +222,7 @@ class SubagentRuntime:
         except asyncio.CancelledError:
             return SubagentResult(
                 ok=False,
-                error="Subagent was cancelled",
+                error="Подзадача была отменена",
                 reason="Cancelled",
             )
         finally:
@@ -267,13 +267,13 @@ class SubagentRuntime:
         except asyncio.CancelledError:
             return SubagentResult(
                 ok=False,
-                error="Subagent task was cancelled",
+                error="Задача подзадачи отменена",
                 reason="Cancelled",
             )
         except asyncio.TimeoutError:
             return SubagentResult(
                 ok=False,
-                error="Subagent execution timed out",
+                error="Истекло время выполнения подзадачи",
                 reason="Timeout",
             )
         except Exception as exc:

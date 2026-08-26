@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from mark.mcp.client import McpClient
-from mark.mcp.streamable_http_transport import McpStreamableHttpTransport, httpx_timeout
+from mark.mcp.streamable_http_transport import McpStreamableHttpTransport
 from mark.mcp.types import McpServerConfig, McpTransportKind
 from mark.mcp.transport import McpStdioTransport
 
@@ -106,14 +106,83 @@ class TestStreamableHttpTransportMethods:
         )
         assert transport._headers["Authorization"] == "Bearer test"
 
+    def test_timeout_config_defaults(self) -> None:
+        """Timeout parameters are stored correctly."""
+        transport = McpStreamableHttpTransport(
+            "http://localhost:3001/mcp",
+            connect_timeout=5.0,
+            read_timeout=20.0,
+        )
+        assert transport._connect_timeout == 5.0
+        assert transport._read_timeout == 20.0
 
-class TestHttpxTimeoutHelper:
-    """Tests for the httpx_timeout helper function."""
-
-    def test_httpx_timeout_returns_timeout_object(self) -> None:
-        """httpx_timeout creates an httpx Timeout object."""
+    def test_make_timeout_produces_httpx_timeout(self) -> None:
+        """_make_timeout creates a valid httpx Timeout object."""
+        transport = McpStreamableHttpTransport("http://localhost:3001/mcp")
         import httpx
-        timeout = httpx_timeout(connect=5.0, total=20.0)
+        timeout = transport._make_timeout()
         assert isinstance(timeout, httpx.Timeout)
-        assert timeout.connect == 5.0
-        assert timeout.total == 20.0
+        assert timeout.connect == 10.0
+        assert timeout.read == 30.0
+
+    def test_make_timeout_with_override(self) -> None:
+        """_make_timeout accepts read override."""
+        transport = McpStreamableHttpTransport("http://localhost:3001/mcp")
+        import httpx
+        timeout = transport._make_timeout(read_override=60.0)
+        assert isinstance(timeout, httpx.Timeout)
+        assert timeout.read == 60.0
+
+
+class TestStreamableHttpTransportTimeoutConfig:
+    """Tests for timeout parameter validation and usage."""
+
+    def test_all_timeout_params_stored(self) -> None:
+        """All four timeout params are stored."""
+        transport = McpStreamableHttpTransport(
+            "http://localhost:3001/mcp",
+            connect_timeout=2.0,
+            read_timeout=5.0,
+            write_timeout=10.0,
+            pool_timeout=3.0,
+        )
+        assert transport._connect_timeout == 2.0
+        assert transport._read_timeout == 5.0
+        assert transport._write_timeout == 10.0
+        assert transport._pool_timeout == 3.0
+
+
+class TestMcpStreamableHttpTransportAsyncContext:
+    """Tests for async context manager protocol."""
+
+    @pytest.mark.asyncio
+    async def test_aenter_raises_on_bad_server(self) -> None:
+        """__aenter__ raises on connection failure."""
+        transport = McpStreamableHttpTransport("http://localhost:19999/nonexistent")
+        with pytest.raises(RuntimeError, match="Streamable HTTP connection failed"):
+            await transport.__aenter__()
+
+    @pytest.mark.asyncio
+    async def test_closed_property_after_stop(self) -> None:
+        """_closed flag is True after stop()."""
+        transport = McpStreamableHttpTransport("http://localhost:3001/mcp")
+        assert transport._closed is False
+        await transport.stop()
+        assert transport._closed is True
+
+
+class TestStreamableHttpMcpClientIntegration:
+    """Integration tests between McpClient and streamable HTTP transport."""
+
+    def test_http_config_cannot_invoke_stdio_args(self) -> None:
+        """STREAMABLE_HTTP config rejects stdio-only fields."""
+        config = McpServerConfig(
+            name="http",
+            transport=McpTransportKind.STREAMABLE_HTTP,
+            url="http://localhost:3001/mcp",
+            # command and args should be ignored for HTTP transport
+        )
+        client = McpClient(config)
+        transport = client._create_transport()
+        assert isinstance(transport, McpStreamableHttpTransport)
+        assert transport.url == "http://localhost:3001/mcp"

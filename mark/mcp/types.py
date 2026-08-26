@@ -80,6 +80,6 @@ class McpServerConfig:
                 f"Command requires stdio transport; got {self.transport.value}"
             )
         if self.max_concurrent < 1:
-            raise ValueError("max_concurrent must be >= 1")
+            raise ValueError("max_concurrent должен быть >= 1")
         if self.transport == McpTransportKind.STREAMABLE_HTTP and not self.url:
-            raise ValueError("STREAMABLE_HTTP transport requires a URL")
+            raise ValueError("STREAMABLE_HTTP-транспорт требует URL")

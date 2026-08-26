@@ -101,13 +101,13 @@ class McpStreamableHttpTransport:
                         timeout=15.0,
                     )
                     if not isinstance(result, dict):
-                        raise ValueError("initialize returned non-dict")
+                        raise ValueError("initialize вернул результат не в формате dict")
                 except Exception:
                     # Server may not support initialize; transport is still valid
                     pass
 
         except Exception as exc:
-            raise RuntimeError(f"Streamable HTTP connection failed: {exc}") from exc
+            raise RuntimeError(f"Ошибка подключения Streamable HTTP: {exc}") from exc
 
     async def _reader_loop(self, read_stream: Any) -> None:
         """Read SSE messages from server and dispatch JSON-RPC responses."""

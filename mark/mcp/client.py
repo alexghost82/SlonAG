@@ -305,18 +305,18 @@ class McpClient:
         if self.config.denied_tools and original_name in self.config.denied_tools:
             return McpCallResult(
                 ok=False,
-                error=f"Tool '{original_name}' is denied by server config",
+                error=f"Инструмент '{original_name}' запрещён политикой сервера",
             )
         if self.config.allowed_tools and original_name not in self.config.allowed_tools:
             return McpCallResult(
                 ok=False,
-                error=f"Tool '{original_name}' is not in allowed list",
+                error=f"Инструмент '{original_name}' не в списке разрешённых",
             )
 
         if original_name not in self._unqualified_tools:
             return McpCallResult(
                 ok=False,
-                error=f"Unknown MCP tool: '{original_name}'",
+                error=f"Неизвестный MCP-инструмент: '{original_name}'",
             )
 
         qualified_name = self._unqualified_tools[original_name]
@@ -333,7 +333,7 @@ class McpClient:
             if not isinstance(result, dict):
                 return McpCallResult(
                     ok=False,
-                    error="MCP tool returned non-dict result",
+                    error="MCP-инструмент вернул результат не в формате dict",
                 )
 
             # Parse content blocks
@@ -366,23 +366,23 @@ class McpClient:
                 warnings=tuple(warnings),
             )
         except asyncio.TimeoutError:
-            return McpCallResult(ok=False, error="MCP tool invocation timed out")
+            return McpCallResult(ok=False, error="Истекло время ожидания вызова MCP-инструмента")
         except RuntimeError as exc:
             error_msg = str(exc)
             if "not connected" in error_msg.lower() or "closed" in error_msg.lower():
                 return McpCallResult(
                     ok=False,
-                    error="MCP server disconnected",
+                    error="MCP-сервер отключился",
                 )
             return McpCallResult(ok=False, error=error_msg)
         except Exception as exc:
-            return McpCallResult(ok=False, error=f"MCP tool invocation failed: {exc}")
+            return McpCallResult(ok=False, error=f"Ошибка вызова MCP-инструмента: {exc}")
 
     async def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> McpCallResult:
         """Retrieve a prompt by name."""
         original_name = self._unqualified_name(name)
         if original_name not in {p.name for p in self._prompts}:
-            return McpCallResult(ok=False, error=f"Unknown prompt: '{original_name}'")
+            return McpCallResult(ok=False, error=f"Неизвестный промпт: '{original_name}'")
 
         try:
             result = await self._transport.send_message(  # type: ignore[union-attr]

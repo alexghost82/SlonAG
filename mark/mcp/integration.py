@@ -225,7 +225,7 @@ class McpIntegration:
     async def read_resource(self, uri: str) -> McpCallResult:
         """Read a resource by URI."""
         if self.client is None:
-            return McpCallResult(ok=False, error="MCP client not initialized")
+            return McpCallResult(ok=False, error="MCP-клиент не инициализирован")
         return await self.client.read_resource(uri)
 
     async def discover_prompts(self) -> list[Any]:
@@ -237,7 +237,7 @@ class McpIntegration:
     async def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> McpCallResult:
         """Retrieve a prompt."""
         if self.client is None:
-            return McpCallResult(ok=False, error="MCP client not initialized")
+            return McpCallResult(ok=False, error="MCP-клиент не инициализирован")
         return await self.client.get_prompt(name, arguments)
 
     def cancel(self) -> None:

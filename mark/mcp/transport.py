@@ -31,7 +31,7 @@ class McpStdioTransport:
     async def start(self) -> None:
         """Launch the MCP server subprocess and open transport."""
         if self.config.command is None or self.config.command == "":
-            raise ValueError("MCP stdio transport requires a non-empty command")
+            raise ValueError("MCP stdio-транспорт требует непустую команду")
 
         env = self._make_env()
         proc = await asyncio.create_subprocess_exec(
@@ -45,7 +45,7 @@ class McpStdioTransport:
 
         if proc.stdin is None or proc.stdout is None:
             await proc.wait()
-            raise RuntimeError("MCP subprocess opened without stdin or stdout")
+            raise RuntimeError("MCP subprocess открыт без stdin или stdout")
 
         self._process = proc
         self._reader_task = asyncio.create_task(self._reader_loop())
@@ -88,7 +88,7 @@ class McpStdioTransport:
                     error = msg["error"]
                     future.set_exception(
                         RuntimeError(
-                            f"MCP error: {error.get('message', 'unknown')}"
+                            f"MCP error: {error.get('message', 'неизвестная ошибка')}"
                         )
                     )
                 else:
@@ -102,7 +102,7 @@ class McpStdioTransport:
     ) -> Any:
         """Send a JSON-RPC request and await the response."""
         if self._process is None or self._process.stdin is None or self._closed:
-            raise RuntimeError("Transport is not connected")
+            raise RuntimeError("Транспорт не подключён")
 
         request_id = str(uuid.uuid4())
         payload: dict[str, Any] = {
