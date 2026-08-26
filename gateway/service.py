@@ -96,7 +96,7 @@ class SlonGateway:
         self, context: GatewayContext, request: GatewayEnvelope
     ) -> GatewayEnvelope:
         if self._automation is None:
-            return response_envelope(request, "automation.listed", {"automations": [], "code": "automation_unavailable"})
+            return response_envelope(request, "automation.listed", {"automations": []})
         records = self._automation.list(workspace_id=context.workspace_id)
         return response_envelope(request, "automation.listed", {"automations": [{
             "id": r.id, "name": r.name, "trigger_type": r.trigger_type,
@@ -109,7 +109,7 @@ class SlonGateway:
         self, context: GatewayContext, request: GatewayEnvelope
     ) -> GatewayEnvelope:
         if self._automation is None:
-            return response_envelope(request, "automation.listed", {"automations": [], "code": "automation_unavailable"})
+            return response_envelope(request, "automation.listed", {"automations": []})
         records = self._automation.list()
         return response_envelope(request, "automation.listed", {"automations": [{
             "id": r.id, "name": r.name, "trigger_type": r.trigger_type,
