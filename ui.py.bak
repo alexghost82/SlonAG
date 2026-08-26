@@ -18,7 +18,6 @@ import psutil
 
 from config.secrets import get_secret, set_secret
 from config.settings import load_settings, save_settings
-from config.schema import PROVIDER_IDS, DEFAULT_PROVIDER_ID
 
 from PyQt6.QtCore import (
     QEasingCurve, QMimeData, QObject, QPointF, QRectF, QSize, Qt,
@@ -1051,10 +1050,9 @@ class SetupOverlay(QWidget):
 
 
 class MainWindow(QMainWindow):
-    _log_sig       = pyqtSignal(str)
-    _state_sig     = pyqtSignal(str)
-    _stt_text_sig  = pyqtSignal(str)
-    _provider_sig  = pyqtSignal(str)  # emitted when provider changes
+    _log_sig   = pyqtSignal(str)
+    _state_sig = pyqtSignal(str)
+    _stt_text_sig = pyqtSignal(str)
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -1070,7 +1068,6 @@ class MainWindow(QMainWindow):
 
         self.on_text_command  = None
         self._muted           = False
-        self._selected_provider = DEFAULT_PROVIDER_ID  # for UI display & control_plane
         self._current_file: str | None = None
         self._local_tts_provider = None
         self._local_tts_ready = False
@@ -1646,19 +1643,10 @@ class MainWindow(QMainWindow):
             def _keys(name: str) -> str | None:
                 return get_secret(name)
 
-            # Read provider from settings (Wave 14+).
-            try:
-                loaded = load_settings()
-                provider_id = loaded.provider_id if hasattr(loaded, "provider_id") else DEFAULT_PROVIDER_ID
-                network_mode = loaded.network_mode if hasattr(loaded, "network_mode") else "hybrid"
-            except Exception:
-                provider_id = DEFAULT_PROVIDER_ID
-                network_mode = "hybrid"
-
             stack = build_runtime_stack(
                 repo_root=BASE_DIR,
-                provider_id=provider_id,
-                network_mode=network_mode,
+                provider_id="gemini",
+                network_mode="hybrid",
                 key_provider=_keys,
             )
             self._runtime_stack = stack
@@ -1952,19 +1940,7 @@ class MainWindow(QMainWindow):
             plane.append_log(text)
 
     def _check_config(self) -> bool:
-        """Return True when at least one provider key is configured."""
         try:
-            loaded = load_settings()
-            provider_id = loaded.provider_id if hasattr(loaded, "provider_id") else DEFAULT_PROVIDER_ID
-            # Determine the secret name for the selected provider.
-            secret_name = f"{provider_id}_api_key" if provider_id != "local" else None
-            if secret_name is None:
-                # Local providers don't require an API key — ready immediately.
-                return True
-            key = get_secret(secret_name)
-            if key:
-                return True
-            # Also allow the older hardcoded names for backward compat.
             return bool(
                 get_secret("gemini_api_key")
                 and get_secret("openrouter_api_key")

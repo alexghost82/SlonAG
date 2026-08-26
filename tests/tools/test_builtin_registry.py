@@ -19,6 +19,7 @@ EXPECTED_TOOLS = frozenset(
         "computer_control",
         "computer_settings",
         "cmd_control",
+        "shell_exec",
         "screen_process",
         "reminder",
         "weather_report",
