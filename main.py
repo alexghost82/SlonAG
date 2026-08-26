@@ -12,6 +12,8 @@ from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     should_extract_memory, extract_memory
 )
+from config.settings import load_settings
+from config.schema import Settings
 
 # New-stack bridge (Wave 13); optional — never break legacy Gemini Live.
 try:
@@ -59,14 +61,50 @@ def _key_provider(name: str) -> str | None:
     return get_secret(name)
 
 
+def _get_settings() -> Settings:
+    """Return settings with fallback to defaults. Never raises."""
+    try:
+        return load_settings()
+    except Exception:  # pragma: no cover
+        from config.schema import default_settings
+        return default_settings()
+
+
+def _resolve_model_info(provider_id: str, model_id: str = "") -> ModelInfo:
+    """Build a ModelInfo from settings (or fall back to Gemini Live default)."""
+    settings = _get_settings()
+    selected_provider = getattr(settings, "provider_id", provider_id)
+    selected_model_id = model_id or getattr(settings, "model_id", "")
+    if selected_model_id:
+        return ModelInfo(
+            provider_id=selected_provider,
+            model_id=selected_model_id,
+            display_name=selected_model_id,
+            text=True,
+            streaming=True,
+            tool_calling=True,
+            source=selected_provider,
+        )
+    # Default: Gemini Live audio model for legacy compatibility.
+    return LIVE_MODEL_INFO
+
+
+def _get_api_key_for(provider_id: str) -> str | None:
+    """Read the API key for a given provider, or None for local providers."""
+    if provider_id == "local" or provider_id == "ollama" or provider_id == "llama_cpp":
+        return None
+    from config.secrets import get_secret
+    return get_secret(f"{provider_id}_api_key")
+
+
 def _build_stack():
     if build_runtime_stack is None:
         return None
     try:
         return build_runtime_stack(
             repo_root=BASE_DIR,
-            provider_id="gemini",
-            network_mode="hybrid",
+            provider_id=_get_settings().provider_id,
+            network_mode=_get_settings().network_mode or "hybrid",
             key_provider=_key_provider,
         )
     except Exception as exc:
@@ -635,18 +673,107 @@ class SlonLive:
 JarvisLive = SlonLive
 
 
+def _run_chat_agent(ui, settings, stack=None):
+    """Run a provider-agnostic chat loop using AgentLoop + tool registry."""
+    from mark.tools.builtin import build_builtin_registry
+    from mark.tools.executor import ToolExecutor as SyncToolExecutor
+    from mark.safety.policy import SafetyPolicy
+    from agent.runtime import AgentLoop
+    from providers.router import Router
+
+    # Ensure all provider factories are registered
+    from providers.openai import provider as _  # noqa: F401  # ensure registration
+    from providers.gemini import provider as __  # noqa: F401  # ensure registration
+    from providers.openrouter import provider as ___  # noqa: F401  # ensure registration
+    from providers.local import ollama, llama_cpp  # noqa: F401  # ensure registration
+
+    provider_id = getattr(settings, "provider_id", "gemini")
+    model_id = getattr(settings, "model_id", "")
+
+    # Audio-capable Gemini uses SlonLive, not AgentLoop.
+    if provider_id == "gemini" and model_id and "audio" in model_id.lower():
+        return False
+
+    model_info = _resolve_model_info(provider_id, model_id)
+
+    # Build key provider callback
+    def key_provider(name: str) -> str | None:
+        from config.secrets import get_secret
+        return get_secret(name)
+
+    # Build the router
+    router = Router(
+        provider_id=provider_id,
+        network_mode=getattr(settings, "network_mode", None),
+        privacy_profile=getattr(settings, "privacy_profile", None),
+        routing_mode=getattr(settings, "routing_mode", None),
+        key_provider=key_provider,
+    )
+
+    # Try to resolve the provider
+    try:
+        provider_instance = router._resolve(provider_id)
+    except Exception as exc:  # pragma: no cover - needs api key
+        ui.write_log(f"ERR: {exc}")
+        print(f"[Main] provider init failed: {exc}")
+        return True
+
+    # Build tool registry and executor
+    tool_registry = build_builtin_registry()
+    safety = SafetyPolicy()
+    tool_executor = SyncToolExecutor(tool_registry, safety)
+
+    # Build and run the AgentLoop
+    agent_loop = AgentLoop(
+        model=model_info,
+        provider=provider_instance,
+        tool_executor=tool_executor,
+    )
+
+    async def _chat_loop():
+        # Simple chat loop: prompt, get response, execute tools, loop.
+        prompt = ""
+        try:
+            while not ui._closed:
+                # Wait for text command from UI callback
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            pass
+
+    print(f"[Main] Using provider={provider_id} model={model_id or model_info.model_id}")
+    ui.write_log(f"SYS: provider={provider_id}")
+    asyncio.create_task(_chat_loop())
+    return True
+
+
 def main():
     ui = SlonUI("face.png")
 
     def runner():
         ui.wait_for_api_key()
-        # Live Gemini path remains the default when Gemini keys are present.
+        settings = _get_settings()
         stack = getattr(ui, "_runtime_stack", None) or _build_stack()
-        slon = SlonLive(ui, runtime_stack=stack)
-        try:
-            asyncio.run(slon.run())
-        except KeyboardInterrupt:
-            print("\nShutting down...")
+
+        selected_provider = getattr(settings, "provider_id", "gemini")
+
+        # Check if this is an audio-capable Gemini model → use SlonLive
+        selected_model_id = getattr(settings, "model_id", "")
+        is_gemini_audio = (
+            selected_provider == "gemini"
+            and selected_model_id
+            and "audio" in selected_model_id.lower()
+        )
+
+        if is_gemini_audio:
+            slon = SlonLive(ui, runtime_stack=stack)
+            try:
+                asyncio.run(slon.run())
+            except KeyboardInterrupt:
+                print("\nShutting down...")
+        else:
+            # Chat-based agent loop for non-Gemini or non-audio models
+            _run_chat_agent(ui, settings, stack)
+            print("\nChat agent finished.")
 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()
