@@ -216,6 +216,12 @@ class McpIntegration:
             return []
         return await self.client.discover_resources()
 
+    async def discover_resource_templates(self) -> list[Any]:
+        """Discover resource templates from the MCP server."""
+        if self.client is None:
+            return []
+        return await self.client.discover_resource_templates()
+
     async def read_resource(self, uri: str) -> McpCallResult:
         """Read a resource by URI."""
         if self.client is None:

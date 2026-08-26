@@ -296,7 +296,7 @@ class TestMcpServer:
                 "messages": [
                     {
                         "role": "assistant",
-                        "content": {"type": "text", "text": summary},
+                        "content": [{"type": "text", "text": summary}],
                     }
                 ]
             }
