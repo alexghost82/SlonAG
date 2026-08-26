@@ -60,7 +60,7 @@ class TestStreamableHttpConnectionFailure:
     async def test_connect_to_nonexistent_server_fails_gracefully(self) -> None:
         """Connection to a server that does not exist raises a descriptive error."""
         transport = McpStreamableHttpTransport("http://localhost:19999/nonexistent")
-        with pytest.raises(RuntimeError, match="Streamable HTTP connection failed"):
+        with pytest.raises(RuntimeError, match="Ошибка подключения Streamable HTTP"):
             await transport.start()
 
 
@@ -159,7 +159,7 @@ class TestMcpStreamableHttpTransportAsyncContext:
     async def test_aenter_raises_on_bad_server(self) -> None:
         """__aenter__ raises on connection failure."""
         transport = McpStreamableHttpTransport("http://localhost:19999/nonexistent")
-        with pytest.raises(RuntimeError, match="Streamable HTTP connection failed"):
+        with pytest.raises(RuntimeError, match="Ошибка подключения Streamable HTTP"):
             await transport.__aenter__()
 
     @pytest.mark.asyncio

@@ -18,7 +18,7 @@ class TestMcpStdioTransport:
     async def test_requires_command(self) -> None:
         config = McpServerConfig(name="test", transport=McpTransportKind.STDIO)
         transport = McpStdioTransport(config)
-        with pytest.raises(ValueError, match="non-empty command"):
+        with pytest.raises(ValueError, match="непустую команду"):
             await transport.start()
 
     @pytest.mark.asyncio
@@ -158,5 +158,5 @@ class TestMcpTransportDisconnect:
         transport = McpStdioTransport(config)
         await transport.start()
         await transport.stop()
-        with pytest.raises(RuntimeError, match="not connected"):
+        with pytest.raises(RuntimeError, match="не подключён"):
             await transport.send_message("tools/list")

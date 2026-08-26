@@ -141,7 +141,7 @@ class TestMcpToolInvocation:
             await client.discover_tools()
             result = await client.invoke_tool("test_nonexistent", {})
             assert not result.ok
-            assert "unknown" in result.error.lower()
+            assert "неизвестн" in result.error.lower()
 
     @pytest.mark.asyncio
     async def test_invoke_write_note(self) -> None:
@@ -290,7 +290,7 @@ class TestMcpToolFiltering:
             assert result.ok
             result2 = await client.invoke_tool("filtered_compute", {"operation": "add", "a": 1, "b": 2})
             assert not result2.ok
-            assert "allowed" in result2.error.lower()
+            assert "разреш" in result2.error.lower()
 
     @pytest.mark.asyncio
     async def test_denied_tools_filter(self) -> None:
@@ -306,4 +306,4 @@ class TestMcpToolFiltering:
             await client.discover_tools()
             result = await client.invoke_tool("filtered_compute", {"operation": "add", "a": 1, "b": 2})
             assert not result.ok
-            assert "denied" in result.error.lower()
+            assert "запрещ" in result.error.lower()
