@@ -260,7 +260,7 @@ async def test_text_only_model_capabilities_are_conservative() -> None:
     assert model.vision is False
     assert model.audio_input is False
     assert model.audio_output is False
-    assert model.tool_calling is False
+    assert model.tool_calling is True
     assert model.structured_output is False
     assert model.embeddings is False
     assert len(transport.calls) == 1
@@ -271,7 +271,7 @@ def test_known_chat_model_does_not_claim_vision() -> None:
     flags = conservative_capabilities("gpt-4o")
     assert flags["text"] is True
     assert flags["vision"] is False
-    assert flags["tool_calling"] is False
+    assert flags["tool_calling"] is True
 
 
 async def test_chat_sends_exactly_one_requested_model() -> None:

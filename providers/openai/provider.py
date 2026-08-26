@@ -181,6 +181,7 @@ def conservative_capabilities(model_id: str) -> dict[str, bool]:
         return flags
     flags["text"] = True
     flags["streaming"] = True
+    flags["tool_calling"] = True
     return flags
 
 
@@ -209,4 +210,3 @@ def _normalize_key(api_key: str | None) -> str | None:
     return stripped or None
 
 
-register("openai", OpenAIChatProvider)
