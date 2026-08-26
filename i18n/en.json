@@ -34,5 +34,16 @@
   },
   "error": {
     "unknown_tool": "Unknown tool"
+  },
+  "api": {
+    "ok": "Request accepted.",
+    "invalid_request": "Request body failed validation.",
+    "missing_field": "A required field is missing.",
+    "invalid_type": "A field has the wrong type.",
+    "unauthorized": "Pairing or authentication is required.",
+    "not_found": "Resource not found.",
+    "approval_required": "Mutating operation requires safety approval.",
+    "idempotency_conflict": "Idempotency key was reused with a different body.",
+    "unknown": "Desktop Control API rejected the request."
   }
 }
