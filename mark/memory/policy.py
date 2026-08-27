@@ -44,7 +44,7 @@ _VALUE_PATTERNS = (
 )
 
 _CARD_CANDIDATE = re.compile(r"(?:\d[ \t-]?){13,19}")
-_SPLIT_KEY = re.compile(r"[._/\s-]+")
+_SPLIT_KEY = re.compile(r"[._/\s=:\-]+")
 
 
 class MemoryPolicy:

@@ -24,7 +24,6 @@ from typing import Any
 from config.schema import (
     PROVIDER_IDS,
     LOCAL_PROVIDER_IDS,
-    CLOUD_PROVIDER_IDS,
     PRIVACY_PROFILES,
     NETWORK_MODES,
     ROUTING_MODES,
@@ -101,6 +100,7 @@ class OnboardStepId(str):
     """Opaque step identifier."""
     pass
 
+STEP_MODEL = OnboardStepId("model")
 STEP_LANGUAGE = OnboardStepId("language")
 STEP_PROVIDER = OnboardStepId("provider")
 STEP_MODEL = OnboardStepId("model")
@@ -167,6 +167,7 @@ STEP_META: dict[OnboardStepId, StepMeta] = {
         title_key="onboard.step_credentials",
         hint_key="onboard.hint_credentials",
         order=4,
+        optional=False,
     ),
     STEP_ENDPOINTS: StepMeta(
         id=STEP_ENDPOINTS,

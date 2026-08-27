@@ -50,14 +50,20 @@ def check_url(url: str) -> None:
         raise UnsafeUrlError()
 
 
-def _host_blocked(host: str) -> bool:
-    if host in _BLOCKED_HOSTS:
-        return True
-    if any(host.endswith(suffix) for suffix in _BLOCKED_HOST_SUFFIXES):
-        return True
-    address = _parse_ip(host)
-    if address is None:
-        return False
+def _host_blocked(
+    host: str | ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return True when *host* is a forbidden destination."""
+    if isinstance(host, ipaddress.IPv4Address | ipaddress.IPv6Address):
+        address = host  # type: ignore[assignment]
+    else:
+        if host in _BLOCKED_HOSTS:
+            return True
+        if any(host.endswith(suffix) for suffix in _BLOCKED_HOST_SUFFIXES):
+            return True
+        address = _parse_ip(host)
+        if address is None:
+            return False
     if address in _METADATA_IPS:
         return True
     return bool(

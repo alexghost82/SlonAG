@@ -14,6 +14,7 @@ PROVIDER_IDS = frozenset(
     {"gemini", "openai", "openrouter", "local", "ollama", "llama_cpp", "openai_compat"}
 )
 LOCAL_PROVIDER_IDS = frozenset({"local", "ollama", "llama_cpp"})
+CLOUD_PROVIDER_IDS = PROVIDER_IDS - LOCAL_PROVIDER_IDS
 NETWORK_MODES = frozenset({"offline", "tools_only", "hybrid"})
 ROUTING_MODES = frozenset({"manual", "local_first", "local_only", "cloud_first"})
 OS_SYSTEMS = frozenset({"windows", "mac", "linux"})

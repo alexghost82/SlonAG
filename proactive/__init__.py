@@ -18,7 +18,12 @@ Usage:
     engine.stop()
 """
 
-from proactive.engine import ProactiveEngine
+# Engine module may not exist yet (work-in-progress).
+try:
+    from proactive.engine import ProactiveEngine  # noqa: F401
+except ImportError:  # pragma: no cover
+    ProactiveEngine = None  # type: ignore[misc,assignment]
+
 from proactive.types import (
     ProactiveAgentConfig,
     ProactiveDecision,
