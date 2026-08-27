@@ -364,6 +364,14 @@
   "shell_exec": {
     "invalid_cwd": "Invalid working directory.",
     "output_truncated": "\n… (output truncated)",
-    "no_args": "Missing required argument 'command' or 'arguments'."
+    "no_args": "Missing required argument 'command' or 'arguments'.",
+    "blocked": "Command blocked by security policy.",
+    "denied": "Execution denied by security policy.",
+    "user_denied": "User denied command execution.",
+    "confirm_error": "User confirmation error.",
+    "exec_error": "Command execution error.",
+    "timeout_error": "Execution timeout exceeded.",
+    "tree_kill": "Process tree killed.",
+    "nonzero_exit": "Command exited with non-zero code."
   }
 }

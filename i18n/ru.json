@@ -362,8 +362,16 @@
     }
   },
   "shell_exec": {
-    "invalid_cwd": "Invalid working directory.",
-    "output_truncated": "\n… (output truncated)",
-    "no_args": "Missing required argument 'command' or 'arguments'."
+    "invalid_cwd": "Недопустимая рабочая директория.",
+    "output_truncated": "\n… (вывод обрезан)",
+    "no_args": "Отсутствует обязательный аргумент \"command\" или \"arguments\".",
+    "blocked": "Команда заблокирована политикой безопасности.",
+    "denied": "Выполнение отклонено политикой безопасности.",
+    "user_denied": "Пользователь отклонил выполнение команды.",
+    "confirm_error": "Ошибка подтверждения пользователем.",
+    "exec_error": "Ошибка выполнения команды.",
+    "timeout_error": "Превышено время выполнения.",
+    "tree_kill": "Дерево процессов завершено.",
+    "nonzero_exit": "Команда завершилась с ненулевым кодом."
   }
 }
