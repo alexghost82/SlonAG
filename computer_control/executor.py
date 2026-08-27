@@ -262,8 +262,7 @@ class ComputerControlExecutor:
             ComputerControlAction.BRIGHTNESS_SET: lambda: self._adapter.brightness_set(
                 value=params["value"]),
             # Utility
-            ComputerControlAction.WAIT: lambda: self._adapter.mouse_move(  # no-op for wait
-                x=0, y=0, token=self._cancellation_token) or ExecutionResult.ok_result(
+            ComputerControlAction.WAIT: lambda: ExecutionResult.ok_result(
                     message=f"Ждем {params['seconds']}s",
                     data={"seconds": params["seconds"]}),
             ComputerControlAction.CAPABILITY_CHECK: lambda: ExecutionResult.ok_result(
@@ -333,5 +332,5 @@ __all__ = [
     "build_computer_control_executor",
     "run_computer_control",
     "validate_action",
-    "LEGACY_ACTION_MAP",
+    "_LEGACY_ACTION_MAP",
 ]

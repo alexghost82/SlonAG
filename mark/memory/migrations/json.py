@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 
@@ -28,7 +29,10 @@ LEGACY_TYPE_MAP: dict[str, RecordType] = {
 }
 
 
-def migrate_json(old: Mapping[str, object] | Path, store: MemoryStore) -> MigrationStats:
+def migrate_json(
+    old: Mapping[str, object] | Path,
+    store: MemoryStore,
+) -> MigrationStats:
     """Write allowed legacy entries through propose/commit. Skip secrets."""
     payload = _load_mapping(old)
     migrated = 0
@@ -50,7 +54,9 @@ def migrate_json(old: Mapping[str, object] | Path, store: MemoryStore) -> Migrat
                         key=key,
                         value=value,
                         source=f"legacy_json:{category}",
-                    )
+                    ),
+                    workspace="default",
+                    user_id="default",
                 )
             except MemoryPolicyError:
                 skipped_secrets += 1

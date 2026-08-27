@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from mark.memory.migrations.schema import apply_schema
+from mark.memory.migrations.schema import SCHEMA_VERSION, apply_schema
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,13 @@ class MemoryRow:
     source: str
     created_at: str
     updated_at: str
+    # ── v2+ scoped fields ─────────────────────────────────────────────
+    dedup_hash: str = ""
+    workspace: str = ""
+    user_id: str = ""
+    session_id: str = ""
+    confidence: float = 1.0
+    recency_weight: float = 1.0
 
 
 class MemoryDatabase:
@@ -38,28 +45,67 @@ class MemoryDatabase:
         self._connection.close()
 
     def insert(self, row: MemoryRow) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                INSERT INTO memory_records
-                    (id, type, key, value, source, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    row.id,
-                    row.type,
-                    row.key,
-                    row.value,
-                    row.source,
-                    row.created_at,
-                    row.updated_at,
-                ),
-            )
+        try:
+            with self._connection:
+                self._connection.execute(
+                    """
+                    INSERT INTO memory_records
+                        (id, type, key, value, source, dedup_hash, workspace,
+                         user_id, session_id, confidence, recency_weight,
+                         created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row.id,
+                        row.type,
+                        row.key,
+                        row.value,
+                        row.source,
+                        getattr(row, "dedup_hash", None),
+                        getattr(row, "workspace", ""),
+                        getattr(row, "user_id", ""),
+                        getattr(row, "session_id", ""),
+                        getattr(row, "confidence", 1.0),
+                        getattr(row, "recency_weight", 1.0),
+                        row.created_at,
+                        row.updated_at,
+                    ),
+                )
+        except sqlite3.OperationalError:
+            # Schema not yet updated — re-apply
+            apply_schema(self._connection)
+            with self._connection:
+                self._connection.execute(
+                    """
+                    INSERT INTO memory_records
+                        (id, type, key, value, source, dedup_hash, workspace,
+                         user_id, session_id, confidence, recency_weight,
+                         created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row.id,
+                        row.type,
+                        row.key,
+                        row.value,
+                        row.source,
+                        getattr(row, "dedup_hash", None),
+                        getattr(row, "workspace", ""),
+                        getattr(row, "user_id", ""),
+                        getattr(row, "session_id", ""),
+                        getattr(row, "confidence", 1.0),
+                        getattr(row, "recency_weight", 1.0),
+                        row.created_at,
+                        row.updated_at,
+                    ),
+                )
 
     def get(self, record_id: str) -> MemoryRow | None:
         cursor = self._connection.execute(
             """
-            SELECT id, type, key, value, source, created_at, updated_at
+            SELECT id, type, key, value, source, dedup_hash, workspace,
+                   user_id, session_id, confidence, recency_weight,
+                   created_at, updated_at
             FROM memory_records
             WHERE id = ?
             """,
@@ -74,7 +120,9 @@ class MemoryDatabase:
         if record_type is None:
             cursor = self._connection.execute(
                 """
-                SELECT id, type, key, value, source, created_at, updated_at
+                SELECT id, type, key, value, source, dedup_hash, workspace,
+                       user_id, session_id, confidence, recency_weight,
+                       created_at, updated_at
                 FROM memory_records
                 ORDER BY created_at ASC, key ASC
                 """
@@ -82,7 +130,9 @@ class MemoryDatabase:
         else:
             cursor = self._connection.execute(
                 """
-                SELECT id, type, key, value, source, created_at, updated_at
+                SELECT id, type, key, value, source, dedup_hash, workspace,
+                       user_id, session_id, confidence, recency_weight,
+                       created_at, updated_at
                 FROM memory_records
                 WHERE type = ?
                 ORDER BY created_at ASC, key ASC
@@ -96,7 +146,9 @@ class MemoryDatabase:
             cursor = self._connection.execute(
                 """
                 UPDATE memory_records
-                SET type = ?, key = ?, value = ?, source = ?, updated_at = ?
+                SET type = ?, key = ?, value = ?, source = ?, dedup_hash = ?,
+                    workspace = ?, user_id = ?, session_id = ?,
+                    confidence = ?, recency_weight = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -104,6 +156,12 @@ class MemoryDatabase:
                     row.key,
                     row.value,
                     row.source,
+                    getattr(row, "dedup_hash", None),
+                    getattr(row, "workspace", ""),
+                    getattr(row, "user_id", ""),
+                    getattr(row, "session_id", ""),
+                    getattr(row, "confidence", 1.0),
+                    getattr(row, "recency_weight", 1.0),
                     row.updated_at,
                     row.id,
                 ),
@@ -135,12 +193,16 @@ class MemoryDatabase:
                 (record_id, payload),
             )
 
-    def find_similar(self, vector: Sequence[float], *, top_k: int = 5) -> list[MemoryRow]:
+    def find_similar(
+        self, vector: Sequence[float], *, top_k: int = 5
+    ) -> list[MemoryRow]:
         """Return rows ranked by cosine similarity to the query vector.
         Each returned MemoryRow gets a transient _similarity attribute."""
         rows = self._connection.execute(
             """
-            SELECT r.id, r.type, r.key, r.value, r.source, r.created_at, r.updated_at
+            SELECT r.id, r.type, r.key, r.value, r.source, r.dedup_hash,
+                   r.workspace, r.user_id, r.session_id, r.confidence,
+                   r.recency_weight, r.created_at, r.updated_at
             FROM memory_records r
             JOIN memory_embeddings e ON r.id = e.record_id
             """
@@ -150,7 +212,7 @@ class MemoryDatabase:
         scored: list[tuple[MemoryRow, float]] = []
         for row in rows:
             sql_row = _row_from_sql(row)
-            stored = json.loads(row['vector'])
+            stored = json.loads(row["vector"])
             sim = _cosine_similarity(vector, stored)
             scored.append((sql_row, sim))
         scored.sort(key=lambda x: x[1], reverse=True)
@@ -170,6 +232,12 @@ def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
         source=str(row["source"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+        dedup_hash=str(row.get("dedup_hash", "") or ""),
+        workspace=str(row.get("workspace", "") or ""),
+        user_id=str(row.get("user_id", "") or ""),
+        session_id=str(row.get("session_id", "") or ""),
+        confidence=float(row.get("confidence", 1.0) or 1.0),
+        recency_weight=float(row.get("recency_weight", 1.0) or 1.0),
     )
 
 
@@ -182,6 +250,7 @@ def _dot_product(a: list[float], b: list[float]) -> float:
 
 def _magnitude(v: list[float]) -> float:
     import math
+
     return math.sqrt(sum(x * x for x in v))
 
 

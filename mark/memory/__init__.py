@@ -15,6 +15,7 @@ from mark.memory.errors import (
     memory_message,
 )
 from mark.memory.migrations import LEGACY_TYPE_MAP, migrate_json
+from mark.memory.migrations.schema import SCHEMA_VERSION, apply_schema
 from mark.memory.policy import MemoryPolicy
 from mark.memory.repository import (
     MemoryRecord,
@@ -22,6 +23,15 @@ from mark.memory.repository import (
     MigrationStats,
     Proposal,
     RecordType,
+)
+from mark.memory.retriever import (
+    ContextChunk,
+    MemoryRetriever,
+    RetrievalResult,
+)
+from mark.memory.context import (
+    MemoryContextAssembler,
+    build_system_prompt_with_memory,
 )
 
 __all__ = [
@@ -34,6 +44,8 @@ __all__ = [
     "CODE_UNKNOWN_TYPE",
     "ERROR_CODES",
     "LEGACY_TYPE_MAP",
+    "SCHEMA_VERSION",
+    "apply_schema",
     "Embedder",
     "EmbeddingService",
     "MemoryPolicy",
@@ -41,9 +53,14 @@ __all__ = [
     "MemoryRecord",
     "MemoryStore",
     "MemoryStoreError",
+    "MemoryContextAssembler",
+    "MemoryRetriever",
     "MigrationStats",
     "Proposal",
     "RecordType",
+    "RetrievalResult",
+    "ContextChunk",
+    "build_system_prompt_with_memory",
     "memory_message",
     "migrate_json",
 ]

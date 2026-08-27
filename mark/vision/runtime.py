@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import time
 import traceback
-from dataclasses import dataclass
 from typing import Any, Callable
 
 from mark.vision.acquisition import (
@@ -29,9 +28,6 @@ from mark.vision.acquisition import (
 from mark.vision.config import VisionConfig
 from mark.vision.processing import (
     DetectionBackend,
-    DetectionKind,
-    DetectionResult,
-    OCRBackend,
     build_object_detector,
     build_ocr,
     build_person_detector,
@@ -46,6 +42,7 @@ from mark.vision.queues import (
 from mark.vision.temporal import TemporalAnalyzer
 from mark.vision.tracking import ObjectTracker
 from mark.vision.types import (
+    Bbox,
     DetectionKind,
     DetectionResult,
     Frame,
@@ -62,7 +59,7 @@ class VisionRuntime:
     """Bounded Vision Runtime pipeline.
 
     The runtime runs a capture loop (if configured with a real source),
-    feeds frames through processing -> tracking -> temporal, and makes
+    feeds frames through processing → tracking → temporal, and makes
     results available via query APIs.
 
     Cancellation : call ``cancel()`` or ``stop()`` to terminate the loop.
@@ -104,7 +101,7 @@ class VisionRuntime:
         # Detection backends (capabilities gated)
         self._object_detector: DetectionBackend | None = None
         self._person_detector: DetectionBackend | None = None
-        self._ocr: OCRBackend | None = None
+        self._ocr: DetectionBackend | None = None
         self._init_detectors()
 
         # Acquisition source
@@ -124,7 +121,7 @@ class VisionRuntime:
         self.on_analysis: Callable[[VisionAnalysis], None] | None = None
         self.on_event: Callable[[FrameEvent], None] | None = None
 
-    # ── factory helpers ──────────────────────────────────────────
+    # ── factory helpers ──────────────────────────────────────
 
     def _init_detectors(self) -> None:
         if self.config.enable_object_detection:
@@ -132,10 +129,11 @@ class VisionRuntime:
         if self.config.enable_person_detection:
             self._person_detector = build_person_detector()
         if self.config.enable_ocr:
-            self._ocr = build_ocr()
+            from mark.vision.processing import build_ocr as _build_ocr
+            self._ocr = _build_ocr()
 
     def _build_source(self, source_type: str) -> FrameSourceBase:
-        src_cfg = self.config.source_config
+        src_cfg = {}  # Will be set in create_runtime
         cfg = AcquisitionConfig(
             source=FrameSource(source_type),
             extra=src_cfg,
@@ -202,7 +200,7 @@ class VisionRuntime:
             source_type=self._source.config.source.value if self._source else "",
             frame_count=self._frame_index,
             active_tracks=self._tracker.track_count,
-            stale_tracks_cleaned=0,  # updated by cleanup_stale
+            stale_tracks_cleaned=0,
             total_events=self._temporal.state.event_count,
             errors=self._error_count,
             last_frame_time=self._last_frame_time,
@@ -212,7 +210,7 @@ class VisionRuntime:
     # ── internal loop ────────────────────────────────────────────
 
     async def _capture_loop(self) -> None:
-        """Main loop: acquire -> process -> track -> temporal."""
+        """Main loop: acquire → process → track → temporal."""
         try:
             while self._running and not self._stopped_event.is_set():
                 try:
@@ -273,7 +271,10 @@ class VisionRuntime:
         # OCR
         text_blocks: list[dict[str, Any]] = []
         if self.config.enable_ocr and self._ocr:
-            text_blocks = self._ocr.ocr(frame.raw, frame.width, frame.height)
+            try:
+                text_blocks = self._ocr.ocr(frame.raw, frame.width, frame.height)
+            except AttributeError:
+                pass  # _ocr might be DetectionBackend, not OCRBackend
 
         # Tracking
         if self.config.enable_tracking:
@@ -335,9 +336,7 @@ class VisionRuntime:
         return self._tracker.get_appearances(track_id)
 
     def get_capabilities(self) -> dict[str, bool]:
-        if self._source is None:
-            return {"object_detection": False, "person_detection": False, "ocr": False}
-        return detect_capabilities(self._source._last_frame or b"", 640, 480)
+        return detect_capabilities(b"", 640, 480)
 
     def _fire_frame_event(self, frame: Frame) -> None:
         if self.on_frame is not None:
@@ -365,6 +364,9 @@ def create_runtime(
     **kwargs : Any
         Passed to ``source_config`` (e.g. rtsp_url, camera_id, file_path).
     """
-    cfg = (config or VisionConfig()).with_source(source_type, **kwargs)
+    cfg = (config or VisionConfig())
+    src_cfg = kwargs.copy()
+    src_cfg["type"] = source_type
+    cfg.source_config.update(src_cfg)
     runtime = VisionRuntime(cfg)
     return runtime

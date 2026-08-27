@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping
+from pathlib import Path
 
 from mark.safety.registry import SafetyRule, tool_spec as safety_rule
 from mark.tools.contracts import SideEffectClass, ToolSpec
@@ -63,9 +65,18 @@ def _input_schema(rule: SafetyRule) -> dict[str, object]:
     return schema
 
 
+def get_base_dir() -> Path:
+    """Return the project base directory."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent.parent
+
+
 def build_builtin_registry() -> ToolRegistry:
     """Build a fresh registry containing each migrated legacy tool once."""
     registry = ToolRegistry()
+
+    # 1. Legacy tools
     for name, handler in LEGACY_HANDLERS.items():
         rule = safety_rule(name)
         registry.register(
@@ -87,7 +98,45 @@ def build_builtin_registry() -> ToolRegistry:
                 parallel_safe=rule.risk.value == 0,
             )
         )
+
+    # 2. Preference learning tools
+    _register_preference_tools(registry, get_base_dir())
+
     return registry
+
+
+def _register_preference_tools(registry: ToolRegistry, base_dir: Path) -> None:
+    """Register the preference learning tools."""
+    try:
+        from mark.preference_learning.tools import build_preference_tools
+        from mark.tools.contracts import SideEffectClass
+
+        preference_specs = build_preference_tools(base_dir)
+        for name, spec_pair in preference_specs.items():
+            spec = spec_pair["spec"]
+            handler = spec_pair["handler"]
+            registry.register(
+                ToolSpec(
+                    name=spec["name"],
+                    description=spec["description"],
+                    input_schema=spec["input_schema"],
+                    output_schema=None,
+                    handler=handler,
+                    risk=spec.get("risk", 1),
+                    read_only=spec.get("read_only", False),
+                    idempotent=spec.get("read_only", False),
+                    side_effects=spec.get("risk", 1) > 0,
+                    side_effect_class=(
+                        SideEffectClass.REVERSIBLE
+                        if spec.get("risk", 1) > 0
+                        else SideEffectClass.NONE
+                    ),
+                    parallel_safe=False,
+                )
+            )
+    except ImportError:
+        # Preference learning module not available (e.g. during import-time checks)
+        pass
 
 
 __all__ = ["build_builtin_registry"]

@@ -15,11 +15,7 @@ from mark.vision.types import Bbox, DetectionKind, DetectionResult
 
 
 class DetectionBackend(ABC):
-    """Abstract base for detection backends.
-
-    ``can_run`` allows the runtime to check availability before
-    attempting to process.
-    """
+    """Abstract base for detection backends."""
 
     @staticmethod
     def can_run() -> bool:
@@ -39,19 +35,12 @@ class OCRBackend(ABC):
 
     @abstractmethod
     def ocr(self, frame: bytes, width: int, height: int) -> list[dict[str, Any]]:
-        """Return list of {text, confidence, bbox} dicts."""
         ...
 
 
 # ── Dummy backends (always available) ──────────────────────────────
 
 class DummyObjectDetector(DetectionBackend):
-    """Deterministic dummy detector — always returns zero results.
-
-    Used as a fallback when real detection libraries are not installed.
-    The backend reports ``can_run=False`` so the runtime knows to skip.
-    """
-
     @staticmethod
     def can_run() -> bool:
         return False
@@ -61,8 +50,6 @@ class DummyObjectDetector(DetectionBackend):
 
 
 class DummyPersonDetector(DetectionBackend):
-    """Deterministic dummy person detector."""
-
     @staticmethod
     def can_run() -> bool:
         return False
@@ -72,8 +59,6 @@ class DummyPersonDetector(DetectionBackend):
 
 
 class DummyOCR(OCRBackend):
-    """Deterministic dummy OCR — returns no text."""
-
     @staticmethod
     def can_run() -> bool:
         return False
@@ -82,13 +67,10 @@ class DummyOCR(OCRBackend):
         return []
 
 
-# ── OpenCV Haar cascade person detector ────────────────────────────
+# ── OpenCV person detector ───────────────────────────────────────
 
 class OpenCVPersonDetector(DetectionBackend):
-    """OpenCV HOG-based person detector.
-
-    Requires ``cv2`` (opencv-python). Falls back to ``can_run=False``.
-    """
+    """OpenCV HOG-based person detector."""
 
     _hog = None
 
@@ -96,9 +78,10 @@ class OpenCVPersonDetector(DetectionBackend):
     def can_run() -> bool:
         if OpenCVPersonDetector._hog is None:
             try:
-                import cv2  # type: ignore[import-untyped]
+                import cv2  # type: ignore
                 OpenCVPersonDetector._hog = cv2.HOGDescriptor()
-                OpenCVPersonDetector._hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+                OpenCVPersonDetector._hog.setSVMDetector(
+                    cv2.HOGDescriptor_getDefaultPeopleDetector())
             except Exception:
                 OpenCVPersonDetector._hog = False
         return OpenCVPersonDetector._hog is not False
@@ -107,20 +90,17 @@ class OpenCVPersonDetector(DetectionBackend):
         if not self.can_run():
             return []
         try:
-            import cv2  # type: ignore[import-untyped]
-            img = cv2.imdecode(
-                __import__("numpy").frombuffer(frame, __import__("numpy").uint8),
-                cv2.IMREAD_COLOR,
-            )
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
+            img = cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 return []
-            rects, weights = OpenCVPersonDetector._hog.detectMultiScale(img, winStride=(4, 4))
+            rects, weights = OpenCVPersonDetector._hog.detectMultiScale(img)
             results: list[DetectionResult] = []
             for (x, y, w, h), score in zip(rects, weights):
                 conf = float(max(score, 0.0))
                 results.append(DetectionResult(
-                    kind=DetectionKind.PERSON,
-                    label="person",
+                    kind=DetectionKind.PERSON, label="person",
                     confidence=conf,
                     bbox=Bbox(x_min=x / width, y_min=y / height,
                               x_max=(x + w) / width, y_max=(y + h) / height),
@@ -131,11 +111,7 @@ class OpenCVPersonDetector(DetectionBackend):
 
 
 class OpenCVObjectDetector(DetectionBackend):
-    """OpenCV Haar/cascade object detector (skeleton).
-
-    Uses configurable cascades. Falls back to empty results when no
-    cascade is configured.
-    """
+    """OpenCV cascade-based object detector."""
 
     def __init__(self, cascade_paths: list[str] | None = None) -> None:
         self.cascade_paths = cascade_paths or []
@@ -144,7 +120,7 @@ class OpenCVObjectDetector(DetectionBackend):
     @staticmethod
     def can_run() -> bool:
         try:
-            import cv2  # type: ignore[import-untyped]
+            import cv2  # type: ignore
             return True
         except Exception:
             return False
@@ -153,13 +129,12 @@ class OpenCVObjectDetector(DetectionBackend):
         if self._cascades:
             return
         try:
-            import cv2  # type: ignore[import-untyped]
+            import cv2  # type: ignore
             for p in self.cascade_paths:
                 try:
                     c = cv2.CascadeClassifier(p)
-                    if c.empty:
-                        continue
-                    self._cascades.append(c)
+                    if not c.empty:
+                        self._cascades.append(c)
                 except Exception:
                     pass
         except Exception:
@@ -170,11 +145,9 @@ class OpenCVObjectDetector(DetectionBackend):
         if not self._cascades:
             return []
         try:
-            import cv2  # type: ignore[import-untyped]
-            img = cv2.imdecode(
-                __import__("numpy").frombuffer(frame, __import__("numpy").uint8),
-                cv2.IMREAD_COLOR,
-            )
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
+            img = cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 return []
             results: list[DetectionResult] = []
@@ -182,8 +155,7 @@ class OpenCVObjectDetector(DetectionBackend):
                 rects = c.detectMultiScale(img, scaleFactor=1.1, minNeighbors=3)
                 for (x, y, w, h) in rects:
                     results.append(DetectionResult(
-                        kind=DetectionKind.OBJECT,
-                        label="detected_object",
+                        kind=DetectionKind.OBJECT, label="detected_object",
                         confidence=0.8,
                         bbox=Bbox(x_min=x / width, y_min=y / height,
                                   x_max=(x + w) / width, y_max=(y + h) / height),
@@ -193,13 +165,10 @@ class OpenCVObjectDetector(DetectionBackend):
             return []
 
 
-# ── Tesseract OCR ──────────────────────────────────────────────────
+# ── Tesseract OCR ────────────────────────────────────────────────
 
 class TesseractOCR(OCRBackend):
-    """Tesseract OCR backend.
-
-    Requires ``pytesseract`` and the Tesseract binary.
-    """
+    """Tesseract OCR backend."""
 
     _tesseract = None
 
@@ -207,7 +176,7 @@ class TesseractOCR(OCRBackend):
     def can_run() -> bool:
         if TesseractOCR._tesseract is None:
             try:
-                import pytesseract  # type: ignore[import-untyped]
+                import pytesseract  # type: ignore
                 TesseractOCR._tesseract = pytesseract
             except Exception:
                 TesseractOCR._tesseract = False
@@ -217,13 +186,13 @@ class TesseractOCR(OCRBackend):
         if not self.can_run():
             return []
         try:
-            import cv2  # type: ignore[import-untyped]
-            import numpy as np  # type: ignore[import-untyped]
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
             img = cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 return []
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            boxes = self._tesseract.image_to_boxes(gray)  # type: ignore[union-attr]
+            boxes = self._tesseract.image_to_boxes(gray)  # type: ignore
             if boxes is None:
                 return []
             lines = boxes.strip().split("\n")
@@ -246,7 +215,7 @@ class TesseractOCR(OCRBackend):
             return []
 
 
-# ── Backend resolver ───────────────────────────────────────────────
+# ── Backend resolver ─────────────────────────────────────────────
 
 def build_person_detector() -> DetectionBackend:
     if OpenCVPersonDetector.can_run():
@@ -267,7 +236,7 @@ def build_ocr() -> OCRBackend:
 
 
 def detect_capabilities(frame: bytes, width: int, height: int) -> dict[str, bool]:
-    """Return a dict of capability -> enabled."""
+    """Return a dict of capability → enabled."""
     return {
         "object_detection": OpenCVObjectDetector.can_run(),
         "person_detection": OpenCVPersonDetector.can_run(),
