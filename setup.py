@@ -1,3 +1,4 @@
+from i18n import t
 """Install Slon runtime dependencies for the current OS."""
 
 from __future__ import annotations
@@ -28,13 +29,13 @@ def main() -> None:
     root = Path(__file__).resolve().parent
     req_name = requirements_file_for_os()
     req_path = root / req_name
-    print(f"Installing requirements from {req_name}...")
+    print(t("actions.installing_reqs", req_name=req_name))
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-r", str(req_path)],
         check=True,
     )
 
-    print("Installing Playwright browsers...")
+    print(t("actions.installing_playwright"))
     subprocess.run([sys.executable, "-m", "playwright", "install"], check=True)
 
     print("\n✅ Setup complete! Run 'python main.py' to start Slon.")

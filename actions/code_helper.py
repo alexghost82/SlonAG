@@ -11,7 +11,8 @@
 #   optimize     → Mevcut kodu Gemini ile optimize et (performans, okunabilirlik, best practices)
 #   auto         → (default) Intent auto-detected from context
 
-import subprocess
+import subprocessfrom i18n import t
+
 import sys
 import json
 import re
@@ -35,7 +36,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 

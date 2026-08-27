@@ -1,3 +1,4 @@
+from i18n import t
 """Headless runtime bridge: assemble new-stack pieces with graceful degrade.
 
 Does not import UI, open sockets, or download models. Secrets are read only

@@ -1,5 +1,6 @@
 #computer_settings.py
-import json
+import jsonfrom i18n import t
+
 import re
 import sys
 import time

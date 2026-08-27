@@ -1,3 +1,4 @@
+from i18n import t
 """Strict public wire contracts for the Slon Gateway."""
 
 from __future__ import annotations
@@ -35,21 +36,21 @@ class GatewayEnvelope:
 
     def __post_init__(self) -> None:
         if not self.id.strip() or len(self.id) > 128:
-            raise GatewayProtocolError("invalid_id", "Envelope id is invalid.")
+            raise GatewayProtocolError("invalid_id", t("error.invalid_envelope_id"))
         parts = self.type.split(".", 1)
         if len(parts) != 2 or parts[0] not in ALLOWED_NAMESPACES or not parts[1]:
-            raise GatewayProtocolError("invalid_type", "Envelope type is unsupported.")
+            raise GatewayProtocolError("invalid_type", t("error.invalid_envelope_type"))
         try:
             parsed = datetime.fromisoformat(self.timestamp.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise GatewayProtocolError("invalid_timestamp", "Timestamp is invalid.") from exc
+            raise GatewayProtocolError("invalid_timestamp", t("error.invalid_timestamp")) from exc
         if parsed.tzinfo is None:
-            raise GatewayProtocolError("invalid_timestamp", "Timestamp needs a timezone.")
+            raise GatewayProtocolError("invalid_timestamp", t("error.timestamp_no_tz"))
         for name, value in (("session_id", self.session_id), ("request_id", self.request_id)):
             if value is not None and (not value.strip() or len(value) > 128):
                 raise GatewayProtocolError(f"invalid_{name}", f"{name} is invalid.")
         if not isinstance(self.payload, Mapping):
-            raise GatewayProtocolError("invalid_payload", "Payload must be an object.")
+            raise GatewayProtocolError("invalid_payload", t("error.invalid_payload"))
         object.__setattr__(self, "payload", MappingProxyType(dict(self.payload)))
 
     def to_dict(self) -> dict[str, object]:
@@ -64,30 +65,30 @@ class GatewayEnvelope:
             self.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
         if len(raw) > MAX_ENVELOPE_BYTES:
-            raise GatewayProtocolError("oversized_frame", "Envelope is too large.")
+            raise GatewayProtocolError("oversized_frame", t("error.oversized_frame"))
         return raw
 
     @classmethod
     def from_json(cls, raw: bytes | str) -> "GatewayEnvelope":
         encoded = raw.encode("utf-8") if isinstance(raw, str) else raw
         if len(encoded) > MAX_ENVELOPE_BYTES:
-            raise GatewayProtocolError("oversized_frame", "Envelope is too large.")
+            raise GatewayProtocolError("oversized_frame", t("error.oversized_frame"))
         try:
             value = json.loads(encoded)
         except (UnicodeError, json.JSONDecodeError) as exc:
-            raise GatewayProtocolError("malformed_frame", "Malformed Gateway frame.") from exc
+            raise GatewayProtocolError("malformed_frame", t("error.malformed_frame")) from exc
         if not isinstance(value, dict):
-            raise GatewayProtocolError("malformed_frame", "Envelope must be an object.")
+            raise GatewayProtocolError("malformed_frame", t("error.malformed_frame_object"))
         required = {"id", "type", "timestamp", "session_id", "request_id", "payload"}
         if set(value) != required:
-            raise GatewayProtocolError("malformed_frame", "Envelope fields are invalid.")
+            raise GatewayProtocolError("malformed_frame", t("error.malformed_frame_fields"))
         if not all(isinstance(value[key], str) for key in ("id", "type", "timestamp")):
-            raise GatewayProtocolError("malformed_frame", "Envelope fields have invalid types.")
+            raise GatewayProtocolError("malformed_frame", t("error.malformed_frame_types"))
         for key in ("session_id", "request_id"):
             if value[key] is not None and not isinstance(value[key], str):
                 raise GatewayProtocolError("malformed_frame", f"{key} has invalid type.")
         if not isinstance(value["payload"], dict):
-            raise GatewayProtocolError("malformed_frame", "Payload must be an object.")
+            raise GatewayProtocolError("malformed_frame", t("error.invalid_payload"))
         return cls(**value)
 
 

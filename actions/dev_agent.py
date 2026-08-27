@@ -1,4 +1,5 @@
-import subprocess
+import subprocessfrom i18n import t
+
 import sys
 import json
 import re
@@ -23,7 +24,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 
@@ -142,7 +143,7 @@ JSON:"""
         raw = _strip_fences(response.text)
         return json.loads(raw)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Planner returned invalid JSON: {e}\nRaw: {response.text[:300]}")
+        raise ValueError(t("planner.plan_json_failed", e=str(e)))
     except Exception as e:
         if _is_rate_limit(e):
             raise RateLimitError(str(e))

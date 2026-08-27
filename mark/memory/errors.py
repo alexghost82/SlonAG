@@ -1,3 +1,4 @@
+from i18n import t
 """Structured memory-store error codes.
 
 Messages must never include API keys, tokens, passwords, or card numbers.

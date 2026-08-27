@@ -1,3 +1,4 @@
+from i18n import t
 """MCP integration with SlonAG AgentLoop, ToolRegistry and SafetyPolicy.
 
 MCP tools flow through the canonical execution pipeline:
@@ -111,7 +112,7 @@ class McpIntegration:
     async def discover_tools(self) -> list[McpToolSpec]:
         """Discover tools from the MCP server and register them."""
         if self.client is None:
-            raise RuntimeError("MCP client not started")
+            raise RuntimeError(t("error.mcp_client_not_started"))
 
         specs = await self.client.discover_tools()
 

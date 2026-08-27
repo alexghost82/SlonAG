@@ -1,3 +1,4 @@
+from i18n import t
 """Gateway composition without creating a second RuntimeStack or SessionStore."""
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ def build_gateway(
         raise GatewayConfigurationError("gateway_signing_key is too short")
     manager = getattr(runtime_stack, "session_manager", None)
     if manager is None:
-        raise GatewayConfigurationError("RuntimeStack SessionManager is required")
+        raise GatewayConfigurationError(t("error.runtime_stack_required"))
     return SlonGateway(
         database_path=root / "memory" / "slon_gateway.sqlite3",
         artifact_root=root / "memory" / "gateway_artifacts",

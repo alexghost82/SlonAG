@@ -1,3 +1,4 @@
+from i18n import t
 import sys
 import time
 import base64
@@ -22,7 +23,7 @@ def _load_api_key() -> str:
 
     key = get_secret("openrouter_api_key")
     if key is None:
-        raise RuntimeError("OpenRouter API key is not configured.")
+        raise RuntimeError(t("error.openrouter_key_missing"))
     return key
 
 TEXT_MODELS: list[str] = [

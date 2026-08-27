@@ -1,5 +1,6 @@
 #flight_finder.py
-import json
+import jsonfrom i18n import t
+
 import re
 import subprocess
 import sys

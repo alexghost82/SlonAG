@@ -1,3 +1,4 @@
+from i18n import t
 """MCP Streamable HTTP transport using the official MCP SDK.
 
 Wraps mcp.client.streamable_http.streamable_http_client to provide
@@ -107,7 +108,7 @@ class McpStreamableHttpTransport:
                     pass
 
         except Exception as exc:
-            raise RuntimeError(f"Ошибка подключения Streamable HTTP: {exc}") from exc
+            raise RuntimeError(t("mcp.session_failed", exc=str(exc))) from exc
 
     async def _reader_loop(self, read_stream: Any) -> None:
         """Read SSE messages from server and dispatch JSON-RPC responses."""

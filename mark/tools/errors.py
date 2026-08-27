@@ -1,3 +1,4 @@
+from i18n import t
 """Structured errors raised by the canonical tool runtime."""
 
 from __future__ import annotations

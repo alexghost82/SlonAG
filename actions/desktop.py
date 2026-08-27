@@ -1,6 +1,7 @@
 """Closed set of typed desktop operations. No exec sandbox."""
 
-from __future__ import annotations
+from __future__ import annotationsfrom i18n import t
+
 
 import os
 import platform

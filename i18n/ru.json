@@ -5,7 +5,9 @@
     "thinking": "Думаю",
     "speaking": "Говорю",
     "processing": "Обрабатываю",
-    "muted": "Микрофон выключен"
+    "muted": "Микрофон выключен",
+    "connected": "Подключено",
+    "disconnected": "Отключено"
   },
   "setup": {
     "title": "Требуется инициализация",
@@ -33,7 +35,49 @@
     "confirm_delete": "Удалить {name}?"
   },
   "error": {
-    "unknown_tool": "Неизвестный инструмент"
+    "unknown_tool": "Неизвестный инструмент",
+    "gemini_key_missing": "Ключ Gemini API не настроен.",
+    "openrouter_key_missing": "Ключ OpenRouter API не настроен.",
+    "tool_execution_failed": "Выполнение инструмента завершилось ошибкой ({code}).",
+    "no_provider_configured": "Провайдер чата не настроен.",
+    "no_tool_executor": "Тукл-экzekьютор не предоставлен и не может быть построен.",
+    "unsupported_tool_executor": "Неподдерживаемый тип тул-экzekьютора: {type}",
+    "model_info_missing": "Gemini Live требует аудио-способную модель Gemini.",
+    "invalid_plan_structure": "Недопустимая структура плана.",
+    "gemini_empty_response": "Gemini вернул пустой ответ.",
+    "camera_open_failed": "Камера не может быть открыта: индекс {index}.",
+    "camera_capture_failed": "Не удалось сделать снимок с камеры.",
+    "vision_session_timeout": "Сессия зрения не запустилась в течение 20с.",
+    "pyautogui_missing": "PyAutoGUI не установлен. Выполните: pip install pyautogui",
+    "browser_thread_not_started": "BrowserThread не запущен.",
+    "unsupported_reminder_os": "Неподдерживаемая ОС напоминаний: {raw}",
+    "dialog_not_found": "Диалог не найден",
+    "runtime_stack_required": "RuntimeStack SessionManager обязателен",
+    "mcp_client_not_started": "MCP клиент не запущен",
+    "mcp_init_failed": "MCP инициализация не удалась: {exc}",
+    "mcp_discovery_failed": "Обнаружение инструментов MCP не удалось: {exc}",
+    "invalid_envelope_id": "Envelope id невалиден.",
+    "invalid_envelope_type": "Envelope type не поддерживается.",
+    "invalid_timestamp": "Время невалидно.",
+    "timestamp_no_tz": "Время требует часового пояса.",
+    "invalid_payload": "Payload должен быть объектом.",
+    "oversized_frame": "Envelope слишком большой.",
+    "malformed_frame": "Некорректный Gateway фрейм.",
+    "malformed_frame_object": "Envelope должен быть объектом.",
+    "malformed_frame_fields": "Поля Envelope невалидны.",
+    "malformed_frame_types": "Типы полей Envelope невалидны.",
+    "incomplete_ws_frame": "Неполный WebSocket фрейм.",
+    "fragmented_frames": "Фрагментированные фреймы не поддерживаются.",
+    "unsupported_opcode": "Неподдерживаемый WebSocket opcode.",
+    "client_frame_must_be_masked": "Клиентские фреймы должны быть маскированы.",
+    "incomplete_frame_length": "Неполная длина фрейма.",
+    "control_frame_too_large": "Контрольный фрейм слишком большой.",
+    "frame_too_large": "WebSocket фрейм слишком большой.",
+    "frame_size_mismatch": "Несоответствие размера WebSocket фрейма.",
+    "transport_stopped": "Транспорт уже остановлен",
+    "streamable_http_requires_url": "STREAMABLE_HTTP-транспорт требует URL",
+    "stdio_requires_command": "MCP stdio-транспорт требует непустую команду",
+    "subprocess_no_stdin_stdout": "MCP subprocess открыт без stdin или stdout"
   },
   "api": {
     "ok": "Запрос принят.",
@@ -45,5 +89,103 @@
     "approval_required": "Изменение требует подтверждения безопасности.",
     "idempotency_conflict": "Ключ идемпотентности использован с другим телом.",
     "unknown": "Desktop Control API отклонил запрос."
+  },
+  "agent": {
+    "max_tool_calls": "Достигнуто максимальное число вызовов инструментов ({n}).",
+    "max_turns": "Достигнуто максимальное число ходов ({n}).",
+    "timeout_exceeded": "Таймаут ({s}с) превышен.",
+    "oscillating_pattern": "Обнаружена осциллирующая паттерн вызовов.",
+    "zero_progress_loop": "Обнаружена петля с нулевым прогрессом.",
+    "cancelled": "Отменено сигналом управления.",
+    "completed": "Завершено успешно.",
+    "interrupted": "Выполнение прервано.",
+    "tool_timed_out": "Выполнение инструмента истекло по таймауту."
+  },
+  "actions": {
+    "whatsapp_error": "Ошибка WhatsApp: {msg}",
+    "whatsapp_cannot_open": "Не удалось открыть WhatsApp.",
+    "message_sent": "Сообщение отправлено: {to}",
+    "search_done": "Поиск завершён.",
+    "video_search_done": "Поиск видео завершён.",
+    "video_summary_done": "Саммари видео завершено.",
+    "plan_steps": "План: {n} шагов",
+    "plan_step": "Шаг {step}: [{tool}] {desc}",
+    "plan_json_failed": "JSON парсинг не удался: {e}",
+    "plan_failed": "Планирование не удалось: {e}",
+    "fallback_plan": "Альтернативный план",
+    "fix_failed": "Исправление не удалось: {err}",
+    "translating_to": "Перевод на: {lang}",
+    "translation_done": "Перевод завершён ({lang})",
+    "translation_failed": "Перевод не удался: {e}",
+    "injecting_translated": "Внедрён переводимый контент",
+    "skipping_step": "Пропуск шага {step}",
+    "installing_reqs": "Установка зависимостей из {req_name}...",
+    "installing_playwright": "Установка браузеров Playwright...",
+    "session_ready": "Сессия готова — {t:.2f}с",
+    "sent_incoming": "Отправлено — {t:.3f}с | входящее аудио…",
+    "slon_speaking": "Slon: {text}",
+    "updating_game": "Обновление игры…",
+    "game_update_cancelled": "Обновление отменено пользователем.",
+    "steam_check_failed": "Не удалось проверить Steam: {err}",
+    "game_not_found": "Игра не найдена."
+  },
+  "gateway": {
+    "frame_incomplete": "Неполный фрейм.",
+    "frame_fragmented": "Фрагментированные фреймы не поддерживаются.",
+    "frame_opcode": "Неподдерживаемый opcode.",
+    "frame_unmasked": "Клиентский фрейм должен быть маскирован.",
+    "frame_length": "Неполная длина.",
+    "frame_control_large": "Контрольный фрейм слишком большой.",
+    "frame_too_large": "Фрейм слишком большой.",
+    "frame_size": "Несоответствие размера."
+  },
+  "mcp": {
+    "transport_stopped": "Транспорт уже остановлен",
+    "transport_not_connected": "Транспорт не подключён",
+    "not_initialized": "MCP не инициализирован",
+    "session_failed": "Ошибка подключения Streamable HTTP: {exc}"
+  },
+  "bridge": {
+    "unavailable": "Мост недоступен: {exc}",
+    "memory_loaded": "Память загружена: {keys}",
+    "memory_error": "Ошибка памяти: {exc}"
+  },
+  "planner": {
+    "plan_created": "План: {n} шагов",
+    "plan_step": "Шаг {step}: [{tool}] {desc}",
+    "plan_json_failed": "JSON парсинг не удался: {e}",
+    "plan_failed": "Планирование не удалось: {e}",
+    "fallback_plan": "Альтернативный план",
+    "plan_revised": "План пересмотрен: {n} шагов",
+    "replan_failed": "Перепланирование не удалось: {e}"
+  },
+  "ui": {
+    "base_url_placeholder": "Базовый URL (кастомная точка)…"
+  },
+  "tools": {
+    "unknown": "Неизвестный инструмент",
+    "registry_empty": "Registry пуст.",
+    "already_registered": "Инструмент уже зарегистрирован: {name}"
+  },
+  "safety": {
+    "policy_violation": "Нарушение политики безопасности.",
+    "source_not_recognized": "Источник не распознан: {source}"
+  },
+  "network": {
+    "request_denied": "Запрос отклонён политикой сети.",
+    "host_blocked": "Хост заблокирован: {host}"
+  },
+  "memory": {
+    "store_error": "Ошибка хранилища памяти.",
+    "policy_error": "Ошибка политики памяти."
+  },
+  "documents": {
+    "bad_mime": "Неподдерживаемый MIME-тип.",
+    "path_traversal": "Обнаружена попытка обхода пути.",
+    "zip_bomb": "Обнаружена zip-бомба."
+  },
+  "speech": {
+    "tts_unavailable": "Локальный TTS недоступен.",
+    "tts_ready": "Локальный TTS готов."
   }
 }

@@ -1,3 +1,4 @@
+from i18n import t
 """Structured document-ingest error codes.
 
 Messages must never include API keys, tokens, file payloads, or other secrets.

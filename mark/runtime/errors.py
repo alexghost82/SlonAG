@@ -1,3 +1,4 @@
+from i18n import t
 """Structured local-runtime error codes and Russian messages.
 
 Messages live in this package so the manager does not edit i18n catalogs.

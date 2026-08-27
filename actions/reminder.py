@@ -1,6 +1,7 @@
 """Schedule reminders from a JSON store. Never interpolates user text into Python."""
 
-from __future__ import annotations
+from __future__ import annotationsfrom i18n import t
+
 
 import json
 import os
@@ -154,7 +155,7 @@ def _normalize_os(os_name: str | None) -> str:
     raw = (os_name if os_name is not None else platform.system()).strip().lower()
     backend = _OS_ALIASES.get(raw)
     if backend is None:
-        raise RuntimeError(f"Unsupported reminder OS: {raw}")
+        raise RuntimeError(t("error.unsupported_reminder_os", raw=raw))
     return backend
 
 

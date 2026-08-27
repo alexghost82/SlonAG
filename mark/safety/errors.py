@@ -1,3 +1,4 @@
+from i18n import t
 """Structured safety-policy error codes.
 
 Messages must never include API keys, tokens, passwords, URLs with

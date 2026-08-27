@@ -12,6 +12,7 @@ from typing import Any
 
 from agent.observation import Observation, ObservationKind
 from agent.latency import LatencyTrace
+from i18n import t
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from mark.tools.contracts import ToolResult
 from providers.contracts import (
@@ -477,7 +478,7 @@ class AgentLoop:
 
     async def _call_provider(self, messages: list[ConversationMessage]) -> ChatResponse:
         if self.provider is None:
-            raise RuntimeError("No ChatProvider configured")
+            raise RuntimeError(t("error.no_provider_configured"))
         specs = getattr(
             getattr(self.tool_executor, "registry", None), "list", lambda: ()
         )()
@@ -507,7 +508,7 @@ class AgentLoop:
 
                 executor = ToolExecutor(build_builtin_registry(), SafetyPolicy())
             except Exception:
-                raise RuntimeError("No tool_executor provided and default cannot be built.")
+                raise RuntimeError(t("error.no_tool_executor"))
 
         if hasattr(executor, "execute_async"):
             from mark.safety import UntrustedSource
@@ -535,7 +536,7 @@ class AgentLoop:
         elif callable(executor):
             res = executor(tool_name, args)
         else:
-            raise RuntimeError(f"Unsupported tool_executor type: {type(executor)}")
+            raise RuntimeError(t("error.unsupported_tool_executor", type=type(executor).__name__))
 
         if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
             res = await res

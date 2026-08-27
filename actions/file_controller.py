@@ -1,7 +1,8 @@
 # actions/file_controller.py
 # File management — allowlisted canonical paths, confirmed mutations, trash-only delete.
 
-from __future__ import annotations
+from __future__ import annotationsfrom i18n import t
+
 
 import shutil
 from collections.abc import Callable, Sequence

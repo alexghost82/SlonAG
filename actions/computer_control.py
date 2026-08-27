@@ -1,5 +1,6 @@
 #computer_control.py
-import io
+import iofrom i18n import t
+
 import json
 import re
 import string
@@ -57,7 +58,7 @@ def _safe_screenshot_path(requested: str | None) -> Path:
 
 def _require_pyautogui():
     if not _PYAUTOGUI:
-        raise RuntimeError("PyAutoGUI not installed. Run: pip install pyautogui")
+        raise RuntimeError(t("error.pyautogui_missing"))
 
 _FIRST_NAMES = [
     "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Drew", "Quinn",

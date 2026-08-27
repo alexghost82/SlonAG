@@ -5,7 +5,9 @@
     "thinking": "Thinking",
     "speaking": "Speaking",
     "processing": "Processing",
-    "muted": "Muted"
+    "muted": "Muted",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
   },
   "setup": {
     "title": "Initialisation required",
@@ -33,7 +35,49 @@
     "confirm_delete": "Delete {name}?"
   },
   "error": {
-    "unknown_tool": "Unknown tool"
+    "unknown_tool": "Unknown tool",
+    "gemini_key_missing": "Gemini API key is not configured.",
+    "openrouter_key_missing": "OpenRouter API key is not configured.",
+    "tool_execution_failed": "Tool execution failed ({code}).",
+    "no_provider_configured": "No ChatProvider configured.",
+    "no_tool_executor": "No tool_executor provided and default cannot be built.",
+    "unsupported_tool_executor": "Unsupported tool_executor type: {type}",
+    "model_info_missing": "Gemini Live requires an audio-capable Gemini ModelInfo.",
+    "invalid_plan_structure": "Invalid plan structure.",
+    "gemini_empty_response": "Gemini returned an empty response.",
+    "camera_open_failed": "Camera could not be opened: index {index}.",
+    "camera_capture_failed": "Could not capture camera frame.",
+    "vision_session_timeout": "Vision session did not start within 20s.",
+    "pyautogui_missing": "PyAutoGUI not installed. Run: pip install pyautogui",
+    "browser_thread_not_started": "BrowserThread not started.",
+    "unsupported_reminder_os": "Unsupported reminder OS: {raw}",
+    "dialog_not_found": "Dialog not found",
+    "runtime_stack_required": "RuntimeStack SessionManager is required",
+    "mcp_client_not_started": "MCP client not started",
+    "mcp_init_failed": "MCP initialization failed: {exc}",
+    "mcp_discovery_failed": "Tool discovery failed: {exc}",
+    "invalid_envelope_id": "Envelope id is invalid.",
+    "invalid_envelope_type": "Envelope type is unsupported.",
+    "invalid_timestamp": "Timestamp is invalid.",
+    "timestamp_no_tz": "Timestamp needs a timezone.",
+    "invalid_payload": "Payload must be an object.",
+    "oversized_frame": "Envelope is too large.",
+    "malformed_frame": "Malformed Gateway frame.",
+    "malformed_frame_object": "Envelope must be an object.",
+    "malformed_frame_fields": "Envelope fields are invalid.",
+    "malformed_frame_types": "Envelope fields have invalid types.",
+    "incomplete_ws_frame": "Incomplete WebSocket frame.",
+    "fragmented_frames": "Fragmented frames are unsupported.",
+    "unsupported_opcode": "Unsupported WebSocket opcode.",
+    "client_frame_must_be_masked": "Client frames must be masked.",
+    "incomplete_frame_length": "Incomplete frame length.",
+    "control_frame_too_large": "WebSocket control frame is too large.",
+    "frame_too_large": "WebSocket frame is too large.",
+    "frame_size_mismatch": "WebSocket frame size mismatch.",
+    "transport_stopped": "Transport already stopped",
+    "streamable_http_requires_url": "STREAMABLE_HTTP transport requires a URL",
+    "stdio_requires_command": "MCP stdio transport requires a non-empty command",
+    "subprocess_no_stdin_stdout": "MCP subprocess opened without stdin or stdout"
   },
   "api": {
     "ok": "Request accepted.",
@@ -45,5 +89,103 @@
     "approval_required": "Mutating operation requires safety approval.",
     "idempotency_conflict": "Idempotency key was reused with a different body.",
     "unknown": "Desktop Control API rejected the request."
+  },
+  "agent": {
+    "max_tool_calls": "Max tool calls ({n}) reached.",
+    "max_turns": "Max turns ({n}) reached.",
+    "timeout_exceeded": "Timeout ({s}s) exceeded.",
+    "oscillating_pattern": "Detected oscillating call pattern.",
+    "zero_progress_loop": "Detected zero-progress repetition loop.",
+    "cancelled": "Cancelled by steering signal.",
+    "completed": "Completed successfully.",
+    "interrupted": "Execution was interrupted.",
+    "tool_timed_out": "Tool execution timed out."
+  },
+  "actions": {
+    "whatsapp_error": "WhatsApp error: {msg}",
+    "whatsapp_cannot_open": "Could not open WhatsApp.",
+    "message_sent": "Message sent to: {to}",
+    "search_done": "Search complete.",
+    "video_search_done": "Video search complete.",
+    "video_summary_done": "Video summary complete.",
+    "plan_steps": "Plan: {n} steps",
+    "plan_step": "Step {step}: [{tool}] {desc}",
+    "plan_json_failed": "JSON parse failed: {e}",
+    "plan_failed": "Planning failed: {e}",
+    "fallback_plan": "Fallback plan",
+    "fix_failed": "Fix failed: {err}",
+    "translating_to": "Translating to: {lang}",
+    "translation_done": "Translation done ({lang})",
+    "translation_failed": "Translation failed: {e}",
+    "injecting_translated": "Injected + translated content",
+    "skipping_step": "Skipping step {step}",
+    "installing_reqs": "Installing requirements from {req_name}...",
+    "installing_playwright": "Installing Playwright browsers...",
+    "session_ready": "Session ready — {t:.2f}s",
+    "sent_incoming": "Sent — {t:.3f}s | audio incoming...",
+    "slon_speaking": "Slon: {text}",
+    "updating_game": "Updating game…",
+    "game_update_cancelled": "Update cancelled by user.",
+    "steam_check_failed": "Failed to check Steam: {err}",
+    "game_not_found": "Game not found."
+  },
+  "gateway": {
+    "frame_incomplete": "Incomplete frame.",
+    "frame_fragmented": "Fragmented frames are unsupported.",
+    "frame_opcode": "Unsupported opcode.",
+    "frame_unmasked": "Client frame must be masked.",
+    "frame_length": "Incomplete length.",
+    "frame_control_large": "Control frame too large.",
+    "frame_too_large": "Frame too large.",
+    "frame_size": "Size mismatch."
+  },
+  "mcp": {
+    "transport_stopped": "Transport already stopped",
+    "transport_not_connected": "Transport not connected",
+    "not_initialized": "MCP not initialized",
+    "session_failed": "Streamable HTTP connection error: {exc}"
+  },
+  "bridge": {
+    "unavailable": "Bridge unavailable: {exc}",
+    "memory_loaded": "Memory loaded: {keys}",
+    "memory_error": "Memory error: {exc}"
+  },
+  "planner": {
+    "plan_created": "Plan: {n} steps",
+    "plan_step": "Step {step}: [{tool}] {desc}",
+    "plan_json_failed": "JSON parse failed: {e}",
+    "plan_failed": "Planning failed: {e}",
+    "fallback_plan": "Fallback plan",
+    "plan_revised": "Revised plan: {n} steps",
+    "replan_failed": "Replan failed: {e}"
+  },
+  "ui": {
+    "base_url_placeholder": "Base URL (custom endpoint)…"
+  },
+  "tools": {
+    "unknown": "Unknown tool",
+    "registry_empty": "Registry empty.",
+    "already_registered": "Tool already registered: {name}"
+  },
+  "safety": {
+    "policy_violation": "Safety policy violation.",
+    "source_not_recognized": "Source not recognized: {source}"
+  },
+  "network": {
+    "request_denied": "Request denied by network policy.",
+    "host_blocked": "Host blocked: {host}"
+  },
+  "memory": {
+    "store_error": "Memory store error.",
+    "policy_error": "Memory policy error."
+  },
+  "documents": {
+    "bad_mime": "Unsupported MIME type.",
+    "path_traversal": "Path traversal attempt detected.",
+    "zip_bomb": "Zip bomb detected."
+  },
+  "speech": {
+    "tts_unavailable": "Local TTS unavailable.",
+    "tts_ready": "Local TTS ready."
   }
 }

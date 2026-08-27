@@ -1,7 +1,8 @@
 # actions/open_app.py
 # Slon — Cross-Platform App Launcher
 
-import time
+import timefrom i18n import t
+
 import subprocess
 import platform
 import shutil

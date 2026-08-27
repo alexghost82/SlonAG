@@ -1,4 +1,5 @@
-import asyncio
+import asynciofrom i18n import t
+
 import threading
 import concurrent.futures
 import platform
@@ -180,7 +181,7 @@ class _BrowserThread:
 
     def run(self, coro, timeout: int = 30):
         if not self._loop:
-            raise RuntimeError("BrowserThread not started.")
+            raise RuntimeError(t("error.browser_thread_not_started"))
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result(timeout=timeout)
 

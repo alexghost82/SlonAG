@@ -16,7 +16,8 @@ Supported types:
   pptx    → summarize, extract_text, to_pdf
 """
 
-import os
+import osfrom i18n import t
+
 import re
 import json
 import shutil
@@ -33,7 +34,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 

@@ -1,5 +1,6 @@
 #web_search.py
-import json
+import jsonfrom i18n import t
+
 import sys
 from pathlib import Path
 
@@ -15,7 +16,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 
@@ -36,7 +37,7 @@ def _gemini_search(query: str) -> str:
 
     text = text.strip()
     if not text:
-        raise ValueError("Gemini returned an empty response.")
+        raise ValueError(t("error.gemini_empty_response"))
     return text
 
 

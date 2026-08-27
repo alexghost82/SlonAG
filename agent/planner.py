@@ -71,7 +71,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 
@@ -101,7 +101,7 @@ def create_plan(
         plan = json.loads(text)
 
         if "steps" not in plan or not isinstance(plan["steps"], list):
-            raise ValueError("Invalid plan structure")
+            raise ValueError(t("error.invalid_plan_structure"))
 
         for step in plan["steps"]:
             if step.get("tool") in ("generated_code",):
@@ -113,22 +113,22 @@ def create_plan(
                 step["tool"] = "web_search"
                 step["parameters"] = {"query": desc[:200]}
 
-        print(f"[Planner] ✅ Plan: {len(plan['steps'])} steps")
+        print(t("planner.plan_created", n=len(plan["steps"])))
         for s in plan["steps"]:
-            print(f"  Step {s['step']}: [{s['tool']}] {s['description']}")
+            print(f"  {t("planner.plan_step", step=s["step"], tool=s["tool"], desc=s['description'])}")
 
         return plan
 
     except json.JSONDecodeError as e:
-        print(f"[Planner] ⚠️ JSON parse failed: {e}")
+        print(t("planner.plan_json_failed", e=str(e)))
         return _fallback_plan(goal)
     except Exception as e:
-        print(f"[Planner] ⚠️ Planning failed: {e}")
+        print(t("planner.plan_failed", e=str(e)))
         return _fallback_plan(goal)
 
 
 def _fallback_plan(goal: str) -> dict:
-    print("[Planner] 🔄 Fallback plan")
+    print(t("planner.fallback_plan"))
     return {
         "goal": goal,
         "steps": [
@@ -184,8 +184,8 @@ Create a REVISED plan for the remaining work only. Do not repeat completed steps
                 step["tool"] = "web_search"
                 step["parameters"] = {"query": step.get("description", goal)[:200]}
 
-        print(f"[Planner] 🔄 Revised plan: {len(plan['steps'])} steps")
+        print(t("planner.plan_revised", n=len(plan["steps"])))
         return plan
     except Exception as e:
-        print(f"[Planner] ⚠️ Replan failed: {e}")
+        print(t("planner.replan_failed", e=str(e)))
         return _fallback_plan(goal)

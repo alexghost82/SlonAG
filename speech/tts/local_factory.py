@@ -1,3 +1,4 @@
+from i18n import t
 """Build a Piper-backed ``LocalTTSProvider`` for the desktop UI.
 
 Resolves binary/model paths under ``models/piper/`` (see ``piper.py``).

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from i18n import t
 
 from dataclasses import replace
 import base64
@@ -1437,7 +1438,7 @@ class MainWindow(QMainWindow):
 
         # ── Base URL input ──
         self._base_url_input = QLineEdit()
-        self._base_url_input.setPlaceholderText("Base URL (custom endpoint)...")
+        self._base_url_input.setPlaceholderText(t("ui.base_url_placeholder"))
         self._base_url_input.setFont(QFont("Courier New", 8))
         self._base_url_input.setFixedHeight(26)
         self._base_url_input.returnPressed.connect(self._on_base_url_changed)
@@ -1527,7 +1528,7 @@ class MainWindow(QMainWindow):
             self._update_status("load_settings: error")
 
     def _update_status(self, msg: str) -> None:
-        self._status_lbl.setText(f"STATUS: {msg}")
+        self._status_lbl.setText(f"{t("status.connected")}: {msg}")
 
     def _on_provider_changed(self, _text: str) -> None:
         self._update_status(f"provider changed to {_text}")

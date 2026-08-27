@@ -5,7 +5,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
+from agent.runtime import AgentLoop
+from i18n import t, AgentLoopResult, LoopBudget
 from agent.steering import SteeringQueue
 from mark.safety import (
     SafetyDecision,
@@ -45,7 +46,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 
@@ -68,7 +69,7 @@ def _inject_context(
                 combined = "\n\n---\n\n".join(all_results)
                 translated = _translate_to_goal_language(combined, goal)
                 params["content"] = translated
-                print("[Executor] 💉 Injected + translated content")
+                print(t("actions.injecting_translated"))
 
     return params
 
@@ -100,7 +101,7 @@ def _translate_to_goal_language(content: str, goal: str) -> str:
         model = genai.GenerativeModel("gemini-2.5-flash")
 
         target_lang = _detect_language(goal)
-        print(f"[Executor] 🌐 Translating to: {target_lang}")
+        print(t("actions.translating_to", lang=target_lang))
 
         prompt = (
             f"You are a professional translator. "
@@ -114,10 +115,10 @@ def _translate_to_goal_language(content: str, goal: str) -> str:
         )
         response = model.generate_content(prompt)
         translated = response.text.strip()
-        print(f"[Executor] ✅ Translation done ({target_lang})")
+        print(t("actions.translation_done", lang=target_lang))
         return translated
     except Exception as e:
-        print(f"[Executor] ⚠️ Translation failed: {e}")
+        print(t("actions.translation_failed", e=str(e)))
         return content
 
 
@@ -142,7 +143,7 @@ def _legacy_result(tool: str, result: ToolResult) -> str:
             raise ToolDeniedError(tool, result.message)
         if result.code == "unknown_tool":
             raise UnknownToolError(tool)
-        raise RuntimeError(result.message or f"Tool execution failed ({result.code}).")
+        raise RuntimeError(t("error.tool_execution_failed", code=str(result.code)))
     if result.message:
         return result.message
     if result.data is None:
@@ -222,7 +223,7 @@ class AgentExecutor:
         from agent.error_handler import ErrorDecision, analyze_error, generate_fix
         from agent.planner import create_plan, replan
 
-        print(f"\n[Executor] 🎯 Goal: {goal}")
+        print(f"\n[Executor] {goal}")
 
         replan_attempts = 0
         completed_steps = []
@@ -255,7 +256,7 @@ class AgentExecutor:
 
                 params = _inject_context(params, tool, step_results, goal=goal)
 
-                print(f"\n[Executor] ▶️ Step {step_num}: [{tool}] {desc}")
+                print(f"\n[Executor] {t("planner.plan_step", step=step_num, tool=tool, desc=desc)}")
 
                 attempt = 1
                 step_ok = False
@@ -294,7 +295,7 @@ class AgentExecutor:
                             continue
 
                         elif decision == ErrorDecision.SKIP:
-                            print(f"[Executor] ⏭️ Skipping step {step_num}")
+                            print(f"[Executor] {t("actions.skipping_step", step=step_num)}")
                             completed_steps.append(step)
                             step_ok = True
                             break
@@ -325,7 +326,7 @@ class AgentExecutor:
                                     step_ok = True
                                     break
                                 except Exception as fix_err:
-                                    print(f"[Executor] ⚠️ Fix failed: {fix_err}")
+                                    print(f"[Executor] {t("actions.fix_failed", err=str(fix_err))}")
 
                             failed_step = step
                             failed_error = error_msg

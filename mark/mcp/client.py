@@ -1,3 +1,4 @@
+from i18n import t
 """MCP client with full lifecycle management for SlonAG."""
 
 from __future__ import annotations
@@ -155,7 +156,7 @@ class McpClient:
             self._initialized = True
 
         except Exception as exc:
-            raise RuntimeError(f"MCP initialization failed: {exc}") from exc
+            raise RuntimeError(t("mcp.session_failed", exc=str(exc))) from exc
 
     async def discover_tools(self) -> list[McpToolSpec]:
         """List all tools exposed by the MCP server."""
@@ -196,7 +197,7 @@ class McpClient:
             return list(tools.values())
         except Exception as exc:
             self._tools = {}
-            raise RuntimeError(f"Tool discovery failed: {exc}") from exc
+            raise RuntimeError(t("error.mcp_discovery_failed", exc=str(exc))) from exc
 
     def _qualified_name(self, name: str) -> str:
         """Add server name prefix to avoid namespace collisions."""

@@ -15,6 +15,7 @@ from memory.memory_manager import (
 )
 from config.settings import load_settings
 from config.schema import Settings
+from i18n import t
 
 # New-stack bridge (Wave 13); optional — never break legacy Gemini Live.
 try:
@@ -51,7 +52,7 @@ def _get_api_key() -> str:
 
     key = get_secret("gemini_api_key")
     if key is None:
-        raise RuntimeError("Gemini API key is not configured.")
+        raise RuntimeError(t("error.gemini_key_missing"))
     return key
 
 
@@ -109,7 +110,7 @@ def _build_stack():
             key_provider=_key_provider,
         )
     except Exception as exc:
-        print(f"[Bridge] unavailable: {type(exc).__name__}")
+        print(f"[Bridge] {t("bridge.unavailable", exc=type(exc).__name__)}")
         return None
 
 
@@ -141,10 +142,10 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
         data = extract_memory(user_text, assistant_text, api_key)
         if data:
             update_memory(data)
-            print(f"[Memory] ✅ {list(data.keys())}")
+            print(f"[Memory] ✅ {t("bridge.memory_loaded", keys=list(data.keys()))}")
     except Exception as exc:
         if "429" not in str(exc):
-            print(f"[Memory] ⚠️ {type(exc).__name__}")
+            print(f"[Memory] ⚠️ {t("bridge.memory_error", exc=type(exc).__name__)}")
 
 from mark.tools.exporters.gemini import export_gemini_tools
 from agent.latency import TurnLatencyTracker
@@ -177,7 +178,7 @@ class SlonLive:
         if selected_model.provider_id != "gemini" or not (
             selected_model.audio_input and selected_model.audio_output
         ):
-            raise ValueError("Gemini Live requires an audio-capable Gemini ModelInfo")
+            raise ValueError(t("error.model_info_missing"))
         self.selected_model = selected_model
         self.workspace_id = workspace_id
         session_manager = getattr(runtime_stack, "session_manager", None)
@@ -430,7 +431,7 @@ class SlonLive:
         else:
             response = {"error": result.message, "code": result.code}
             self.ui.write_log(
-                f"ERR: {name} — {str(result.message or result.code)[:120]}"
+                f"{t("error.tool_execution_failed", code=name)}: {str(result.message or result.code)[:120]}"
             )
         print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
         self.latency_trace.mark("observation_returned")
@@ -446,7 +447,7 @@ class SlonLive:
                 # suppress its native response or invite a provider retry just
                 # because durable recording failed afterward.
                 self.ui.write_log(
-                    f"ERR: durable tool result unavailable ({type(exc).__name__})"
+                    f"{t("error.tool_execution_failed", code="durable_record")}: {type(exc).__name__}"
                 )
         self._emit_event(
             RuntimeEventKind.TOOL_FINISHED,
@@ -498,7 +499,7 @@ class SlonLive:
                     await self._persist_tool_result(call, result, value)
                 except Exception as exc:
                     self.ui.write_log(
-                        f"ERR: durable tool result unavailable ({type(exc).__name__})"
+                        f"{t("error.tool_execution_failed", code="durable_record")}: {type(exc).__name__}"
                     )
             return responses
         results = []
@@ -712,8 +713,8 @@ def _run_chat_agent(ui, settings, stack=None):
             try:
                 provider_instance = router._resolve(provider_id)
             except Exception as exc:  # pragma: no cover - needs api key
-                ui.write_log(f"ERR: {exc}")
-                print(f"[Main] router resolve failed: {exc}")
+                ui.write_log(t("error.unknown", ) + ": " + str(exc))
+                print(f"[Main] {t("error.unknown")}: {exc}")
                 return True
         else:
             router = None
@@ -738,8 +739,8 @@ def _run_chat_agent(ui, settings, stack=None):
         try:
             provider_instance = router._resolve(provider_id)
         except Exception as exc:  # pragma: no cover - needs api key
-            ui.write_log(f"ERR: {exc}")
-            print(f"[Main] provider init failed: {exc}")
+            ui.write_log(t("error.unknown", ) + ": " + str(exc))
+            print(f"[Main] {t("error.unknown")}: {exc}")
             return True
 
     # Build tool registry / executor when stack didn't provide them
@@ -772,7 +773,7 @@ def _run_chat_agent(ui, settings, stack=None):
 
     async def _chat_loop():
         """Async loop that processes user commands through AgentLoop."""
-        ui.write_log(f"SYS: provider={provider_id} ready")
+        ui.write_log(f"{t("status.ready")} [{provider_id}]")
         try:
             while _running[0]:
                 try:
@@ -822,16 +823,16 @@ def _run_chat_agent(ui, settings, stack=None):
                 except queue.Empty:
                     continue
                 except Exception as exc:
-                    ui.write_log(f"ERR: {exc}")
-                    print(f"[Main] agent loop error: {exc}", exc_info=True)
+                    ui.write_log(t("error.unknown", ) + ": " + str(exc))
+                    print(f"[Main] {t("error.unknown")}: {exc}", exc_info=True)
 
         except asyncio.CancelledError:
             _running[0] = False
         finally:
             _running[0] = False
 
-    print(f"[Main] Using provider={provider_id} model={model_id or model_info.model_id}")
-    ui.write_log(f"SYS: provider={provider_id}")
+    print(f"[Main] provider={provider_id} model={model_id or model_info.model_id}")
+    ui.write_log(f"{t("status.connected")} [{provider_id}]")
     asyncio.create_task(_chat_loop())
     return True
 
@@ -858,11 +859,11 @@ def main():
             try:
                 asyncio.run(slon.run())
             except KeyboardInterrupt:
-                print("\nShutting down...")
+                print(f"\n{t("status.disconnected")}")
         else:
             # Chat-based agent loop for non-Gemini or non-audio models
             _run_chat_agent(ui, settings, stack)
-            print("\nChat agent finished.")
+            print(f"\n{t("agent.completed")}")
 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()
