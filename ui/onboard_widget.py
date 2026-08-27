@@ -961,6 +961,8 @@ class OnboardingWizard(QWidget):
             self._state.language = data.get("language", "ru")
         elif step_id == STEP_PROVIDER:
             self._state.provider_id = data.get("provider_id", "")
+            if self._state.provider_id in ("ollama", "llama_cpp"):
+                self._state.local_provider = self._state.provider_id
         elif step_id == STEP_MODEL:
             self._state.model_id = data.get("model_id", "")
         elif step_id == STEP_CREDENTIALS:
