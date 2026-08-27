@@ -74,6 +74,7 @@ class OpenRouterClient:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "SlonAG/1.0 ProviderLayer",
         }
 
     def _raise_http(self, response: Any) -> None:

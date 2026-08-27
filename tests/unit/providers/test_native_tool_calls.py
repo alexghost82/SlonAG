@@ -25,6 +25,6 @@ def test_openai_malformed_arguments_fail_explicitly() -> None:
 def test_openrouter_native_tool_call_keeps_correlation() -> None:
     parsed = openrouter_tool_calls({"choices": [{"message": {"tool_calls": [
         {"id": "or-1", "function": {"name": "weather_report", "arguments": '{"city":"Haifa"}'}},
-    ]}}]})
+    ]}}]}, "openrouter")
     assert parsed[0].id == "or-1"
     assert parsed[0].arguments == {"city": "Haifa"}

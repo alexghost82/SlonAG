@@ -162,6 +162,7 @@ class OpenAIHttpClient:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "SlonAG/1.0 ProviderLayer",
         }
 
 

@@ -119,26 +119,44 @@ class Router:
             return configured
         return tuple(await self._resolve(selected).list_models())
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(
+        self,
+        request: ChatRequest,
+        *,
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> ChatResponse:
         request = self._route_request(request)
         self._require_request_capabilities(request)
         try:
-            response = await self._resolve(request.model.provider_id).chat(request)
+            response = await self._resolve(
+                request.model.provider_id, base_url=base_url, timeout=timeout
+            ).chat(request)
         except ProviderError as exc:
             fallback_id = self._fallback_provider_id(request.model.provider_id, exc)
             if fallback_id is None:
                 raise
             fallback_request = await self._fallback_request(request, fallback_id)
-            response = await self._resolve(fallback_id).chat(fallback_request)
+            response = await self._resolve(
+                fallback_id, base_url=base_url, timeout=timeout
+            ).chat(fallback_request)
             return self._validate_response(response, fallback_request)
         return self._validate_response(response, request)
 
-    async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
+    async def stream(
+        self,
+        request: ChatRequest,
+        *,
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> AsyncIterator[ChatEvent]:
         request = self._route_request(request)
         self._require_request_capabilities(request)
         yielded = False
         try:
-            async for event in self._resolve(request.model.provider_id).stream(request):
+            async for event in self._resolve(
+                request.model.provider_id, base_url=base_url, timeout=timeout
+            ).stream(request):
                 yielded = True
                 yield _as_chat_event(event)
             return
@@ -149,7 +167,9 @@ class Router:
             if fallback_id is None:
                 raise
         fallback_request = await self._fallback_request(request, fallback_id)
-        async for event in self._resolve(fallback_id).stream(fallback_request):
+        async for event in self._resolve(
+            fallback_id, base_url=base_url, timeout=timeout
+        ).stream(fallback_request):
             yield _as_chat_event(event)
 
     async def _fallback_request(
@@ -208,7 +228,9 @@ class Router:
             return False
         return provider_id not in CLOUD_PROVIDER_IDS or not self._cloud_restricted()
 
-    def _route_request(self, request: ChatRequest) -> ChatRequest:
+    def _route_request(
+        self, request: ChatRequest, *, base_url: str | None = None
+    ) -> ChatRequest:
         if self.routing_mode is None:
             return request
         candidates = self._models or (request.model,)
@@ -270,7 +292,13 @@ class Router:
             return None
         return nxt
 
-    def _resolve(self, provider_id: str) -> ChatProvider:
+    def _resolve(
+        self,
+        provider_id: str,
+        *,
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> ChatProvider:
         if not self._cloud_allowed(provider_id):
             raise ProviderError(
                 self._cloud_forbidden_message(provider_id),
@@ -288,16 +316,29 @@ class Router:
                 "missing api key",
                 provider_id=provider_id,
             )
-        instance = self._build_from_factory(provider_id)
+        instance = self._build_from_factory(
+            provider_id, base_url=base_url, timeout=timeout
+        )
         self._resolved[provider_id] = instance
         return instance
 
-    def _build_from_factory(self, provider_id: str) -> ChatProvider:
+    def _build_from_factory(
+        self,
+        provider_id: str,
+        *,
+        base_url: str | None = None,
+        timeout: float | None = None,
+    ) -> ChatProvider:
         factory = _factory_for(provider_id)
+        params: dict[str, object] = {}
         key = self._lookup_key(provider_id)
         if key is not None and "api_key" in inspect.signature(factory).parameters:
-            return factory(api_key=key)
-        return factory()
+            params["api_key"] = key
+        if base_url is not None and "base_url" in inspect.signature(factory).parameters:
+            params["base_url"] = base_url
+        if timeout is not None and "timeout" in inspect.signature(factory).parameters:
+            params["timeout"] = timeout
+        return factory(**params)
 
 
 def _factory_for(provider_id: str):

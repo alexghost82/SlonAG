@@ -29,6 +29,7 @@ async def test_same_chat_request_works_against_all_registered_mocks(registered_m
         "local",
         "ollama",
         "openai",
+        "openai_compat",
         "openrouter",
     )
     assert registered_mocks == expected_ids

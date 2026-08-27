@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 PRIVACY_PROFILES = frozenset({"fully_local", "local_with_tools", "cloud", "hybrid"})
 PROVIDER_IDS = frozenset(
-    {"gemini", "openai", "openrouter", "local", "ollama", "llama_cpp"}
+    {"gemini", "openai", "openrouter", "local", "ollama", "llama_cpp", "openai_compat"}
 )
 LOCAL_PROVIDER_IDS = frozenset({"local", "ollama", "llama_cpp"})
 NETWORK_MODES = frozenset({"offline", "tools_only", "hybrid"})

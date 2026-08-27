@@ -15,7 +15,7 @@ from providers.contracts import (
     ProviderStatus,
     ToolCall,
 )
-from providers.errors import ProviderAuthError
+from providers.errors import ProviderAuthError, ProviderError
 from providers.openrouter.catalog import parse_models_payload
 from providers.openrouter.client import DEFAULT_API_URL, DEFAULT_TIMEOUT, OpenRouterClient, RequestFn
 from providers.openrouter.errors import PROVIDER_ID
@@ -75,10 +75,10 @@ class OpenRouterChatProvider:
         require_capability(request.model, request.role)
         data = self._http().post_json(self._api_url, _chat_payload(request))
         return ChatResponse(
-            text=_message_text(data),
+            text=_message_text(data, PROVIDER_ID),
             provider_id=PROVIDER_ID,
             model_id=request.model.model_id,
-            tool_calls=_tool_calls(data),
+            tool_calls=_tool_calls(data, PROVIDER_ID),
         )
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
@@ -132,24 +132,41 @@ def _chat_payload(request: ChatRequest, *, stream: bool = False) -> dict[str, An
     return payload
 
 
-def _message_text(data: object) -> str:
+def _message_text(data: object, provider_id: str) -> str:
     if not isinstance(data, dict):
-        return ""
-    choices = data.get("choices") or []
-    if not isinstance(choices, list) or not choices:
-        return ""
+        raise ProviderError(
+            "OpenRouter returned an invalid response (not an object)",
+            provider_id=provider_id,
+        )
+    choices = data.get("choices")
+    if choices is None or not isinstance(choices, list) or not choices:
+        raise ProviderError(
+            "OpenRouter returned no choices",
+            provider_id=provider_id,
+        )
     first = choices[0]
     if not isinstance(first, dict):
-        return ""
-    message = first.get("message") or {}
+        raise ProviderError(
+            "OpenRouter returned an invalid response structure",
+            provider_id=provider_id,
+        )
+    message = first.get("message")
     if not isinstance(message, dict):
-        return ""
+        raise ProviderError(
+            "OpenRouter response missing message field",
+            provider_id=provider_id,
+        )
     content = message.get("content")
-    return content if isinstance(content, str) else ""
+    if not isinstance(content, str):
+        raise ProviderError(
+            "OpenRouter response content is not a string",
+            provider_id=provider_id,
+        )
+    return content
 
 
-def _tool_calls(data: object) -> tuple[ToolCall, ...]:
-    return parse_tool_calls(data, PROVIDER_ID)
+def _tool_calls(data: object, provider_id: str) -> tuple[ToolCall, ...]:
+    return parse_tool_calls(data, provider_id)
 
 
 def _parse_sse_line(line: str) -> ChatEvent | None:

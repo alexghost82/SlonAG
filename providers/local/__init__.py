@@ -1,4 +1,4 @@
-"""Local OpenAI-compatible, Ollama, and llama.cpp chat adapters."""
+"""Local OpenAI-compatible, Ollama, llama.cpp, and generic OpenAI-compatible chat adapters."""
 
 from __future__ import annotations
 
@@ -18,14 +18,20 @@ from providers.local.ollama import OllamaChatProvider
 from providers.local.openai_compatible import OpenAICompatibleChatProvider
 from providers.registry import register
 
-FACTORY_IDS = ("local", "ollama", "llama_cpp")
+FACTORY_IDS = ("local", "ollama", "llama_cpp", "openai_compat")
 
 
 def register_factories() -> None:
-    """Register the three local factory ids. Safe to call more than once."""
+    """Register the four local factory ids. Safe to call more than once."""
     register("local", OpenAICompatibleChatProvider)
     register("ollama", OllamaChatProvider)
     register("llama_cpp", LlamaCppChatProvider)
+    # openai_compat: factory that returns an instance with provider_id="openai_compat"
+    def _openai_compat_factory(**kwargs):
+        instance = OpenAICompatibleChatProvider(**kwargs)
+        instance.provider_id = "openai_compat"
+        return instance
+    register("openai_compat", _openai_compat_factory)
 
 
 register_factories()
@@ -42,5 +48,4 @@ __all__ = [
     "TransportResponse",
     "is_loopback_url",
     "register_factories",
-    "resolve_local_capabilities",
 ]
