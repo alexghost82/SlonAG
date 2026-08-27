@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
-from .types import SelfImprovementState
+from .types import SelfImprovementRecord, SelfImprovementState
 
 
 def _path() -> Path:
@@ -22,14 +21,13 @@ def load_state(path: str | None = None) -> SelfImprovementState:
     except (json.JSONDecodeError, OSError):
         return SelfImprovementState()
 
-    # Normalize
     state = SelfImprovementState()
     state.observations_count = raw.get("observations_count", 0)
     state.candidates_generated = raw.get("candidates_generated", 0)
     state.approved_count = raw.get("approved_count", 0)
     state.rolled_back_count = raw.get("rolled_back_count", 0)
     state.improvements = {
-        k: SelfImprovementState._record_from_dict(v)
+        k: SelfImprovementRecord._record_from_dict(v)
         for k, v in raw.get("improvements", {}).items()
     }
     return state

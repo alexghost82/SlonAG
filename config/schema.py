@@ -42,6 +42,11 @@ DEFAULT_OPENAI_COMPAT_BASE_URL = ""
 DEFAULT_NETWORK_MODE = "hybrid"
 DEFAULT_ROUTING_MODE = "manual"
 
+# Voice pipeline defaults
+DEFAULT_VOICE_STT_ENGINE = "faster_whisper"
+DEFAULT_VOICE_TTS_ENGINE = "piper"
+
+
 _SECRET_FIELD_MARKERS = ("api_key", "token", "secret", "password")
 
 
@@ -169,6 +174,32 @@ class Settings:
     provider_settings: dict[str, ProviderBaseURL] = field(default_factory=dict)
     os_system: str | None = None
     camera_index: int | None = None
+    voice_stt_engine: str = DEFAULT_VOICE_STT_ENGINE
+    voice_tts_engine: str = DEFAULT_VOICE_TTS_ENGINE
+    voice_mic_device: str | None = None
+    voice_speaker_device: str | None = None
+
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "privacy_profile": self.privacy_profile,
+            "provider_id": self.provider_id,
+            "model_id": self.model_id,
+            "language": self.language,
+            "network_mode": self.network_mode,
+            "routing_mode": self.routing_mode,
+            "model_roles": self.model_roles.to_dict(),
+            "local_models": self.local_models.to_dict(),
+            "provider_settings": {
+                pid: ps.to_dict() for pid, ps in self.provider_settings.items()
+            },
+        }
+        if self.os_system is not None:
+            payload["os_system"] = self.os_system
+        voice_stt_engine: str = DEFAULT_VOICE_STT_ENGINE
+    voice_tts_engine: str = DEFAULT_VOICE_TTS_ENGINE
+    voice_mic_device: str | None = None
+    voice_speaker_device: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -188,8 +219,15 @@ class Settings:
             payload["os_system"] = self.os_system
         if self.camera_index is not None:
             payload["camera_index"] = self.camera_index
+        if self.voice_stt_engine != DEFAULT_VOICE_STT_ENGINE:
+            payload["voice_stt_engine"] = self.voice_stt_engine
+        if self.voice_tts_engine != DEFAULT_VOICE_TTS_ENGINE:
+            payload["voice_tts_engine"] = self.voice_tts_engine
+        if self.voice_mic_device is not None:
+            payload["voice_mic_device"] = self.voice_mic_device
+        if self.voice_speaker_device is not None:
+            payload["voice_speaker_device"] = self.voice_speaker_device
         return payload
-
 
 def default_settings() -> Settings:
     return Settings()

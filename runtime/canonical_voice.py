@@ -21,32 +21,29 @@ from runtime.events import RuntimeEventKind
 
 logger = logging.getLogger(__name__)
 
-# ── constants ────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 MIC_SAMPLE_RATE = 16_000
 MIC_CHANNELS = 1
 MIC_CHUNK_DURATION = 0.05  # 50 ms
 TTS_SAMPLE_RATE = 24_000
 TTS_CHANNEL = 1
 
-# Queue capacity - discard oldest when full (stale audio)
 MIC_QUEUE_CAP = 32
-TTS_QUEUE_CAP = 64
 TEXT_QUEUE_CAP = 8
-
-# VAD silence timeout (seconds) - silence longer than this triggers STT
 VAD_SILENCE_TIMEOUT = 0.6
-# Reconnect back-off
 RECONNECT_DELAY_S = 2.0
-RECONNECT_MAX_DELAY_S = 30.0
 RECONNECT_FAILURES_BEFORE_ABORT = 50
 
-# ── config ───────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# VoiceConfig
+# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class VoiceConfig:
     """Voice pipeline configuration.
 
-    Parameters are provider-neutral; implementations wire the actual
-    engine (faster-whisper, Whisper, Coqui, Piper, ...) at runtime.
+    Provider-neutral; implementations wire the actual engine at runtime.
     """
 
     language: str = "ru"
@@ -62,11 +59,13 @@ class VoiceConfig:
     muted: bool = False
     barge_in: bool = True
 
-    # Optional VAD callable: lambda audio: bool (speech activity in chunk)
+    # Optional VAD callable: lambda audio: bool (speech activity
     vad: Callable[[bytes], bool] | None = None
 
 
-# ── bounded queues with stale-discard ────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Bounded queues with stale-discard
+# ---------------------------------------------------------------------------
 class FreshAudioQueue(asyncio.Queue):
     """Bounded queue that drops the oldest chunk when full."""
 
@@ -79,7 +78,7 @@ class FreshAudioQueue(asyncio.Queue):
             try:
                 self.get_nowait()
             except asyncio.QueueEmpty:
-                break
+                pass
             self.dropped_chunks += 1
         super().put_nowait(item)
 
@@ -96,12 +95,14 @@ class FreshTextQueue(asyncio.Queue):
             try:
                 self.get_nowait()
             except asyncio.QueueEmpty:
-                break
+                pass
             self.dropped_chunks += 1
         super().put_nowait(item)
 
 
-# ── playback generation guard ───────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Playback generation guard
+# ---------------------------------------------------------------------------
 class PlaybackGeneration:
     """Monotonically increasing generation for barge-in / stale discard."""
 
@@ -120,13 +121,15 @@ class PlaybackGeneration:
             return self._value
 
 
-# ── STT / TTS adapters ─────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# STT / TTS adapters
+# ---------------------------------------------------------------------------
 class STTAdapter:
     """Adapter wrapping an STT provider for the voice pipeline."""
 
     def __init__(
         self,
-        provider: Any,  # must implement SpeechToTextProvider
+        provider: Any,
         language: str,
         vad: Callable[[bytes], bool] | None = None,
         cancelled: threading.Event | None = None,
@@ -178,7 +181,7 @@ class TTSAdapter:
 
     def __init__(
         self,
-        provider: Any,  # must implement TextToSpeechProvider
+        provider: Any,
         voice: str,
         speed: float = 1.0,
         volume: float = 1.0,
@@ -188,6 +191,7 @@ class TTSAdapter:
         self.speed = speed
         self.volume = volume
         self._speaking = False
+        self.interrupted: bool = False
 
     @property
     def is_speaking(self) -> bool:
@@ -195,10 +199,12 @@ class TTSAdapter:
 
     def interrupt(self) -> None:
         self._speaking = False
+        self.interrupted = True
 
     async def synthesize(self, text: str) -> bytes:
         """Return audio bytes."""
         self._speaking = True
+        self.interrupted = False
         try:
             from providers.contracts import ModelInfo, SpeechRequest
             result = await self.provider.synthesize(
@@ -220,17 +226,19 @@ class TTSAdapter:
             self._speaking = False
 
 
-# ── canonical voice bridge ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# VoiceBridge -- canonical pipeline
+# ---------------------------------------------------------------------------
 class VoiceBridge:
     """Canonical voice pipeline: mic -> STT -> AgentLoop -> TTS -> playback.
 
     Works with any ChatProvider that supports the agent-loop contract.
-    Manages bounded queues, barge-in, stale audio discard, and reconnect.
+    Manages bounded queues, barge-in, stale audio discard, reconnect/recovery.
 
     Parameters
     ----------
     config: VoiceConfig
-    ui: SlonUI - must have muted, write_log, and optionally is_speaking, speak
+    ui: SlonUI - must have muted, write_log, optionally is_speaking/speak
     agent_loop_factory: Callable[[ModelInfo, provider, executor], AgentLoop]
     model_info: ModelInfo for the text provider
     set_speaking: Callback(bool) for UI speaking indicator
@@ -241,9 +249,7 @@ class VoiceBridge:
         *,
         config: VoiceConfig,
         ui: Any,
-        agent_loop_factory: Callable[
-            [Any, Any, Any], Any
-        ],
+        agent_loop_factory: Callable[[Any, Any, Any], Any],
         model_info: Any,  # ModelInfo
         set_speaking: Callable[[bool], None],
     ) -> None:
@@ -259,6 +265,8 @@ class VoiceBridge:
         self._tts_adapter: TTSAdapter | None = None
         self._agent_loop: Any = None
 
+    # -- public API -------------------------------------------------------
+
     def cancel(self) -> None:
         """Request the pipeline to stop."""
         self._cancelled.set()
@@ -272,22 +280,17 @@ class VoiceBridge:
         self._generation.bump()
         self.set_speaking(False)
 
+    # -- STT / TTS build --------------------------------------------------
+
     async def _build_stt(self) -> STTAdapter:
         """Build STT adapter from model_info provider."""
-        from providers.contracts import ChatProvider
-
-        # Try to build a dedicated STT provider
-        # Check for stt_engine in config and resolve via the provider system
-        provider_id = self.model_info.provider_id if hasattr(self.model_info, "provider_id") else "local"
-
-        # Try to resolve STT from the provider router
+        provider_id = getattr(self.model_info, "provider_id", "local")
         try:
             from providers.router import Router
             router = Router(provider_id=provider_id, network_mode="hybrid")
             provider = router._resolve(provider_id)
         except Exception:
             logger.exception("Could not resolve provider for STT, using fallback")
-            # Fallback: create a minimal STT-compatible wrapper
             provider = None
 
         return STTAdapter(
@@ -295,14 +298,16 @@ class VoiceBridge:
             language=self.config.language,
             vad=self.config.vad,
             cancelled=self._cancelled,
-            speaking_callback=self.ui.is_speaking
-            if hasattr(self.ui, "is_speaking") and callable(self.ui.is_speaking)
-            else None,
+            speaking_callback=(
+                self.ui.is_speaking
+                if hasattr(self.ui, "is_speaking") and callable(getattr(self.ui, "is_speaking", None))
+                else None
+            ),
         )
 
     async def _build_tts(self) -> TTSAdapter:
         """Build TTS adapter from model_info provider."""
-        provider_id = self.model_info.provider_id if hasattr(self.model_info, "provider_id") else "local"
+        provider_id = getattr(self.model_info, "provider_id", "local")
         try:
             from providers.router import Router
             router = Router(provider_id=provider_id, network_mode="hybrid")
@@ -331,7 +336,7 @@ class VoiceBridge:
             executor = ToolExecutor(registry, safety)
 
             from providers.router import Router
-            provider_id = self.model_info.provider_id if hasattr(self.model_info, "provider_id") else "local"
+            provider_id = getattr(self.model_info, "provider_id", "local")
             router = Router(provider_id=provider_id, network_mode="hybrid")
             provider = router._resolve(provider_id)
 
@@ -341,6 +346,8 @@ class VoiceBridge:
         except Exception:
             logger.exception("Failed to build AgentLoop")
             raise
+
+    # -- microphone capture -----------------------------------------------
 
     async def _mic_capture(self, queue: FreshAudioQueue) -> None:
         """Read microphone and push PCM16 chunks to queue."""
@@ -361,8 +368,7 @@ class VoiceBridge:
                 device=device,
             )
         except Exception:
-            logger.exception("microphone open failed")
-            # Try without explicit device
+            logger.exception("microphone open failed, retrying without device")
             try:
                 stream = sd.InputStream(
                     samplerate=MIC_SAMPLE_RATE,
@@ -389,6 +395,8 @@ class VoiceBridge:
             stream.close()
             logger.info("voice: mic stopped")
 
+    # -- STT loop ---------------------------------------------------------
+
     async def _stt_loop(
         self,
         mic_queue: FreshAudioQueue,
@@ -398,9 +406,7 @@ class VoiceBridge:
         assert self._stt_adapter is not None
         buffer: list[bytes] = []
         silence_count = 0
-        silence_threshold = int(
-            VAD_SILENCE_TIMEOUT / MIC_CHUNK_DURATION
-        )
+        silence_threshold = int(VAD_SILENCE_TIMEOUT / MIC_CHUNK_DURATION)
 
         while not self._cancelled.is_set():
             try:
@@ -417,17 +423,19 @@ class VoiceBridge:
                 silence_count = 0
                 text = await self._stt_adapter.transcribe(payload)
                 if text:
-                    logger.info("voice: STT -> '%s'", text[:80])
+                    logger.info("voice: STT -> \'%s\'", text[:80])
                     text_queue.put_nowait(text)
+
+    # -- agent turn -------------------------------------------------------
 
     async def _agent_turn(
         self,
         text: str,
-        history: list[dict],
+        history: list[dict[str, str]],
     ) -> str | None:
         """Run one AgentLoop turn, return assistant text."""
         assert self._agent_loop is not None
-        logger.info("voice: agent turn: %s", text[:80)
+        logger.info("voice: agent turn: %s", text[:80])
         try:
             result = await self._agent_loop.run(
                 user_goal=text,
@@ -440,8 +448,6 @@ class VoiceBridge:
             )
             if result is None:
                 return None
-
-            # Normalize response
             if hasattr(result, "text"):
                 return result.text
             if hasattr(result, "content"):
@@ -451,10 +457,33 @@ class VoiceBridge:
             logger.exception("AgentLoop error")
             return None
 
+    # -- agent consumer loop ----------------------------------------------
+
+    async def _agent_consumer_loop(
+        self,
+        text_queue: FreshTextQueue,
+        tts_queue: asyncio.Queue[str],
+    ) -> None:
+        """Consume STT text, run AgentLoop, send response to TTS queue."""
+        assert self._agent_loop is not None
+        history: list[dict[str, str]] = []
+
+        while not self._cancelled.is_set():
+            try:
+                text = await asyncio.wait_for(text_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+
+            response = await self._agent_turn(text, history)
+            if response is not None and response.strip():
+                history.append({"role": "assistant", "content": response})
+                tts_queue.put_nowait(response)
+
+    # -- TTS + playback ---------------------------------------------------
+
     async def _tts_playback_task(
         self,
         tts_queue: asyncio.Queue[str],
-        mic_queue: FreshAudioQueue,
     ) -> None:
         """Synthesize and play TTS output with barge-in guard."""
         assert self._tts_adapter is not None
@@ -465,10 +494,11 @@ class VoiceBridge:
             except asyncio.TimeoutError:
                 continue
 
-            # Barge-in / stale check
-            if self._tts_adapter.interrupted if hasattr(self._tts_adapter, 'interrupted') else False:
+            if self._tts_adapter.interrupted:
                 self._tts_adapter.interrupt()
+                self._tts_adapter.interrupted = False
                 self.set_speaking(False)
+                self._emit_event(RuntimeEventKind.CANCELLED)
                 continue
 
             if not text or not text.strip():
@@ -498,7 +528,6 @@ class VoiceBridge:
         if not audio_data:
             return
 
-        # Convert WAV or raw to int16 if needed
         try:
             stream = sd.RawOutputStream(
                 samplerate=TTS_SAMPLE_RATE,
@@ -516,6 +545,8 @@ class VoiceBridge:
         except Exception:
             logger.exception("playback error")
 
+    # -- events -----------------------------------------------------------
+
     def _emit_event(self, kind: RuntimeEventKind, **kw: Any) -> None:
         """Emit runtime event through the UI."""
         try:
@@ -525,15 +556,14 @@ class VoiceBridge:
         except Exception:
             pass
 
-    # ── lifecycle ──────────────────────────────────────────────────────────
+    # -- lifecycle --------------------------------------------------------
 
     async def run(self) -> None:
-        """Run the canonical voice pipeline until cancelled or unrecoverable error."""
+        """Run the canonical voice pipeline until cancelled or error."""
         if self._running:
             return
         self._running = True
 
-        # Build components
         self._stt_adapter = await self._build_stt()
         self._tts_adapter = await self._build_tts()
         await self._build_agent_loop()
@@ -549,12 +579,8 @@ class VoiceBridge:
                 tasks = [
                     asyncio.create_task(self._mic_capture(mic_queue)),
                     asyncio.create_task(self._stt_loop(mic_queue, text_queue)),
-                    asyncio.create_task(
-                        self._agent_consumer_loop(text_queue, tts_queue)
-                    ),
-                    asyncio.create_task(
-                        self._tts_playback_task(tts_queue, mic_queue)
-                    ),
+                    asyncio.create_task(self._agent_consumer_loop(text_queue, tts_queue)),
+                    asyncio.create_task(self._tts_playback_task(tts_queue)),
                 ]
                 await asyncio.gather(*tasks)
             except asyncio.CancelledError:
@@ -567,26 +593,6 @@ class VoiceBridge:
 
         self._running = False
         logger.info("voice: pipeline stopped")
-
-    async def _agent_consumer_loop(
-        self,
-        text_queue: FreshTextQueue,
-        tts_queue: asyncio.Queue[str],
-    ) -> None:
-        """Consume STT text, run AgentLoop, send response to TTS queue."""
-        assert self._agent_loop is not None
-        history: list[dict[str, str]] = []
-
-        while not self._cancelled.is_set():
-            try:
-                text = await asyncio.wait_for(text_queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue
-
-            response = await self._agent_turn(text, history)
-            if response is not None and response.strip():
-                history.append({"role": "assistant", "content": response})
-                tts_queue.put_nowait(response)
 
 
 __all__ = [

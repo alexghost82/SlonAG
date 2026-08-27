@@ -8,7 +8,7 @@ import time
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from agent.observation import Observation, ObservationKind
 from agent.latency import LatencyTrace
@@ -161,8 +161,19 @@ class AgentLoopResult:
     effective_model_id: str | None = None
 
 
+class MemoryContextCallback(Protocol):
+    """Protocol for memory context injection hooks."""
+
+    def __call__(self, user_input: str) -> str: ...
+
+
 class AgentLoop:
-    """Core multi-turn model -> tool -> observation -> model orchestration engine."""
+    """Core multi-turn model -> tool -> observation -> model orchestration engine.
+
+    Supports memory integration via optional callbacks:
+    - memory_context_callback: returns memory context text to prepend to messages
+    - memory_on_turn_complete: called after each turn with (user_input, assistant_output)
+    """
 
     def __init__(
         self,
@@ -173,6 +184,7 @@ class AgentLoop:
         budget: LoopBudget | None = None,
         loop_detector: LoopDetector | None = None,
         cancel_event: threading.Event | None = None,
+        memory_context_callback: MemoryContextCallback | None = None,
     ) -> None:
         self.provider = provider
         self.tool_executor = tool_executor
@@ -184,6 +196,7 @@ class AgentLoop:
             loop_detector if loop_detector is not None else LoopDetector()
         )
         self.cancel_event = cancel_event
+        self._memory_callback = memory_context_callback
 
     async def run(
         self,
@@ -192,6 +205,7 @@ class AgentLoop:
         *,
         history: Sequence[ConversationMessage] = (),
         on_message: Callable[[ConversationMessage], None] | None = None,
+        on_turn_complete: Callable[[str, str], None] | None = None,
     ) -> AgentLoopResult:
         """Executes the multi-turn agent loop until a final answer or termination condition is reached."""
         steps: list[AgentLoopStepResult] = []
@@ -250,7 +264,7 @@ class AgentLoop:
             try:
                 trace.mark("provider_request_start")
                 response = await asyncio.wait_for(
-                    self._call_provider(messages), timeout=self.budget.remaining_seconds()
+                    self._call_provider(messages, user_goal), timeout=self.budget.remaining_seconds()
                 )
             except TimeoutError:
                 return AgentLoopResult(False, steps=steps, reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded")
@@ -268,185 +282,120 @@ class AgentLoop:
                     ok=False,
                     final_answer=None,
                     steps=steps,
-                    reason=f"Duplicate tool_call_id: {duplicate_ids[0]}",
+                    reason=f"Duplicate tool call IDs detected: {duplicate_ids}",
                 )
+
             if tool_calls:
-                append_message(
-                    AssistantToolCallMessage(
-                        content=response_text,
-                        tool_calls=tool_calls,
-                    )
-                )
-            else:
-                append_message(AssistantMessage(response_text))
-
-            if not tool_calls:
-                trace.mark("turn_complete")
-                return AgentLoopResult(
-                    ok=True,
-                    final_answer=str(response_text) if response_text else None,
-                    steps=steps,
-                    reason="Completed successfully",
-                    latency_ms=trace.breakdown(),
-                    effective_provider_id=response.provider_id,
-                    effective_model_id=response.model_id,
-                )
-
-            parsed_calls = [self._parse_tool_call(call) for call in tool_calls]
-            remaining_calls = max(
-                0, self.budget.max_tool_calls - self.budget.tool_call_count
-            )
-            batch_results: tuple[object, ...] | None = None
-            if hasattr(self.tool_executor, "execute_many_async") and remaining_calls:
-                from mark.safety import UntrustedSource
-
-                selected = parsed_calls[:remaining_calls]
-                try:
-                    trace.mark("tool_call_received")
-                    trace.mark("tool_execution_start")
-                    execution_kwargs = {
-                        "source": UntrustedSource.USER,
-                        "intent": user_goal,
-                    }
-                    if self.cancel_event is not None:
-                        execution_kwargs["cancel_event"] = self.cancel_event
-                    batch_results = await asyncio.wait_for(
-                        self.tool_executor.execute_many_async(
-                            selected,
-                            **execution_kwargs,
-                        ),
-                        timeout=self.budget.remaining_seconds(),
-                    )
-                except TimeoutError:
-                    return AgentLoopResult(
-                        False,
-                        steps=steps,
-                        reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded",
-                    )
-            elif hasattr(self.tool_executor, "execute_many") and remaining_calls:
-                from mark.safety import UntrustedSource
-
-                selected = parsed_calls[:remaining_calls]
-                try:
-                    trace.mark("tool_call_received")
-                    trace.mark("tool_execution_start")
-                    execution_kwargs = {
-                        "source": UntrustedSource.USER,
-                        "intent": user_goal,
-                    }
-                    if self.cancel_event is not None:
-                        execution_kwargs["cancel_event"] = self.cancel_event
-                    batch_results = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            self.tool_executor.execute_many,
-                            selected,
-                            **execution_kwargs,
-                        ),
-                        timeout=self.budget.remaining_seconds(),
-                    )
-                except TimeoutError:
-                    return AgentLoopResult(
-                        False,
-                        steps=steps,
-                        reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded",
-                    )
-
-            for call_index, tool_call in enumerate(tool_calls):
-                if self.budget.tool_call_count >= self.budget.max_tool_calls:
-                    return AgentLoopResult(
-                        ok=False,
-                        final_answer=str(response_text) if response_text else None,
-                        steps=steps,
-                        reason=f"Max tool calls ({self.budget.max_tool_calls}) reached",
-                    )
                 self.budget.tool_call_count += 1
 
-                tool_id, tool_name, tool_args = parsed_calls[call_index]
+                # Record for loop detection
+                for tc in tool_calls:
+                    self.loop_detector.record_call(tc.name, dict(tc.arguments))
 
-                # Execute tool, returning observation on error instead of crashing
-                try:
-                    if batch_results is not None:
-                        raw_res = batch_results[call_index]
-                    else:
-                        raw_res = await asyncio.wait_for(
-                            self._execute_tool(
-                                tool_id, tool_name, tool_args, user_goal
-                            ),
-                            timeout=self.budget.remaining_seconds(),
-                        )
-                    if isinstance(raw_res, Observation):
-                        obs = raw_res
-                    elif isinstance(raw_res, ToolResult):
-                        trace.mark_at("approval_start", raw_res.approval_started_at)
-                        trace.mark_at("approval_finish", raw_res.approval_finished_at)
-                        trace.mark_at("tool_handler_start", raw_res.handler_started_at)
-                        obs = Observation.from_tool_result(tool_id, tool_name, raw_res)
-                    else:
-                        obs = Observation(
-                            tool_call_id=tool_id,
-                            tool_name=tool_name,
-                            kind=ObservationKind.SUCCESS,
-                            ok=True,
-                            content=raw_res,
-                        )
-                except TimeoutError:
-                    obs = Observation(
-                        tool_call_id=tool_id,
-                        tool_name=tool_name,
-                        kind=ObservationKind.TIMEOUT,
-                        ok=False,
-                        error="Tool execution timed out.",
-                    )
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    obs = Observation(
-                        tool_call_id=tool_id,
-                        tool_name=tool_name,
-                        kind=ObservationKind.TOOL_ERROR,
-                        ok=False,
-                        error=str(exc),
-                    )
-                trace.mark("tool_execution_finish")
-
-                step_res = AgentLoopStepResult(
-                    turn_index=self.budget.turn_count,
-                    tool_name=tool_name,
-                    observation=obs,
-                )
-                steps.append(step_res)
-
-                summary = str(obs.content) if obs.ok else (obs.error or "Error")
-                self.loop_detector.record_call(
-                    tool_name, tool_args, result_summary=summary
-                )
-
-                is_loop, loop_reason = self.loop_detector.check_loop()
-                if is_loop and self.budget.turn_count < self.budget.max_turns:
+                # Check loop before executing
+                loop_detected, loop_reason = self.loop_detector.check_loop()
+                if loop_detected:
                     return AgentLoopResult(
                         ok=False,
-                        final_answer=None,
                         steps=steps,
                         reason=loop_reason or "Loop detected",
                     )
 
+                observations: list[Observation] = []
+                tool_result_messages: list[ToolResultMessage] = []
+                for tool_call in tool_calls:
+                    tool_id = tool_call.id
+                    tool_name = tool_call.name
+                    args = dict(tool_call.arguments)
+
+                    if self.cancel_event is not None and self.cancel_event.is_set():
+                        observations.append(
+                            Observation(
+                                tool_call_id=tool_id,
+                                tool_name=tool_name,
+                                kind=ObservationKind.TOOL_ERROR,
+                                content="Cancelled",
+                                ok=False,
+                                error="Tool execution cancelled",
+                            )
+                        )
+                        tool_result_messages.append(
+                            ToolResultMessage(
+                                tool_call_id=tool_id,
+                                tool_name=tool_name,
+                                result="Cancelled",
+                                error="Tool execution cancelled",
+                            )
+                        )
+                        continue
+
+                    trace.mark("tool_execution_start")
+                    try:
+                        exec_result = await self._execute_tool(tool_id, tool_name, args, user_goal)
+                    except Exception as exc:
+                        observations.append(
+                            Observation(
+                                tool_call_id=tool_id,
+                                tool_name=tool_name,
+                                kind=ObservationKind.TOOL_ERROR,
+                                content=str(exc),
+                                ok=False,
+                                error=str(exc),
+                            )
+                        )
+                        tool_result_messages.append(
+                            ToolResultMessage(
+                                tool_call_id=tool_id,
+                                tool_name=tool_name,
+                                result=None,
+                                error=str(exc),
+                            )
+                        )
+                        continue
+
+                    trace.mark("tool_execution_end")
+                    obs = Observation.from_tool_result(tool_call, exec_result)
+                    observations.append(obs)
+                    tool_result_messages.append(
+                        ToolResultMessage(
+                            tool_call_id=tool_id,
+                            tool_name=tool_name,
+                            result=obs.content if obs.ok else None,
+                            error=None if obs.ok else obs.error,
+                            artifacts=tuple(obs.artifacts),
+                        )
+                    )
+                    trace.mark("observation_returned")
+
+                messages.extend(tool_result_messages)
+
+            else:
+                # No tool calls — final answer
                 append_message(
-                    ToolResultMessage(
-                        tool_call_id=tool_id,
-                        tool_name=tool_name,
-                        result=obs.content if obs.ok else None,
-                        error=None if obs.ok else obs.error,
-                        artifacts=tuple(obs.artifacts),
+                    AssistantMessage(
+                        text=response_text,
+                        tool_calls=None,
                     )
                 )
-                trace.mark("observation_returned")
-
-            if self.budget.turn_count >= self.budget.max_turns:
+                append_message(
+                    AssistantToolCallMessage(
+                        content=response_text,
+                        tool_calls=(),
+                    )
+                )
+                if on_turn_complete is not None:
+                    on_turn_complete(user_goal, str(response_text) if response_text else "")
+                if self._memory_callback is not None:
+                    try:
+                        self._memory_callback(user_goal, str(response_text) if response_text else "")
+                    except Exception:
+                        pass  # Memory persistence failures are non-fatal
                 return AgentLoopResult(
-                    ok=False,
+                    ok=True,
                     final_answer=str(response_text) if response_text else None,
                     steps=steps,
-                    reason=f"Max turns ({self.budget.max_turns}) reached",
+                    reason="",
+                    latency_ms=trace.to_dict(),
                 )
 
             # Check steering queue after observation processing
@@ -476,9 +425,43 @@ class AgentLoop:
                         text = signal.text or "User guidance injected"
                         append_message(UserMessage(text))
 
-    async def _call_provider(self, messages: list[ConversationMessage]) -> ChatResponse:
+            if self.budget.turn_count >= self.budget.max_turns:
+                return AgentLoopResult(
+                    ok=False,
+                    final_answer=str(response_text) if response_text else None,
+                    steps=steps,
+                    reason=f"Max turns ({self.budget.max_turns}) reached",
+                )
+
+            # Append observations back to messages for the next model turn
+            for obs in observations:
+                append_message(
+                    AssistantToolCallMessage(
+                        content=None,
+                        tool_calls=tuple(
+                            ToolCall(
+                                id=obs.tool_call_id or "",
+                                name=obs.tool_name or "",
+                                arguments={},
+                            )
+                        ),
+                    )
+                )
+
+    async def _call_provider(
+        self, messages: list[ConversationMessage], user_goal: str
+    ) -> ChatResponse:
         if self.provider is None:
             raise RuntimeError(t("error.no_provider_configured"))
+
+        # ── memory context injection ─────────────────────────────────
+        memory_context = ""
+        if self._memory_callback is not None:
+            try:
+                memory_context = self._memory_callback(user_goal)
+            except Exception:
+                pass  # Memory retrieval failures are non-fatal
+
         specs = getattr(
             getattr(self.tool_executor, "registry", None), "list", lambda: ()
         )()
@@ -490,7 +473,15 @@ class AgentLoop:
             if self.model.tool_calling
             else ()
         )
-        req = ChatRequest(model=self.model, messages=tuple(messages), tools=tools)
+
+        # If we have memory context, inject it as a system message at the front
+        effective_messages: list[ConversationMessage]
+        if memory_context:
+            effective_messages = [UserMessage(memory_context)] + list(messages)
+        else:
+            effective_messages = list(messages)
+
+        req = ChatRequest(model=self.model, messages=tuple(effective_messages), tools=tools)
         response = await self.provider.chat(req)
         if not isinstance(response, ChatResponse):
             raise TypeError("provider.chat() must return ChatResponse")

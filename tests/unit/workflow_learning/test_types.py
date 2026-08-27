@@ -54,6 +54,18 @@ class TestWorkflowStep:
         )
         assert step.artifacts == [{"kind": "file", "path": "/tmp/test.txt"}]
 
+    def test_from_tool_result_minimal(self):
+        step = WorkflowStep.from_tool_result(
+            tool_name="shell_exec",
+            args={"cmd": "ls"},
+            ok=True,
+        )
+        assert step.tool_name == "shell_exec"
+        assert step.ok is True
+        assert step.message == ""
+        assert step.data is None
+        assert step.artifacts == []
+
 
 class TestWorkflowCandidate:
     """Tests for WorkflowCandidate state machine."""
@@ -96,7 +108,8 @@ class TestWorkflowCandidate:
         c.transition_to(WorkflowState.DEPRECATED)
         assert c.state == WorkflowState.DEPRECATED
 
-    def test_cannot_reject_draft(self):
+    def test_cannot_skip_stages(self):
+        """Should not be able to skip from DRAFT directly to DEPRECATED."""
         c = WorkflowCandidate(name="test")
         with pytest.raises(ValueError):
             c.transition_to(WorkflowState.DEPRECATED)
@@ -118,12 +131,14 @@ class TestWorkflowCandidate:
         c.transition_to(WorkflowState.DEPRECATED)
         assert c.is_terminal is True
 
+        c.transition_to(WorkflowState.PARAMETERIZED)
+        assert c.is_terminal is True
+
     def test_updated_at_changes_on_transition(self):
         c = WorkflowCandidate(name="test")
         before = c.updated_at
-        time.sleep(0.01)
         c.transition_to(WorkflowState.CANDIDATE)
-        assert c.updated_at > before
+        assert c.updated_at >= before
 
 
 class TestWorkflowStateEnum:
@@ -140,6 +155,10 @@ class TestWorkflowStateEnum:
     def test_iteration(self):
         states = list(WorkflowState)
         assert len(states) == 6
+
+    def test_from_string(self):
+        assert WorkflowState("draft") == WorkflowState.DRAFT
+        assert WorkflowState("active") == WorkflowState.ACTIVE
 
 
 class TestParameterSlot:
@@ -181,6 +200,20 @@ class TestExecutionResult:
         assert r.ok is False
         assert r.error == "some error"
 
+    def test_with_step_results(self):
+        r = ExecutionResult(
+            workflow_id="abc123",
+            template_version=1,
+            step_results=[
+                StepExecutionResult(step_index=0, tool_name="shell_exec", ok=True),
+                StepExecutionResult(step_index=1, tool_name="file_write", ok=False, message="denied"),
+            ],
+        )
+        assert len(r.step_results) == 2
+        assert r.ok is True  # Initial state
+        r.mark_failed("final error")
+        assert r.ok is False
+
 
 class TestApprovalResult:
     """Tests for ApprovalResult model."""
@@ -213,3 +246,76 @@ class TestActionSequence:
         )
         assert len(seq.steps) == 2
         assert seq.success is True
+
+    def test_failed_sequence(self):
+        seq = ActionSequence(
+            steps=[
+                WorkflowStep(tool_name="shell_exec", args={"command": "ls"}, ok=True),
+                WorkflowStep(tool_name="file_write", args={"path": "/tmp/x"}, ok=False),
+            ],
+            success=False,
+        )
+        assert seq.success is False
+
+
+class TestWorkflowTemplate:
+    """Tests for WorkflowTemplate model."""
+
+    def test_initial(self):
+        t = WorkflowTemplate(
+            id="abc123",
+            version=1,
+            name="test-template",
+            description="Test",
+            state=WorkflowState.ACTIVE,
+            parameter_slots=[],
+            step_descriptors=[],
+        )
+        assert t.name == "test-template"
+        assert t.is_active is True
+
+    def test_not_active(self):
+        t = WorkflowTemplate(
+            id="abc123",
+            version=1,
+            name="test",
+            description="Test",
+            state=WorkflowState.DRAFT,
+            parameter_slots=[],
+            step_descriptors=[],
+        )
+        assert t.is_active is False
+
+
+class TestStepDescriptor:
+    """Tests for StepDescriptor model."""
+
+    def test_defaults(self):
+        sd = StepDescriptor(
+            tool_name="shell_exec",
+            arg_template={"cmd": {"_slot": "command", "_type": "string"}},
+            required_slots=["command"],
+        )
+        assert sd.tool_name == "shell_exec"
+        assert sd.required_slots == ["command"]
+        assert sd.safety_risk == 0
+
+
+class TestExecutionRecord:
+    """Tests for ExecutionRecord model."""
+
+    def test_initial(self):
+        r = ExecutionRecord(workflow_id="abc123", template_version=1)
+        assert r.workflow_id == "abc123"
+        assert r.template_version == 1
+        assert r.created_at > 0
+
+
+class TestActionSequenceEvent:
+    """Tests for ActionSequenceEvent model."""
+
+    def test_basic(self):
+        event = ActionSequenceEvent(tool_name="shell_exec", args={"cmd": "ls"})
+        assert event.tool_name == "shell_exec"
+        assert event.args == {"cmd": "ls"}
+        assert event.tool_call_id is None

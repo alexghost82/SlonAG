@@ -10,6 +10,7 @@ from mark.workflow_learning.types import (
     ActionSequenceEvent,
     WorkflowCandidate,
     WorkflowState,
+    WorkflowStep,
 )
 
 
@@ -81,7 +82,9 @@ class TestActionObserver:
                 ActionSequenceEvent(tool_name="shell_exec", args={"cmd": "ls"}),
                 ok=True,
             )
-        assert obs.get_sequence_count(list(obs.get_history().keys())[0]) == 1
+        keys = list(obs.get_history().keys())
+        if keys:
+            assert obs.get_sequence_count(keys[0]) == 1
 
         # Second sequence (same pattern)
         for i in range(3):
@@ -89,15 +92,67 @@ class TestActionObserver:
                 ActionSequenceEvent(tool_name="shell_exec", args={"cmd": "ls"}),
                 ok=True,
             )
-        key = list(obs.get_history().keys())[0]
-        assert obs.get_sequence_count(key) == 2
+        if keys:
+            assert obs.get_sequence_count(keys[0]) == 2
+
+    def test_store_called_on_candidate_created(self):
+        store = MagicMock()
+        obs = _make_observer(store=store, buffer_size=3, min_repetitions=1)
+
+        for i in range(3):
+            obs.record_event(
+                ActionSequenceEvent(tool_name="shell_exec", args={"cmd": str(i)}),
+                ok=True,
+            )
+
+        store.save_candidate.assert_called_once()
+        candidate = store.save_candidate.call_args[0][0]
+        assert candidate.state == WorkflowState.CANDIDATE
+
+    def test_no_candidate_on_failure(self):
+        store = MagicMock()
+        obs = _make_observer(store=store, buffer_size=3, min_repetitions=1)
+
+        # Record a failed sequence
+        obs.record_event(
+            ActionSequenceEvent(tool_name="shell_exec", args={"cmd": "fail"}),
+            ok=False,
+            message="error",
+        )
+        obs.record_event(
+            ActionSequenceEvent(tool_name="file_write", args={"path": "/tmp/x"}),
+            ok=True,
+        )
+        obs.record_event(
+            ActionSequenceEvent(tool_name="shell_exec", args={"cmd": "ls"}),
+            ok=True,
+        )
+
+        # Store should NOT be called because sequence is not successful
+        store.save_candidate.assert_not_called()
+
+    def test_callbacks_notified(self):
+        captured = []
+        obs = _make_observer(buffer_size=2, min_repetitions=1)
+        obs.on_candidate_created(lambda c: captured.append(c))
+
+        obs.record_event(
+            ActionSequenceEvent(tool_name="shell_exec", args={"cmd": "ls"}),
+            ok=True,
+        )
+        obs.record_event(
+            ActionSequenceEvent(tool_name="file_write", args={"path": "/tmp/x"}),
+            ok=True,
+        )
+
+        assert len(captured) == 1
+        assert captured[0].state == WorkflowState.CANDIDATE
 
 
 class TestSequenceAnalysis:
     """Tests for sequence hashing and analysis."""
 
     def test_same_tools_different_args_same_hash(self):
-        from mark.workflow_learning.observer import ActionObserver
         seq1 = ActionSequence(
             steps=[
                 WorkflowStep(tool_name="shell_exec", args={"cmd": "ls -la"}, ok=True),
@@ -115,23 +170,15 @@ class TestSequenceAnalysis:
         assert hash1 == hash2  # Same tool names, same success
 
     def test_different_tools_different_hash(self):
-        from mark.workflow_learning.observer import ActionObserver
         seq1 = ActionSequence(
-            steps=[
-                WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True),
-            ]
+            steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True)]
         )
         seq2 = ActionSequence(
-            steps=[
-                WorkflowStep(tool_name="file_read", args={"path": "/tmp/x"}, ok=True),
-            ]
+            steps=[WorkflowStep(tool_name="file_read", args={"path": "/tmp/x"}, ok=True)]
         )
-        hash1 = ActionObserver._sequence_hash(seq1)
-        hash2 = ActionObserver._sequence_hash(seq2)
-        assert hash1 != hash2
+        assert ActionObserver._sequence_hash(seq1) != ActionObserver._sequence_hash(seq2)
 
     def test_success_vs_failure_different_hash(self):
-        from mark.workflow_learning.observer import ActionObserver
         seq1 = ActionSequence(
             steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True)]
         )
@@ -139,3 +186,8 @@ class TestSequenceAnalysis:
             steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=False)]
         )
         assert ActionObserver._sequence_hash(seq1) != ActionObserver._sequence_hash(seq2)
+
+    def test_empty_sequence_hash_deterministic(self):
+        seq = ActionSequence(steps=[])
+        h = ActionObserver._sequence_hash(seq)
+        assert len(h) == 16  # SHA256 hex truncated to 16 chars

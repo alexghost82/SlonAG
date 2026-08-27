@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>E2E Test Page</title>
+<style>
+  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+  h1 { color: #333; }
+  input, textarea, select { display: block; width: 100%; margin-bottom: 10px; padding: 8px; box-sizing: border-box; }
+  button { padding: 10px 20px; background: #0066cc; color: white; border: none; cursor: pointer; border-radius: 4px; }
+  button:hover { background: #0055aa; }
+  #result { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 4px; min-height: 20px; }
+  #list { list-style: none; padding: 0; }
+  #list li { padding: 5px 10px; background: #e8f4ff; margin-bottom: 2px; border-radius: 2px; }
+  #counter { font-size: 1.5em; font-weight: bold; color: #0066cc; }
+</style>
+</head>
+<body>
+<h1>SlonAG E2E Test Page</h1>
+
+<section id="form-section">
+  <h2>Contact Form</h2>
+  <form id="contact-form">
+    <input type="text" id="name" placeholder="Your name" autocomplete="off">
+    <input type="email" id="email" placeholder="Your email" autocomplete="off">
+    <select id="subject">
+      <option value="">Select subject</option>
+      <option value="general">General</option>
+      <option value="support">Support</option>
+      <option value="sales">Sales</option>
+    </select>
+    <textarea id="message" rows="3" placeholder="Your message"></textarea>
+    <button type="submit" id="submit-btn">Submit</button>
+  </form>
+</section>
+
+<section id="result-section">
+  <h2>Result</h2>
+  <div id="result">Submit the form to see results here.</div>
+</section>
+
+<section id="list-section">
+  <h2>Task List</h2>
+  <ul id="list">
+    <li>Item Alpha</li>
+    <li>Item Beta</li>
+  </ul>
+  <button type="button" id="add-btn" data-value="NewItem">Add Item</button>
+</section>
+
+<section id="counter-section">
+  <h2>Counter</h2>
+  <div id="counter">0</div>
+  <button type="button" id="increment-btn">+1</button>
+</section>
+
+<script>
+  // Form submission
+  document.getElementById('contact-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var name = document.getElementById('name').value;
+    var email = document.getElementById('email').value;
+    var subject = document.getElementById('subject').value;
+    var message = document.getElementById('message').value;
+    var resultEl = document.getElementById('result');
+    resultEl.innerHTML = '<strong>Name:</strong> ' + name + '<br>' +
+                         '<strong>Email:</strong> ' + email + '<br>' +
+                         '<strong>Subject:</strong> ' + subject + '<br>' +
+                         '<strong>Message:</strong> ' + message;
+  });
+
+  // Counter
+  var count = 0;
+  document.getElementById('increment-btn').addEventListener('click', function() {
+    count++;
+    count++;
+    document.getElementById('counter').textContent = String(count);
+  });
+
+  // List adder
+  document.getElementById('add-btn').addEventListener('click', function() {
+    var li = document.createElement('li');
+    li.textContent = document.getElementById('add-btn').dataset.value;
+    document.getElementById('list').appendChild(li);
+  });
+</script>
+</body>
+</html>

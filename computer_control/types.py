@@ -48,6 +48,221 @@ class VerificationStatus(StrEnum):
 
 
 # ---------------------------------------------------------------------------
+# OS / platform enums
+# ---------------------------------------------------------------------------
+
+class OSPlatform(StrEnum):
+    """Operating system platform."""
+
+    UNKNOWN = "unknown"
+    LINUX = "linux"
+    MACOS = "macos"
+    WINDOWS = "windows"
+
+
+class ScrollDirection(StrEnum):
+    """Scroll direction."""
+
+    UP = "up"
+    DOWN = "down"
+    LEFT = "left"
+    RIGHT = "right"
+
+
+class MouseClickButton(StrEnum):
+    """Mouse button for click actions."""
+
+    LEFT = "left"
+    RIGHT = "right"
+    MIDDLE = "middle"
+
+
+class Permission(StrEnum):
+    """Platform permission types."""
+
+    SCREEN = "screen"
+    MOUSE = "mouse"
+    KEYBOARD = "keyboard"
+    CLIPBOARD = "clipboard"
+    WINDOW = "window"
+    APP = "application"
+
+
+# ---------------------------------------------------------------------------
+# ComputerControlAction — platform action identifiers (StrEnum)
+# ---------------------------------------------------------------------------
+
+class ComputerControlAction(StrEnum):
+    """Canonical identifiers for platform-level computer-control actions.
+
+    Used by the executor to dispatch actions to the platform adapter.
+    """
+
+    # Mouse
+    MOUSE_MOVE = "mouse_move"
+    MOUSE_CLICK = "mouse_click"
+    MOUSE_DOUBLE_CLICK = "mouse_double_click"
+    MOUSE_RIGHT_CLICK = "mouse_right_click"
+    MOUSE_DRAG = "mouse_drag"
+
+    # Keyboard
+    KEYBOARD_TYPE = "keyboard_type"
+    KEYBOARD_HOTKEY = "keyboard_hotkey"
+    KEYBOARD_PRESS = "keyboard_press"
+
+    # Clipboard
+    CLIPBOARD_READ = "clipboard_read"
+    CLIPBOARD_WRITE = "clipboard_write"
+
+    # Screen
+    SCREENSHOT = "screenshot"
+    SCROLL = "scroll"
+
+    # Window
+    WINDOW_LIST = "window_list"
+    WINDOW_FOCUS = "window_focus"
+    WINDOW_MINIMIZE = "window_minimize"
+    WINDOW_MAXIMIZE = "window_maximize"
+    WINDOW_CLOSE = "window_close"
+    WINDOW_GET_INFO = "window_get_info"
+
+    # App
+    APP_LAUNCH = "app_launch"
+    APP_KILL = "app_kill"
+    APP_LIST = "app_list"
+
+    # System
+    VOLUME_GET = "volume_get"
+    VOLUME_SET = "volume_set"
+    BRIGHTNESS_GET = "brightness_get"
+    BRIGHTNESS_SET = "brightness_set"
+
+    # Control
+    WAIT = "wait"
+    CAPABILITY_CHECK = "capability_check"
+
+
+# ACTION_FIELDS defines the JSON schema fields for each platform action.
+ACTION_FIELDS: dict[str, dict[str, Any]] = {
+    "mouse_move": {"x": {"type": "int"}, "y": {"type": "int"}},
+    "mouse_click": {
+        "x": {"type": "int", "optional": True},
+        "y": {"type": "int", "optional": True},
+        "button": {"type": "str", "enum": ["left", "right", "middle"], "default": "left"},
+        "clicks": {"type": "int", "default": 1},
+    },
+    "mouse_drag": {
+        "x1": {"type": "int"}, "y1": {"type": "int"},
+        "x2": {"type": "int"}, "y2": {"type": "int"},
+        "duration": {"type": "float", "default": 0.5},
+    },
+    "keyboard_type": {"text": {"type": "str"}},
+    "keyboard_hotkey": {"keys": {"type": "list[str]"}},
+    "keyboard_press": {"key": {"type": "str"}},
+    "scroll": {
+        "direction": {"type": "str", "enum": ["up", "down", "left", "right"]},
+        "amount": {"type": "int", "default": 3},
+    },
+    "clipboard_read": {},
+    "clipboard_write": {"text": {"type": "str"}},
+    "screenshot": {"save_path": {"type": "str", "optional": True}},
+    "window_focus": {"title": {"type": "str"}},
+    "window_minimize": {"title": {"type": "str"}},
+    "window_maximize": {"title": {"type": "str"}},
+    "window_close": {"title": {"type": "str"}},
+    "window_list": {},
+    "window_get_info": {"title": {"type": "str", "optional": True}},
+    "app_launch": {"path": {"type": "str", "optional": True}, "name": {"type": "str", "optional": True}},
+    "app_kill": {"pid": {"type": "int", "default": 0}, "name": {"type": "str", "optional": True}},
+    "app_list": {},
+    "volume_get": {},
+    "volume_set": {"value": {"type": "int"}},
+    "brightness_get": {},
+    "brightness_set": {"value": {"type": "int"}},
+    "screen_info": {},
+    "wait": {"seconds": {"type": "float", "default": 1.0}},
+    "capability_check": {"capability": {"type": "str"}},
+}
+
+
+# ---------------------------------------------------------------------------
+# Platform dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ScreenPosition:
+    """A screen coordinate."""
+
+    x: int
+    y: int
+
+
+@dataclass(frozen=True)
+class WindowInfo:
+    """A window on the desktop."""
+
+    title: str
+    pid: int
+    x: int = 0
+    y: int = 0
+    width: int = 0
+    height: int = 0
+    is_active: bool = False
+    is_visible: bool = True
+    is_minimized: bool = False
+    is_maximized: bool = False
+
+
+@dataclass(frozen=True)
+class AppInfo:
+    """Application info."""
+
+    name: str
+    pid: int
+    is_active: bool = False
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    """Result of a platform action execution."""
+
+    ok: bool = True
+    message: str = ""
+    error: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def ok_result(cls, message: str = "", data: dict[str, Any] | None = None) -> ExecutionResult:
+        return cls(ok=True, message=message, data=data or {})
+
+    @classmethod
+    def error_result(cls, code: str, message: str) -> ExecutionResult:
+        return cls(ok=False, message=message, error=code, data={})
+
+
+# ---------------------------------------------------------------------------
+# CancellationToken — lightweight cancellation protocol
+# ---------------------------------------------------------------------------
+
+class CancellationToken:
+    """Cancel an in-flight operation."""
+
+    def __init__(self) -> None:
+        self._cancelled: bool = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def check(self) -> None:
+        if self._cancelled:
+            raise CancellationError("Operation cancelled.")
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled
+
+
+# ---------------------------------------------------------------------------
 # Frame
 # ---------------------------------------------------------------------------
 
@@ -92,7 +307,7 @@ class VisionObservation:
 
 
 # ---------------------------------------------------------------------------
-# Proposed / executed action
+# Proposed / executed action (closed-loop specific)
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -242,20 +457,36 @@ class SafetyDenialError(ClosedLoopError):
 
 
 __all__ = [
+    # Enums
+    "FrameSource",
     "ActionCategory",
+    "VerificationStatus",
+    "OSPlatform",
+    "ScrollDirection",
+    "MouseClickButton",
+    "Permission",
+    "ComputerControlAction",
+    "LoopPhase",
+    # Dataclasses
+    "ScreenPosition",
+    "WindowInfo",
+    "AppInfo",
+    "ExecutionResult",
+    "Frame",
+    "VisionObservation",
+    "ComputerAction",
+    "VerificationResult",
+    "LoopBudget",
+    "LoopState",
+    # Constants
+    "ACTION_FIELDS",
+    # Cancellation
+    "CancellationToken",
+    # Errors
+    "ClosedLoopError",
+    "StaleObservationError",
     "BudgetExceededError",
     "CancellationError",
-    "ClosedLoopError",
-    "ComputerAction",
-    "Frame",
-    "FrameSource",
-    "LoopBudget",
-    "LoopPhase",
-    "LoopState",
-    "SafetyDenialError",
-    "StaleObservationError",
     "VerificationFailedError",
-    "VerificationResult",
-    "VerificationStatus",
-    "VisionObservation",
+    "SafetyDenialError",
 ]
