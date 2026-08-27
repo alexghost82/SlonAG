@@ -428,6 +428,10 @@ class PrivacyStep(_StepWidget):
         self._priv_local_tools = QRadioButton(t("onboard.privacy_local_tools"))
         self._priv_hybrid = QRadioButton(t("onboard.privacy_hybrid"))
         self._priv_cloud = QRadioButton(t("onboard.privacy_cloud"))
+        self._priv_fully_local.setData("fully_local")
+        self._priv_local_tools.setData("local_with_tools")
+        self._priv_hybrid.setData("hybrid")
+        self._priv_cloud.setData("cloud")
         for r in (self._priv_fully_local, self._priv_local_tools, self._priv_hybrid, self._priv_cloud):
             r.setFont(QFont("Courier New", 10))
             r.setStyleSheet(f"color: {_TEXT}; background: transparent;")
@@ -444,6 +448,9 @@ class PrivacyStep(_StepWidget):
         self._net_offline = QRadioButton(t("onboard.net_offline"))
         self._net_tools = QRadioButton(t("onboard.net_tools"))
         self._net_hybrid = QRadioButton(t("onboard.net_hybrid"))
+        self._net_offline.setData("offline")
+        self._net_tools.setData("tools_only")
+        self._net_hybrid.setData("hybrid")
         for r in (self._net_offline, self._net_tools, self._net_hybrid):
             r.setFont(QFont("Courier New", 10))
             r.setStyleSheet(f"color: {_TEXT}; background: transparent;")
@@ -461,6 +468,10 @@ class PrivacyStep(_StepWidget):
         self._route_local_first = QRadioButton(t("onboard.route_local_first"))
         self._route_local_only = QRadioButton(t("onboard.route_local_only"))
         self._route_cloud_first = QRadioButton(t("onboard.route_cloud_first"))
+        self._route_manual.setData("manual")
+        self._route_local_first.setData("local_first")
+        self._route_local_only.setData("local_only")
+        self._route_cloud_first.setData("cloud_first")
         for r in (self._route_manual, self._route_local_first, self._route_local_only, self._route_cloud_first):
             r.setFont(QFont("Courier New", 10))
             r.setStyleSheet(f"color: {_TEXT}; background: transparent;")
@@ -484,19 +495,19 @@ class PrivacyStep(_StepWidget):
     def _selected_privacy(self) -> str:
         for r in (self._priv_fully_local, self._priv_local_tools, self._priv_hybrid, self._priv_cloud):
             if r.isChecked():
-                return r.text()
+                return r.data() or "hybrid"
         return "hybrid"
 
     def _selected_net(self) -> str:
         for r in (self._net_offline, self._net_tools, self._net_hybrid):
             if r.isChecked():
-                return r.text()
+                return r.data() or "hybrid"
         return "hybrid"
 
     def _selected_route(self) -> str:
         for r in (self._route_manual, self._route_local_first, self._route_local_only, self._route_cloud_first):
             if r.isChecked():
-                return r.text()
+                return r.data() or "manual"
         return "manual"
 
 
