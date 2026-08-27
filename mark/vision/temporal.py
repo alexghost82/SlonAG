@@ -110,8 +110,19 @@ class TemporalAnalyzer:
         return list(self.state.history)
 
     def _get_recent_labels(self, window: int = 10) -> set[str]:
+        """Return labels from recent frames.
+        
+        NOTE: This is a simplified implementation. The full implementation would
+        need per-frame detection data stored in the temporal store. Currently
+        returns an empty set — multi-frame label tracking is a planned feature.
+        """
         recent = self.state.history[-window:]
-        return set()  # simplified — would need detection data per frame
+        return set()  # TODO: collect labels from detection data in recent frames
 
     def _get_trajectory(self, track_id: str) -> list[dict[str, float]]:
-        return []  # placeholder — would use tracking store
+        """Return trajectory points for a track ID.
+        
+        NOTE: This is a placeholder — tracking store is not yet implemented.
+        Returns empty list. Multi-object tracking is a planned feature.
+        """
+        return []  # TODO: implement tracking store for trajectory data

@@ -196,27 +196,6 @@ class Settings:
         }
         if self.os_system is not None:
             payload["os_system"] = self.os_system
-        voice_stt_engine: str = DEFAULT_VOICE_STT_ENGINE
-    voice_tts_engine: str = DEFAULT_VOICE_TTS_ENGINE
-    voice_mic_device: str | None = None
-    voice_speaker_device: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "privacy_profile": self.privacy_profile,
-            "provider_id": self.provider_id,
-            "model_id": self.model_id,
-            "language": self.language,
-            "network_mode": self.network_mode,
-            "routing_mode": self.routing_mode,
-            "model_roles": self.model_roles.to_dict(),
-            "local_models": self.local_models.to_dict(),
-            "provider_settings": {
-                pid: ps.to_dict() for pid, ps in self.provider_settings.items()
-            },
-        }
-        if self.os_system is not None:
-            payload["os_system"] = self.os_system
         if self.camera_index is not None:
             payload["camera_index"] = self.camera_index
         if self.voice_stt_engine != DEFAULT_VOICE_STT_ENGINE:

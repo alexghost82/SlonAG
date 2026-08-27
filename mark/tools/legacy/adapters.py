@@ -168,25 +168,15 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
 # Wave 22: shell_exec — bounded subprocess executor
 shell_exec_handler = _action_handler("actions.shell_exec", "shell_exec")
 
-# cmd_control is deprecated/broken; delegate to shell_exec for backward compat.
+# cmd_control is deprecated — removed from the advertised tool catalog.
+# Kept in LEGACY_HANDLERS only so old callers don't crash on import.
 def _cmd_control_deprecated_handler(args: Mapping[str, object]) -> ToolResult:
-    """Deprecated shim: route broken cmd_control to canonical shell_exec.
-
-    Maps legacy argument names (``cmd`` → ``command``) so callers
-    using the old tool name still work through the approved pipeline.
-    """
-    cmd = args.get("command", args.get("cmd", ""))
-    if isinstance(cmd, str) and cmd.strip():
-        kwargs: dict[str, object] = {"command": cmd}
-        cwd = args.get("cwd")
-        if cwd is not None:
-            kwargs["cwd"] = cwd
-        timeout = args.get("timeout")
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        return shell_exec_handler(kwargs)
-    # No command at all — shell_exec will produce the proper error.
-    return shell_exec_handler({"command": ""})
+    """Return a clear error: cmd_control has been removed. Use ``shell_exec`` instead."""
+    return ToolResult(
+        ok=False,
+        code="deprecated",
+        message="cmd_control is deprecated and removed from the tool catalog. Use ``shell_exec`` instead.",
+    )
 
 
 # === Wave 24: Vision + STT + TTS tool handlers ===

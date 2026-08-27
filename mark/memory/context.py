@@ -12,6 +12,7 @@ from mark.memory.retriever import ContextChunk, RetrievalResult
 
 
 MAX_MEMORY_CHUNKS = 10
+_MAX_MEMORY_BYTES = 4096  # Cap assembled context at ~4 KB
 DEFAULT_MEMORY_PREFIX = "# CONTEXT — PERSONAL MEMORY (trustworthy, up-to-date)"
 
 
@@ -68,7 +69,18 @@ class MemoryContextAssembler:
         if not lines or len(lines) == 1:
             return ""
 
-        return "\n".join(lines)
+        text = "\n".join(lines)
+        # Enforce byte budget (truncate if exceeded)
+        encoded = text.encode("utf-8")
+        if len(encoded) > _MAX_MEMORY_BYTES:
+            trimmed = encoded[:_MAX_MEMORY_BYTES].decode("utf-8", errors="ignore")
+            # Truncate at last full line boundary
+            last_newline = trimmed.rfind("\n")
+            if last_newline > 100:  # Keep at least some content
+                trimmed = trimmed[:last_newline]
+            return trimmed[:_MAX_MEMORY_BYTES] + " ..."
+
+        return text
 
     def assemble_chunks(self, chunks: list[ContextChunk]) -> str:
         """Directly assemble chunks (bypassing RetrievalResult)."""

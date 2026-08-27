@@ -24,7 +24,10 @@ _METADATA_IPS = frozenset(
     }
 )
 _DOTTED_IPV4 = re.compile(r"^(\d+)\.(\d+)\.(\d+)\.(\d+)$")
-_HEX_IPV4 = re.compile(r"^0x[0-9a-f]+$")
+_HEX_IPV4 = re.compile(r"^0x[0-9a-f]+$", re.IGNORECASE)
+# Partial IPv4: "N.M" or "N.M.O" — not valid IP literals but browsers
+# may interpret them in unexpected ways.
+_PARTIAL_IPV4 = re.compile(r"^(\d+)(\.(\d+))?(\.(\d+))?$")
 
 
 def check_url(url: str) -> None:
@@ -70,20 +73,43 @@ def _host_blocked(host: str) -> bool:
 def _parse_ip(
     host: str,
 ) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Parse an IP literal from *host*, including ambiguous forms.
+
+    Returns the concrete IPv4/IPv6 address, or None if the host is purely
+    alphabetic / a FQDN.
+    """
+    # --- Octal-style dotted IPv4: 0177.0.0.1 → 127.0.0.1 ---
     dotted = _DOTTED_IPV4.fullmatch(host)
-    if dotted is not None and any(len(part) > 1 and part.startswith("0") for part in dotted.groups()):
-        # Ambiguous octal-style IPv4 (browsers may treat 0177.0.0.1 as 127.0.0.1).
+    if dotted is not None and any(
+        len(part) > 1 and part.startswith("0") for part in dotted.groups()
+    ):
         return ipaddress.ip_address("127.0.0.1")
+
+    # --- Pure decimal integer IPv4 (big-endian): 127.0.0.1 → 2130706433 ---
     if host.isdigit():
         number = int(host)
-        if number < 2**32:
+        if 0 <= number < 2**32:
             return ipaddress.IPv4Address(number)
         return None
+
+    # --- Hex IPv4: 0x7f000001 → 127.0.0.1 ---
     if _HEX_IPV4.fullmatch(host):
         number = int(host, 16)
-        if number < 2**32:
+        if 0 <= number < 2**32:
             return ipaddress.IPv4Address(number)
         return None
+
+    # --- Partial IPv4: "N.M" or "N.M.O" — reject as unambiguous. ---
+    partial = _PARTIAL_IPV4.fullmatch(host)
+    if partial is not None:
+        groups = partial.groups()
+        # If we have a second or third group, this is a partial IPv4 (N.M or N.M.O)
+        # which is not a valid IP literal — reject conservatively.
+        if groups[1] is not None or groups[2] is not None:
+            return ipaddress.ip_address("0.0.0.0")
+        # Single number without dots — already handled above by isdigit()
+
+    # --- Standard IPv4 / IPv6 ---
     try:
         address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(host)
     except ValueError:

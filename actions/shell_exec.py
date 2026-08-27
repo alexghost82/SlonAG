@@ -60,24 +60,104 @@ _TIMEOUT_BOUND_LOW: float = 1.0
 _TIMEOUT_BOUND_HIGH: float = 300.0
 
 # Always-refuse prefixes (checked against the full command string).
+# Broad set covering common privilege-escalation, destructive, and
+# system-disruption commands. Whitespace/encoding obfuscation is
+# handled at the token level in ``_is_blocked``.
 _BLOCKED_PREFIXES: tuple[str, ...] = (
     "sudo ",
     "sudo\t",
     "su ",
+    "su\t",
     "pkexec ",
     "chmod 777 ",
     "chmod o+ ",
     "chown root ",
-    "mkfs ",
+    "mkfs",
     "dd if=/dev/zero",
+    "dd of=/dev/zero",
+    "dd if=/dev/",
     "rm -rf /",
     "rm -rf /*",
     "shutdown ",
+    "shutdown\t",
     "halt ",
+    "halt\t",
     "reboot",
+    "reboot ",
     "poweroff",
+    "poweroff ",
     "init 0",
     "init 6",
+    "umount /",
+    "umount ",
+    "mount /",
+    "mount ",
+    "chmod 000 ",
+    "chattr ",
+    "chattr -i ",
+    "chattr -a ",
+    "mkfs ",
+    "mkfs.",
+    "blkid /",
+    "fdisk /",
+    "dd ",
+    "> /dev/",
+    "> /etc/",
+    "echo * > /etc/",
+    "echo * > /boot/",
+    "echo * > /sys/",
+    "echo * > /proc/",
+    "nc -l ",
+    "nc -e ",
+    "ncat -l ",
+    "ncat -e ",
+    "ncat ",
+    "socat ",
+    "nmap -sS ",
+    "nmap -O ",
+    "arp ",
+    "iptables -F",
+    "iptables -X",
+    "iptables -Z",
+    "iptables -I INPUT",
+    "ifconfig ",
+    "ip route flush",
+    "ip link set ",
+    "kill -9 1",
+    "kill -9 0",
+    "kill -KILL 1",
+    "killall -9 ",
+    "pkill -9 ",
+    "kill -9 root",
+    "echo * > /etc/shadow",
+    "echo * > /etc/passwd",
+    "wget * /etc/",
+    "curl * /etc/",
+    "cat /etc/shadow",
+    "cat /etc/passwd",
+    "cat /etc/sudoers",
+    "cat /root/",
+    "cat ~/.ssh/",
+    "cat ~/.bash_history",
+    "cat ~/.zsh_history",
+    "cat ~/.aws/",
+    "cat ~/.azure/",
+    "cat ~/.gcloud/",
+    "cat ~/.config/",
+    "cat /proc/",
+    "cat /sys/",
+    "dd if=",
+    "wget ",
+    "curl ",
+    "python -c ",
+    "python3 -c ",
+    "perl -e ",
+    "ruby -e ",
+    "bash -c ",
+    "sh -c ",
+    "/bin/bash -c",
+    "/bin/sh -c",
+    "/bin/zsh -c",
 )
 
 # Internal tracker for process-tree cleanup on cancellation / timeout.
@@ -90,10 +170,28 @@ _active_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 
 def _is_blocked(cmd: str) -> bool:
-    """Return ``True`` when the command is explicitly forbidden."""
+    """Return ``True`` when the command is explicitly forbidden.
+
+    Handles leading whitespace, null bytes, newline injections, and
+    backtick / $() prefix obfuscation.
+    """
+    if not isinstance(cmd, str):
+        return False
+    # Strip leading whitespace, null bytes, and newlines
     stripped = cmd.strip()
+    # Remove null bytes (C-string injection)
+    stripped = stripped.replace("\x00", "")
+    # Remove backtick and $() prefix tricks
+    while stripped and stripped[0] in ("$", "`", "\x0a", "\x0d"):
+        stripped = stripped.lstrip("$`\x0a\x0d\x00")
+    # Check each blocked prefix
     for prefix in _BLOCKED_PREFIXES:
         if stripped.startswith(prefix):
+            return True
+        # Also match if the command token itself is a blocked word
+        # even when followed by spaces (e.g. "reboot" at end of string)
+        first_token = stripped.split()[0] if stripped.split() else stripped
+        if first_token in {"reboot", "poweroff", "halt"}:
             return True
     return False
 

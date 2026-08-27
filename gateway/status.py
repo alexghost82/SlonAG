@@ -11,9 +11,20 @@ from typing import Mapping
 def read_gateway_status(
     path: str | Path, *, stale_after_seconds: float = 5.0
 ) -> Mapping[str, object]:
+    """Read gateway status, distinguishing not-configured vs disabled vs unavailable.
+
+    States:
+    - ``not-configured`` — the gateway database does not exist yet (normal for
+      headless / non-gateway deployments).  The gateway can be started.
+    - ``disabled`` — the gateway was explicitly stopped or never started and
+      the database is absent (legacy compat).
+    - ``unavailable`` — database exists but is corrupted or locked.
+    - ``stopped`` — database exists but no heartbeat row (clean shutdown).
+    - ``running`` / ``starting`` / ``degraded`` — live states.
+    """
     database = Path(path)
     if not database.is_file():
-        return {"state": "disabled"}
+        return {"state": "not-configured"}
     try:
         uri = f"file:{database.resolve()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True)

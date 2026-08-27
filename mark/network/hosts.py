@@ -22,6 +22,7 @@ _METADATA_IPS = frozenset(
 )
 _DOTTED_IPV4 = re.compile(r"^(\d+)\.(\d+)\.(\d+)\.(\d+)$")
 _HEX_IPV4 = re.compile(r"^0x[0-9a-f]+$", re.IGNORECASE)
+_PARTIAL_IPV4 = re.compile(r"^(\d+)(\.(\d+))?(\.(\d+))?$")
 _PROXY_ENV_KEYS = (
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -120,6 +121,12 @@ def parse_ip_literal(
         if number < 2**32:
             return ipaddress.IPv4Address(number)
         return None
+    # Partial IPv4: "N.M" or "N.M.O" — reject conservatively.
+    partial = _PARTIAL_IPV4.fullmatch(host)
+    if partial is not None:
+        g = partial.groups()
+        if g[1] is not None or g[2] is not None:
+            return ipaddress.ip_address("0.0.0.0")
     try:
         address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(
             host
