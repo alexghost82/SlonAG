@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from computer_control.deterministic import MockPlatformAdapter
+from computer_control.platform import build_platform_adapter
 from computer_control.executor import validate_action, run_computer_control
 from mark.tools.contracts import ToolResult
 
@@ -186,6 +186,6 @@ def computer_control(
     executor_params: dict[str, Any] = dict(params)
 
     # Execute
-    result = run_computer_control(action=action, parameters=executor_params, adapter=MockPlatformAdapter())
+    result = run_computer_control(action=action, parameters=executor_params, adapter=build_platform_adapter("auto"))
 
     return result

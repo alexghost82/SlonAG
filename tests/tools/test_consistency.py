@@ -277,3 +277,39 @@ class TestDeprecatedToolConsistency:
         assert "shell_exec" in result.message.lower(), (
             f"cmd_control message should suggest 'shell_exec': {result.message}"
         )
+
+
+class TestModelCatalogConsistency:
+    """Tests that verify the model catalog does not advertise fake models."""
+
+    def test_no_mock_model_in_default_catalog(self) -> None:
+        """ModelStore must not advertise a fake 'mock-model' by default."""
+        from server.routes.models import ModelStore
+        from providers.contracts import ModelInfo
+
+        store = ModelStore()
+        models = store.list_models()
+        for m in models:
+            assert m.id != "mock-model", (
+                "ModelStore must not advertise 'mock-model' — it is a fake"
+            )
+            assert m.display_name != "Mock Local", (
+                "ModelStore must not advertise 'Mock Local' — it is a fake"
+            )
+
+
+class TestActionHandlerConsistency:
+    """Tests that verify action handlers return clear errors on import failure."""
+
+    def test_action_handler_handles_import_error(self) -> None:
+        """_action_handler must return ok=False when module cannot be imported."""
+        from mark.tools.legacy.adapters import _action_handler
+
+        handler = _action_handler("actions.nonexistent_module_fake_xyz", "missing_func")
+        result = handler({})
+        assert result.ok is False, (
+            f"Handler should return ok=False on import error, got ok={result.ok}"
+        )
+        assert result.code in ("handler_unavailable", "handler_error"), (
+            f"Expected error code, got: {result.code}"
+        )

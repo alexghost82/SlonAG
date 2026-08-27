@@ -80,11 +80,28 @@ def _action_handler(
         args: Mapping[str, object], *, _speak: Callable[..., object] | None = None,
         _player: object | None = None,
     ) -> ToolResult:
-        action = getattr(import_module(module_name), function_name)
-        kwargs: dict[str, Any] = {"parameters": dict(args), "player": _player}
-        if accepts_speak:
-            kwargs["speak"] = _speak
-        return normalize_legacy_result(action(**kwargs))
+        try:
+            action = getattr(import_module(module_name), function_name)
+        except (ImportError, ModuleNotFoundError) as exc:
+            return ToolResult(
+                ok=False, code="handler_unavailable",
+                message=f"Handler '{module_name}.{function_name}' недоступен: {exc}",
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="handler_error",
+                message=f"Ошибка при вызове '{module_name}.{function_name}': {exc}",
+            )
+        try:
+            kwargs: dict[str, Any] = {"parameters": dict(args), "player": _player}
+            if accepts_speak:
+                kwargs["speak"] = _speak
+            return normalize_legacy_result(action(**kwargs))
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="handler_failed",
+                message=f"Handler '{function_name}' завершился с ошибкой: {exc}",
+            )
 
     handler.__name__ = f"{function_name}_handler"
     handler._accepts_legacy_context = True  # type: ignore[attr-defined]
