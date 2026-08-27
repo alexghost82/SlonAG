@@ -28,15 +28,15 @@ ERROR_CODES = frozenset(
 )
 
 _MESSAGES: dict[str, str] = {
-    CODE_OK: "Network policy accepted the request.",
-    CODE_OFFLINE: "External network access is disabled in offline mode.",
-    CODE_TOOL_NOT_ALLOWED: "This tool is not allowlisted for network access.",
-    CODE_UNSAFE_HOST: "Host is not allowed by network policy.",
+    CODE_OK: t("network.ok"),
+    CODE_OFFLINE: t("network.offline"),
+    CODE_TOOL_NOT_ALLOWED: t("network.tool_not_allowed"),
+    CODE_UNSAFE_HOST: t("network.unsafe_host", host="_PLACEHOLDER_"),
     CODE_PROXY_FORCED_EXTERNAL: (
-        "Proxy settings would send a loopback request through an external proxy."
+        t("network.proxy_forced_external")
     ),
-    CODE_INVALID_URL: "URL is not a valid http(s) request target.",
-    CODE_CLOUD_DENIED: "Cloud providers are not allowed under the current policy.",
+    CODE_INVALID_URL: t("network.invalid_url"),
+    CODE_CLOUD_DENIED: t("network.cloud_denied"),
 }
 
 _UNKNOWN = "Network policy rejected the request."

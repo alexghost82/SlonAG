@@ -15,7 +15,8 @@
     "gemini_key": "Gemini API key",
     "openrouter_key": "OpenRouter API key",
     "os": "Operating system",
-    "initialise": "Initialise systems"
+    "initialise": "Initialise systems",
+    "complete": "✅ Setup complete! Run 'python main.py' to start Slon."
   },
   "window": {
     "title": "J.A.R.V.I.S — Slon"
@@ -77,7 +78,8 @@
     "transport_stopped": "Transport already stopped",
     "streamable_http_requires_url": "STREAMABLE_HTTP transport requires a URL",
     "stdio_requires_command": "MCP stdio transport requires a non-empty command",
-    "subprocess_no_stdin_stdout": "MCP subprocess opened without stdin or stdout"
+    "subprocess_no_stdin_stdout": "MCP subprocess opened without stdin or stdout",
+    "unknown": "Unknown error"
   },
   "api": {
     "ok": "Request accepted.",
@@ -99,7 +101,17 @@
     "cancelled": "Cancelled by steering signal.",
     "completed": "Completed successfully.",
     "interrupted": "Execution was interrupted.",
-    "tool_timed_out": "Tool execution timed out."
+    "tool_timed_out": "Tool execution timed out.",
+    "replan_forced": "Максимум попыток для шага — форсирую перепланирование",
+    "decision": "Решение: {decision} — {reason}",
+    "analysis_failed": "Анализ не удался: {error} — перепланирование",
+    "fix_failed": "Генерация исправления не удалась: {error}",
+    "task_queued": "Задача в очереди: [{id}] {goal}",
+    "task_cancelled": "Задача отменена: [{id}]",
+    "task_running": "Выполняется: [{id}] {goal}",
+    "task_completed": "Завершено: [{id}]",
+    "task_failed": "Ошибка: [{id}] {error}",
+    "callback_error": "Ошибка callback on_complete: {error}"
   },
   "actions": {
     "whatsapp_error": "WhatsApp error: {msg}",
@@ -127,7 +139,73 @@
     "updating_game": "Updating game…",
     "game_update_cancelled": "Update cancelled by user.",
     "steam_check_failed": "Failed to check Steam: {err}",
-    "game_not_found": "Game not found."
+    "game_not_found": "Game not found.",
+    "browser": {
+      "response": "{result}"
+    },
+    "code_helper": {
+      "auto_detected": "[Code] 🤖 Auto-detected: {action}"
+    },
+    "computer": {
+      "action_failed": "[ComputerControl] ❌ {action}: {e}"
+    },
+    "settings": {
+      "intent": "Действие: {action}  Значение: {value}  ОС: {os}"
+    },
+    "desktop": {
+      "op": "Действие: {op}"
+    },
+    "dev_agent": {
+      "fixed": "[DevAgent] 🔧 Fixed: {path}"
+    },
+    "file": {
+      "write_ok": "Записано: {path}"
+    },
+    "game_updater": {
+      "complete": "[GameUpdater] ✅ Update {game} completed"
+    },
+    "open_app": {
+      "desktop_entry_failed": "Не удалось найти .desktop для {app}"
+    },
+    "reminder": {
+      "notify": "Напоминание: {msg}"
+    },
+    "shell_exec": {
+      "completed": "[Shell] Exec completed"
+    },
+    "weather": {
+      "slon_message": "Slon: {message}"
+    },
+    "web_search": {
+      "snippet": "Результат: {snippet}"
+    },
+    "youtube": {
+      "scrape_failed_open": "Ошибка парсинга, открывается страница поиска"
+    },
+    "screen": {
+      "failed": "[Screen] Screenshot processing failed: {e}"
+    },
+    "browser_control": {
+      "failed": "[BrowserCtrl] ❌ {e}"
+    },
+    "flight": {
+      "editor_open_failed": "Не удалось открыть текстовый редактор: {error}"
+    },
+    "code": {
+      "auto_detected": "Авто-определено: {action}"
+    },
+    "dev": {
+      "msg": "{msg}"
+    },
+    "send_message": {
+      "platform_not_found": "Платформа не найдена: {platform}"
+    },
+    "shell": {
+      "not_allowed": "Команда запрещена политикой безопасности: {cmd}"
+    },
+    "game": {
+      "failed": "Ошибка обновления: {error}"
+    }
   },
   "gateway": {
     "frame_incomplete": "Incomplete frame.",
@@ -160,7 +238,21 @@
     "replan_failed": "Replan failed: {e}"
   },
   "ui": {
-    "base_url_placeholder": "Base URL (custom endpoint)…"
+    "base_url_placeholder": "Base URL (custom endpoint)…",
+    "stt_listen": "🎤  LOCAL STT",
+    "stt_na": "🎤  LOCAL STT N/A",
+    "tts_on": "🗣  LOCAL TTS ON",
+    "tts_off": "🗣  LOCAL TTS OFF",
+    "tts_na": "🗣  LOCAL TTS N/A",
+    "desktop_api_off": "📡  DESKTOP API OFF",
+    "desktop_api_on": "📡  DESKTOP API ON",
+    "mic_muted": "🔇  MICROPHONE MUTED",
+    "mic_active": "🎙  MICROPHONE ACTIVE",
+    "file_hint_default": "Tell Slon what to do with it",
+    "uptime": "UP  {h:02d}:{m:02d}",
+    "uptime_none": "UP  --:--",
+    "proc_count": "PROC  {n}",
+    "proc_none": "PROC  --"
   },
   "tools": {
     "unknown": "Unknown tool",
@@ -168,24 +260,110 @@
     "already_registered": "Tool already registered: {name}"
   },
   "safety": {
-    "policy_violation": "Safety policy violation.",
-    "source_not_recognized": "Source not recognized: {source}"
+    "policy_violation": "Security policy rejected the request.",
+    "source_not_recognized": "Source not recognized: {source}",
+    "ok": "Security policy accepted the request.",
+    "unknown_tool": "Unknown tool.",
+    "invalid_args": "Tool arguments failed validation.",
+    "unsafe_url": "URL is blocked by policy."
   },
   "network": {
     "request_denied": "Request denied by network policy.",
-    "host_blocked": "Host blocked: {host}"
+    "host_blocked": "Host blocked: {host}",
+    "ok": "Network policy accepted the request.",
+    "offline": "External network access is disabled.",
+    "tool_not_allowed": "Tool not allowlisted for network access.",
+    "unsafe_host": "Host blocked by network policy: {host}.",
+    "proxy_forced_external": "Proxy settings would send request through external proxy.",
+    "invalid_url": "URL is not a valid http(s) target.",
+    "cloud_denied": "Cloud providers blocked by policy."
   },
   "memory": {
     "store_error": "Memory store error.",
-    "policy_error": "Memory policy error."
+    "policy_error": "Memory policy error.",
+    "ok": "Memory store is ready.",
+    "load_error": "Ошибка загрузки: {error}",
+    "trimmed": "Усечено {cat}/{key} (лимит: {n} символов)",
+    "saved": "Сохранено: {keys}",
+    "stage1_failed": "Проверка Stage1 не удалась: {error}",
+    "extract_failed": "Ошибка извлечения: {error}",
+    "secret_rejected": "Secret rejected",
+    "unknown_proposal": "Unknown proposal",
+    "unknown_type": "Unknown data type",
+    "invalid_record": "Invalid record",
+    "invalid_migration": "Invalid migration",
+    "not_found": "Record not found"
   },
   "documents": {
     "bad_mime": "Unsupported MIME type.",
     "path_traversal": "Path traversal attempt detected.",
-    "zip_bomb": "Zip bomb detected."
+    "zip_bomb": "Zip bomb detected.",
+    "ok": "Document ingest succeeded.",
+    "too_large": "Document exceeds size limit.",
+    "failed": "Document ingest failed.",
+    "missing_hook": "No hook configured for document"
   },
   "speech": {
     "tts_unavailable": "Local TTS unavailable.",
-    "tts_ready": "Local TTS ready."
+    "tts_ready": "Local TTS ready.",
+    "tts_unknown_command": "Unknown command: {cmd}",
+    "unknown_command": "Неизвестная команда: {cmd}",
+    "tts_started": "TTS запущен",
+    "tts_config": "конфиг={config}",
+    "tts_model": "модель={model}"
+  },
+  "chat": {
+    "user": "You: {text}",
+    "assistant": "Slon: {text}",
+    "latency": "SYS: latency {lat}",
+    "playback_cleared": "SYS: playback interrupted cleared={inv}",
+    "online": "SYS: Slon online.",
+    "reconnecting": "SYS: reconnecting in {d}s..."
+  },
+  "runtime": {
+    "approval_denied": "APPROVAL denied: {tool} ({reason})",
+    "state": "STATE {state}",
+    "latency_stats": "LATENCY_STATISTICS",
+    "resource_snapshots": "RESOURCE_SNAPSHOTS",
+    "ok": "Локальный runtime запущен.",
+    "oom": "Out of memory for local model.",
+    "not_running": "Local runtime not running.",
+    "start_failed": "Local runtime start failed.",
+    "stop_failed": "Local runtime stop failed.",
+    "remote_url": "Remote runtime URL blocked. Only local addresses allowed.",
+    "pull_unconfirmed": "Model pull requires size and license confirmation.",
+    "failed": "Local runtime error."
+  },
+  "server": {
+    "pairing_rejected": "gateway pairing rejected: --gateway-lan is required",
+    "tls_warning": "WARNING: TLS-only LAN/iOS Gateway ENABLED (opt-in; no internet publication).",
+    "control_stopped": "Desktop Control API stopped.",
+    "pairing_code": "Код сопряжения Slon (только локально): {code}",
+    "pairing_rejected_code": "Код сопряжения отклонён"
+  },
+  "mark": {
+    "runtime": {
+      "pull_unconfirmed": "Pull не подтверждён."
+    },
+    "safety": {
+      "unsafe_url": "URL содержит unsafe host."
+    },
+    "network": {
+      "cloud_denied": "Облачный запрос отклонён политикой."
+    },
+    "documents": {
+      "missing_hook": "Хук документ-ингеста не найден."
+    },
+    "tools": {
+      "duplicate": "Инструмент уже зарегистрирован."
+    },
+    "memory": {
+      "not_found": "Не найдено."
+    }
+  },
+  "shell_exec": {
+    "invalid_cwd": "Invalid working directory.",
+    "output_truncated": "\n… (output truncated)",
+    "no_args": "Missing required argument 'command' or 'arguments'."
   }
 }
