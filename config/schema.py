@@ -30,10 +30,17 @@ MODEL_ROLE_KEYS = (
 DEFAULT_LANGUAGE = "ru"
 DEFAULT_PRIVACY_PROFILE = "hybrid"
 DEFAULT_PROVIDER_ID = "gemini"
-DEFAULT_NETWORK_MODE = "hybrid"
-DEFAULT_ROUTING_MODE = "manual"
+
+# Base URL defaults per provider type (for local/OpenAI-compatible endpoints)
+DEFAULT_OPENAI_BASE_URL = ""  # uses official OpenAI endpoint
+DEFAULT_GEMINI_BASE_URL = ""  # uses official Gemini endpoint
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
 DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 DEFAULT_LLAMA_CPP_BASE_URL = "http://127.0.0.1:8080"
+DEFAULT_OPENAI_COMPAT_BASE_URL = ""
+DEFAULT_NETWORK_MODE = "hybrid"
+DEFAULT_ROUTING_MODE = "manual"
 
 _SECRET_FIELD_MARKERS = ("api_key", "token", "secret", "password")
 
@@ -106,6 +113,17 @@ class LocalModelOverride:
 
 
 @dataclass(frozen=True)
+class ProviderBaseURL:
+    """Base URL override for a specific provider (OpenAI-compatible endpoints)."""
+
+    base_url: str = ""
+    remote_enabled: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"base_url": self.base_url, "remote_enabled": self.remote_enabled}
+
+
+@dataclass(frozen=True)
 class LocalModelsSettings:
     """Non-secret configuration for local language-model runtimes."""
 
@@ -142,11 +160,13 @@ class Settings:
 
     privacy_profile: str = DEFAULT_PRIVACY_PROFILE
     provider_id: str = DEFAULT_PROVIDER_ID
+    model_id: str = ""  # explicit model selection (empty = auto-resolve)
     language: str = DEFAULT_LANGUAGE
     network_mode: str = DEFAULT_NETWORK_MODE
     routing_mode: str = DEFAULT_ROUTING_MODE
     model_roles: ModelRoles = field(default_factory=ModelRoles)
     local_models: LocalModelsSettings = field(default_factory=LocalModelsSettings)
+    provider_settings: dict[str, ProviderBaseURL] = field(default_factory=dict)
     os_system: str | None = None
     camera_index: int | None = None
 
@@ -154,11 +174,15 @@ class Settings:
         payload: dict[str, Any] = {
             "privacy_profile": self.privacy_profile,
             "provider_id": self.provider_id,
+            "model_id": self.model_id,
             "language": self.language,
             "network_mode": self.network_mode,
             "routing_mode": self.routing_mode,
             "model_roles": self.model_roles.to_dict(),
             "local_models": self.local_models.to_dict(),
+            "provider_settings": {
+                pid: ps.to_dict() for pid, ps in self.provider_settings.items()
+            },
         }
         if self.os_system is not None:
             payload["os_system"] = self.os_system
@@ -193,6 +217,7 @@ def validate_settings(data: object) -> Settings:
         data, "privacy_profile", PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE
     )
     provider_id = _optional_enum(data, "provider_id", PROVIDER_IDS, DEFAULT_PROVIDER_ID)
+    model_id = _optional_str(data, "model_id", "")
     language = _optional_non_empty_str(data, "language", DEFAULT_LANGUAGE)
     network_mode = _optional_enum(
         data, "network_mode", NETWORK_MODES, DEFAULT_NETWORK_MODE
@@ -202,17 +227,20 @@ def validate_settings(data: object) -> Settings:
     )
     model_roles = _validate_model_roles(data.get("model_roles", {}))
     local_models = _validate_local_models(data.get("local_models", {}))
+    provider_settings = _validate_provider_settings(data.get("provider_settings"))
     os_system = _optional_os_overlay(data)
     camera_index = _optional_non_negative_int(data, "camera_index")
 
     return Settings(
         privacy_profile=privacy_profile,
         provider_id=provider_id,
+        model_id=model_id,
         language=language,
         network_mode=network_mode,
         routing_mode=routing_mode,
         model_roles=model_roles,
         local_models=local_models,
+        provider_settings=provider_settings,
         os_system=os_system,
         camera_index=camera_index,
     )
@@ -258,6 +286,25 @@ def _optional_non_empty_str(
     if not value.strip():
         raise SettingsValidationError(f"{field_name} must be a non-empty string")
     return value
+
+
+def _optional_str(
+    data: Mapping[str, Any], field_name: str, default: str
+) -> str:
+    """Return *field_name* value as a string from *data*, or *default*.
+
+    Unlike ``_optional_non_empty_str``, this helper accepts empty strings
+    (useful for optional *model_id* or *base_url* that default to "").
+    """
+    if field_name not in data:
+        return default
+    value = data[field_name]
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise SettingsValidationError(f"{field_name} must be a string")
+    return value
+
 
 
 def _optional_os_overlay(data: Mapping[str, Any]) -> str | None:
@@ -386,6 +433,34 @@ def _validate_model_overrides(value: object) -> dict[str, LocalModelOverride]:
                 )
             kwargs["context_length"] = context_length
         result[model_id] = LocalModelOverride(**kwargs)
+    return result
+
+
+def _validate_provider_settings(value: object) -> dict[str, ProviderBaseURL]:
+    """Validate provider base_url overrides for local-compatible endpoints."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise SettingsValidationError("provider_settings must be an object")
+    allowed_providers = PROVIDER_IDS
+    result: dict[str, ProviderBaseURL] = {}
+    for pid, raw in value.items():
+        if not isinstance(pid, str) or pid not in allowed_providers:
+            raise SettingsValidationError(
+                f"provider_settings contains unknown provider {pid!r}"
+            )
+        if not isinstance(raw, Mapping):
+            raise SettingsValidationError(f"provider_settings.{pid} must be an object")
+        _reject_unknown_or_secret_keys(
+            raw, f"provider_settings.{pid}", {"base_url", "remote_enabled"}
+        )
+        base_url = _optional_str(raw, "base_url", "")
+        remote = raw.get("remote_enabled", False)
+        if not isinstance(remote, bool):
+            raise SettingsValidationError(
+                f"provider_settings.{pid}.remote_enabled must be a boolean"
+            )
+        result[pid] = ProviderBaseURL(base_url=base_url, remote_enabled=remote)
     return result
 
 

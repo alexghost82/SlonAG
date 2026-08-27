@@ -702,32 +702,60 @@ def _run_chat_agent(ui, settings, stack=None):
         from config.secrets import get_secret
         return get_secret(name)
 
-    # Build the router
-    router = Router(
-        provider_id=provider_id,
-        network_mode=getattr(settings, "network_mode", None),
-        privacy_profile=getattr(settings, "privacy_profile", None),
-        routing_mode=getattr(settings, "routing_mode", None),
-        key_provider=key_provider,
-    )
+    # Prefer the stack's Router (already wired with model_id / base_url)
+    if stack is not None:
+        router = getattr(stack, "router", None) or None
+        tool_registry = getattr(stack, "tool_registry", None)
+        safety = getattr(stack, "safety", None)
+        tool_executor_factory = getattr(stack, "sync_tool_executor_factory", None)
+        if router is not None:
+            try:
+                provider_instance = router._resolve(provider_id)
+            except Exception as exc:  # pragma: no cover - needs api key
+                ui.write_log(f"ERR: {exc}")
+                print(f"[Main] router resolve failed: {exc}")
+                return True
+        else:
+            router = None
+            tool_registry = None
+            safety = None
+            tool_executor_factory = None
+    else:
+        router = None
+        tool_registry = None
+        safety = None
+        tool_executor_factory = None
 
-    # Try to resolve the provider
-    try:
-        provider_instance = router._resolve(provider_id)
-    except Exception as exc:  # pragma: no cover - needs api key
-        ui.write_log(f"ERR: {exc}")
-        print(f"[Main] provider init failed: {exc}")
-        return True
+    # Fall back to building from scratch when stack didn't provide router
+    if router is None:
+        router = Router(
+            provider_id=provider_id,
+            network_mode=getattr(settings, "network_mode", None),
+            privacy_profile=getattr(settings, "privacy_profile", None),
+            routing_mode=getattr(settings, "routing_mode", None),
+            key_provider=key_provider,
+        )
+        try:
+            provider_instance = router._resolve(provider_id)
+        except Exception as exc:  # pragma: no cover - needs api key
+            ui.write_log(f"ERR: {exc}")
+            print(f"[Main] provider init failed: {exc}")
+            return True
 
-    # Build tool registry and executor
-    tool_registry = build_builtin_registry()
-    safety = SafetyPolicy()
-    tool_executor = SyncToolExecutor(tool_registry, safety)
+    # Build tool registry / executor when stack didn't provide them
+    if tool_registry is None:
+        tool_registry = build_builtin_registry()
+    if safety is None:
+        safety = SafetyPolicy()
+    if tool_executor_factory is None:
+        tool_executor_factory = lambda reg, sat: SyncToolExecutor(reg, sat)
+
+    tool_executor = tool_executor_factory(tool_registry, safety)
 
     # Build and run the AgentLoop
     agent_loop = AgentLoop(
         model=model_info,
-        provider=provider_instance,
+        provider=router,  # use the full router (handles routing + resolution)
         tool_executor=tool_executor,
     )
 

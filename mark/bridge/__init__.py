@@ -82,6 +82,8 @@ def build_runtime_stack(
     key_provider: KeyProvider | None = None,
     memory_db_path: str | Path | None = None,
     session_db_path: str | Path | None = None,
+    model_id: str = "",
+    provider_settings: dict[str, Any] | None = None,
 ) -> RuntimeStack:
     """Best-effort assembly of router / memory / safety / network / speech."""
     root = Path(repo_root) if repo_root is not None else Path.cwd()
@@ -92,11 +94,19 @@ def build_runtime_stack(
     def _router() -> Any:
         from providers.router import Router
 
+        # Resolve base_url override for this provider from provider_settings
+        _base_url = ""
+        _ps = provider_settings or {}
+        if isinstance(_ps, dict):
+            _psec = _ps.get(pid, {})
+            if isinstance(_psec, dict):
+                _base_url = _psec.get("base_url", "") or ""
         return Router(
             pid,
             network_mode=mode,
             privacy_profile=privacy_profile,
             key_provider=key_provider,
+            configured_model_id=model_id if model_id else None,
         )
 
     def _memory() -> Any:

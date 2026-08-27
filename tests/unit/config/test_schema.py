@@ -158,3 +158,108 @@ def test_all_local_provider_ids_are_supported(provider_id):
 def test_rejects_malformed_local_model_config(payload, match):
     with pytest.raises(SettingsValidationError, match=match):
         validate_settings(payload)
+
+
+# ── Tests for model_id and provider_settings ──────────────────────────
+
+def test_model_id_empty_by_default():
+    s = validate_settings({})
+    assert s.model_id == ""
+
+
+def test_model_id_accepted_when_present():
+    s = validate_settings({"model_id": "gpt-4o"})
+    assert s.model_id == "gpt-4o"
+
+
+def test_model_id_rejects_non_string():
+    with pytest.raises(SettingsValidationError, match="model_id"):
+        validate_settings({"model_id": 42})
+
+
+def test_model_id_round_trip():
+    s = validate_settings({"model_id": "claude-3-opus"})
+    s2 = validate_settings(s.to_dict())
+    assert s2.model_id == "claude-3-opus"
+
+
+def test_provider_settings_empty_by_default():
+    s = validate_settings({})
+    assert s.provider_settings == {}
+
+
+def test_provider_settings_accepted():
+    raw = {"ollama": {"base_url": "http://localhost:11434", "remote_enabled": False}}
+    s = validate_settings({"provider_settings": raw})
+    assert "ollama" in s.provider_settings
+    assert s.provider_settings["ollama"].base_url == "http://localhost:11434"
+
+
+def test_provider_settings_rejects_unknown_provider():
+    with pytest.raises(SettingsValidationError, match="unknown provider"):
+        validate_settings({"provider_settings": {"fake": {"base_url": ""}}})
+
+
+def test_provider_settings_rejects_invalid_remote_enabled():
+    with pytest.raises(SettingsValidationError, match="remote_enabled"):
+        validate_settings(
+            {"provider_settings": {"ollama": {"remote_enabled": "yes"}}}
+        )
+
+
+def test_provider_settings_round_trip():
+    raw = {"ollama": {"base_url": "http://custom:11434", "remote_enabled": True}}
+    s = validate_settings({"provider_settings": raw})
+    s2 = validate_settings(s.to_dict())
+    assert s2.provider_settings["ollama"].base_url == "http://custom:11434"
+    assert s2.provider_settings["ollama"].remote_enabled is True
+
+
+def test_provider_settings_multiple_providers():
+    raw = {
+        "ollama": {"base_url": "http://a:11434", "remote_enabled": False},
+        "llama_cpp": {"base_url": "http://b:8080", "remote_enabled": True},
+    }
+    s = validate_settings({"provider_settings": raw})
+    assert len(s.provider_settings) == 2
+    assert "ollama" in s.provider_settings
+    assert "llama_cpp" in s.provider_settings
+
+
+def test_provider_settings_rejects_non_object_value():
+    with pytest.raises(SettingsValidationError, match="must be an object"):
+        validate_settings({"provider_settings": {"ollama": "not-a-dict"}})
+
+
+def test_provider_settings_rejects_unknown_keys_in_nested():
+    # provider_settings.{pid} accepts base_url and remote_enabled only
+    with pytest.raises(SettingsValidationError, match="unknown field"):
+        validate_settings(
+            {"provider_settings": {"ollama": {"unknown_key": "x", "base_url": ""}}}
+        )
+
+
+def test_openai_compat_provider_settings():
+    s = validate_settings(
+        {"provider_settings": {"openai_compat": {"base_url": "http://10.0.0.1:9000/v1", "remote_enabled": True}}}
+    )
+    assert s.provider_settings["openai_compat"].base_url == "http://10.0.0.1:9000/v1"
+
+
+def test_full_round_trip_with_all_new_fields():
+    raw = {
+        "provider_id": "openai",
+        "model_id": "gpt-4o-mini",
+        "provider_settings": {
+            "ollama": {"base_url": "http://127.0.0.1:11434", "remote_enabled": False},
+            "llama_cpp": {"base_url": "http://127.0.0.1:8080", "remote_enabled": True},
+        },
+    }
+    s = validate_settings(raw)
+    assert s.provider_id == "openai"
+    assert s.model_id == "gpt-4o-mini"
+    assert len(s.provider_settings) == 2
+    s2 = validate_settings(s.to_dict())
+    assert s2.provider_id == "openai"
+    assert s2.model_id == "gpt-4o-mini"
+    assert s2.provider_settings == s.provider_settings

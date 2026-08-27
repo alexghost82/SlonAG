@@ -1372,6 +1372,281 @@ class MainWindow(QMainWindow):
             lay.addWidget(lbl)
 
         return w
+
+    def _build_settings_section(self) -> QWidget:
+        """Provider / model / base URL / API key controls."""
+        from config.schema import PROVIDER_IDS, DEFAULT_PROVIDER_ID
+
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+
+        hdr = QLabel("⚙ PROVISION")
+        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; "
+                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 2px;")
+        lay.addWidget(hdr)
+
+        # ── Provider selector ──
+        self._provider_cbox = QComboBox()
+        self._provider_cbox.addItems(sorted(PROVIDER_IDS))
+        self._provider_cbox.setFont(QFont("Courier New", 8))
+        self._provider_cbox.setFixedHeight(26)
+        self._provider_cbox.currentTextChanged.connect(self._on_provider_changed)
+        self._provider_cbox.setStyleSheet(f"""
+            QComboBox {{
+                background: {C.PANEL}; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px;
+            }}
+            QComboBox::drop-down {{ border: none; }}
+            QComboBox QAbstractItemView {{ background: {C.PANEL2}; color: {C.WHITE}; selection-background-color: {C.PRI_DIM}; }}
+        """)
+        lay.addWidget(self._provider_cbox)
+
+        # ── Model selector ──
+        self._model_cbox = QComboBox()
+        self._model_cbox.addItems(["(auto)", "gpt-4o", "gpt-4o-mini", "gemini-2.0-flash", "gemini-2.5-flash", "claude-3.5-sonnet", "llama-3.1-70b", "custom"])
+        self._model_cbox.setFont(QFont("Courier New", 8))
+        self._model_cbox.setFixedHeight(26)
+        self._model_cbox.currentTextChanged.connect(self._on_model_changed)
+        self._model_cbox.setStyleSheet(f"""
+            QComboBox {{
+                background: {C.PANEL}; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px;
+            }}
+            QComboBox::drop-down {{ border: none; }}
+            QComboBox QAbstractItemView {{ background: {C.PANEL2}; color: {C.WHITE}; selection-background-color: {C.PRI_DIM}; }}
+        """)
+        lay.addWidget(self._model_cbox)
+
+        # ── Model manual input (shown when "custom" selected) ──
+        self._model_input = QLineEdit()
+        self._model_input.setPlaceholderText("Модель (custom)...")
+        self._model_input.setFont(QFont("Courier New", 8))
+        self._model_input.setFixedHeight(26)
+        self._model_input.setVisible(False)
+        self._model_input.returnPressed.connect(self._on_model_changed)
+        self._model_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {C.PANEL}; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px;
+            }}
+        """)
+        lay.addWidget(self._model_input)
+
+        # ── Base URL input ──
+        self._base_url_input = QLineEdit()
+        self._base_url_input.setPlaceholderText("Base URL (custom endpoint)...")
+        self._base_url_input.setFont(QFont("Courier New", 8))
+        self._base_url_input.setFixedHeight(26)
+        self._base_url_input.returnPressed.connect(self._on_base_url_changed)
+        self._base_url_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {C.PANEL}; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px;
+            }}
+        """)
+        lay.addWidget(self._base_url_input)
+
+        # ── API Key input ──
+        self._api_key_input = QLineEdit()
+        self._api_key_input.setPlaceholderText("API Key (сохраняется в secrets)...")
+        self._api_key_input.setFont(QFont("Courier New", 8))
+        self._api_key_input.setFixedHeight(26)
+        self._api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._api_key_input.returnPressed.connect(self._on_api_key_saved)
+        self._api_key_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {C.PANEL}; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px;
+            }}
+        """)
+        lay.addWidget(self._api_key_input)
+
+        # ── Save button ──
+        self._save_btn = QPushButton("💾 SAVE SETTINGS")
+        self._save_btn.setFixedHeight(28)
+        self._save_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._save_btn.clicked.connect(self._save_ui_settings)
+        self._save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {C.PRI}; color: {C.BG}; border: none; border-radius: 3px;
+            }}
+            QPushButton:hover {{ background: {C.PRI_DIM}; }}
+        """)
+        lay.addWidget(self._save_btn)
+
+        # ── Status label ──
+        self._status_lbl = QLabel("STATUS: —")
+        self._status_lbl.setFont(QFont("Courier New", 7))
+        self._status_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        lay.addWidget(self._status_lbl)
+
+        self._refresh_settings_ui()
+        return w
+
+    def _refresh_settings_ui(self) -> None:
+        """Load current settings into the UI controls."""
+        try:
+            from config.schema import DEFAULT_PROVIDER_ID
+            loaded = load_settings()
+            pid = getattr(loaded, "provider_id", DEFAULT_PROVIDER_ID)
+            self._provider_cbox.setCurrentText(pid)
+
+            mid = getattr(loaded, "model_id", "")
+            auto_match = False
+            known = ["gpt-4o", "gpt-4o-mini", "gemini-2.0-flash", "gemini-2.5-flash", "claude-3.5-sonnet", "llama-3.1-70b"]
+            if not mid:
+                self._model_cbox.setCurrentText("(auto)")
+                auto_match = True
+            elif mid in known:
+                self._model_cbox.setCurrentText(mid)
+                auto_match = True
+            else:
+                self._model_cbox.setCurrentText("custom")
+                self._model_input.setText(mid)
+                self._model_input.setVisible(True)
+
+            ps = getattr(loaded, "provider_settings", {})
+            ps_dict = {}
+            if ps:
+                for k, v in ps.items():
+                    if hasattr(v, "to_dict"):
+                        ps_dict[k] = v.to_dict()
+                    elif isinstance(v, dict):
+                        ps_dict[k] = v
+            base_url = ""
+            if isinstance(ps_dict, dict) and pid in ps_dict:
+                base_url = ps_dict[pid].get("base_url", "") or ""
+            self._base_url_input.setText(base_url)
+
+            self._update_status(f"provider={pid}, model={mid or '(auto)'}")
+        except Exception:
+            self._update_status("load_settings: error")
+
+    def _update_status(self, msg: str) -> None:
+        self._status_lbl.setText(f"STATUS: {msg}")
+
+    def _on_provider_changed(self, _text: str) -> None:
+        self._update_status(f"provider changed to {_text}")
+
+    def _on_model_changed(self, _text: str) -> None:
+        self._update_status(f"model changed to {_text}")
+
+    def _on_base_url_changed(self) -> None:
+        self._update_status("base URL updated")
+
+    def _on_api_key_saved(self) -> None:
+        self._update_status("api key saved to secrets")
+
+    def _save_ui_settings(self) -> None:
+        """Persist all UI controls to settings and rebuild runtime."""
+        try:
+            from config.schema import DEFAULT_PROVIDER_ID, ProviderBaseURL, PROVIDER_IDS
+            import json
+            import os
+
+            loaded = load_settings()
+            pid = self._provider_cbox.currentText()
+            mid_text = self._model_cbox.currentText()
+
+            # Determine model_id
+            mid = ""
+            if mid_text and mid_text != "(auto)":
+                if mid_text == "custom" and self._model_input.isVisible():
+                    mid = self._model_input.text().strip()
+                else:
+                    mid = mid_text
+
+            # Determine base_url from provider_settings
+            ps_dict: dict[str, dict] = {}
+            existing_ps = getattr(loaded, "provider_settings", {})
+            if existing_ps:
+                for k, v in existing_ps.items():
+                    if hasattr(v, "to_dict"):
+                        ps_dict[k] = v.to_dict()
+                    elif isinstance(v, dict):
+                        ps_dict[k] = v
+
+            base_url = self._base_url_input.text().strip()
+            ps_dict[pid] = {
+                "base_url": base_url,
+                "remote_enabled": base_url.startswith("https://"),
+            }
+
+            provider_settings_data = {}
+            for k, v in ps_dict.items():
+                provider_settings_data[k] = ProviderBaseURL(
+                    base_url=v.get("base_url", ""),
+                    remote_enabled=v.get("remote_enabled", False),
+                )
+
+            # Update settings
+            new_settings = replace(loaded, model_id=mid, provider_settings=provider_settings_data)
+
+            # Persist
+            save_settings(new_settings)
+
+            # Update secrets if API key provided
+            api_key = self._api_key_input.text().strip()
+            if api_key and pid not in ("local", "ollama", "llama_cpp"):
+                secret_name = f"{pid}_api_key"
+                from config.secrets import set_secret
+                set_secret(secret_name, api_key)
+
+            self._update_status(f"saved: provider={pid}, model={mid or '(auto)'}")
+
+            # Rebuild runtime with new settings
+            self._build_runtime_from_settings()
+
+        except Exception as exc:
+            self._update_status(f"save error: {exc}")
+
+    def _build_runtime_from_settings(self) -> None:
+        """Rebuild RuntimeStack using current UI settings."""
+        try:
+            def _keys(name: str) -> str | None:
+                from config.secrets import get_secret
+                return get_secret(name)
+
+            loaded = load_settings()
+            pid = getattr(loaded, "provider_id", "gemini")
+            mode = getattr(loaded, "network_mode", "hybrid")
+            mid = getattr(loaded, "model_id", "")
+            ps_raw = getattr(loaded, "provider_settings", {})
+            ps_dict = {}
+            if ps_raw:
+                for k, v in ps_raw.items():
+                    if hasattr(v, "to_dict"):
+                        ps_dict[k] = v.to_dict()
+                    elif isinstance(v, dict):
+                        ps_dict[k] = v
+
+            if build_runtime_stack is not None:
+                stack = build_runtime_stack(
+                    repo_root=BASE_DIR,
+                    provider_id=pid,
+                    network_mode=mode,
+                    key_provider=_keys,
+                    model_id=mid,
+                    provider_settings=ps_dict,
+                )
+                self._runtime_stack = stack
+                for line in stack.summary_lines()[:12]:
+                    self._log_sig.emit(f"SYS: bridge {line}")
+
+            # Also update control plane
+            if self._control_plane is not None:
+                self._control_plane.provider_id = pid
+                self._control_plane.network_mode = mode
+
+            self._update_status(f"runtime rebuilt: provider={pid}")
+        except Exception as exc:
+            self._update_status(f"runtime rebuild failed: {exc}")
+
+
     def _build_right_panel(self) -> QWidget:
         w = QWidget()
         w.setFixedWidth(_RIGHT_W)
@@ -1379,6 +1654,14 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(w)
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(6)
+
+        # Provider settings section (inserted at top of right panel)
+        self._settings_section = self._build_settings_section()
+        lay.addWidget(self._settings_section)
+
+        sep_settings = QFrame(); sep_settings.setFrameShape(QFrame.Shape.HLine)
+        sep_settings.setStyleSheet(f"color: {C.BORDER}; margin: 4px 0;")
+        lay.addWidget(sep_settings)
 
         def _sec(txt):
             l = QLabel(f"▸ {txt}")
@@ -1646,20 +1929,35 @@ class MainWindow(QMainWindow):
             def _keys(name: str) -> str | None:
                 return get_secret(name)
 
-            # Read provider from settings (Wave 14+).
+            # Read full settings from disk (Wave 15+).
             try:
                 loaded = load_settings()
-                provider_id = loaded.provider_id if hasattr(loaded, "provider_id") else DEFAULT_PROVIDER_ID
-                network_mode = loaded.network_mode if hasattr(loaded, "network_mode") else "hybrid"
+                provider_id = getattr(loaded, "provider_id", DEFAULT_PROVIDER_ID)
+                network_mode = getattr(loaded, "network_mode", "hybrid")
+                model_id = getattr(loaded, "model_id", "")
+                ps_raw = getattr(loaded, "provider_settings", {})
             except Exception:
                 provider_id = DEFAULT_PROVIDER_ID
                 network_mode = "hybrid"
+                model_id = ""
+                ps_raw = {}
+
+            # Convert provider_settings to dict for bridge
+            ps_dict = {}
+            if ps_raw:
+                for k, v in ps_raw.items():
+                    if hasattr(v, "to_dict"):
+                        ps_dict[k] = v.to_dict()
+                    elif isinstance(v, dict):
+                        ps_dict[k] = v
 
             stack = build_runtime_stack(
                 repo_root=BASE_DIR,
                 provider_id=provider_id,
                 network_mode=network_mode,
                 key_provider=_keys,
+                model_id=model_id,
+                provider_settings=ps_dict,
             )
             self._runtime_stack = stack
             for line in stack.summary_lines()[:12]:
