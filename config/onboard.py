@@ -24,7 +24,6 @@ from typing import Any
 from config.schema import (
     PROVIDER_IDS,
     LOCAL_PROVIDER_IDS,
-    CLOUD_PROVIDER_IDS,
     PRIVACY_PROFILES,
     NETWORK_MODES,
     ROUTING_MODES,
@@ -45,6 +44,8 @@ from config.schema import (
 from config.secrets import set_secret, KNOWN_SECRET_NAMES
 from i18n import t
 
+
+CLOUD_PROVIDER_IDS = frozenset(PROVIDER_IDS - LOCAL_PROVIDER_IDS)
 # ---------------------------------------------------------------------------
 # Available models / engines
 # ---------------------------------------------------------------------------
@@ -101,7 +102,6 @@ class OnboardStepId(str):
     """Opaque step identifier."""
     pass
 
-STEP_MODEL = OnboardStepId("model")
 STEP_LANGUAGE = OnboardStepId("language")
 STEP_PROVIDER = OnboardStepId("provider")
 STEP_MODEL = OnboardStepId("model")
@@ -127,6 +127,7 @@ ALL_STEPS = (
     STEP_MEMORY,
     STEP_AUTOMATION,
     STEP_LAN,
+    STEP_COMPLETE,
 )
 
 # ---------------------------------------------------------------------------
@@ -217,6 +218,13 @@ STEP_META: dict[OnboardStepId, StepMeta] = {
         hint_key="onboard.hint_lan",
         order=11,
         optional=True,
+    ),
+    STEP_COMPLETE: StepMeta(
+        id=STEP_COMPLETE,
+        title_key="onboard.step_complete",
+        hint_key="onboard.hint_complete",
+        order=12,
+        optional=False,
     ),
 }
 
