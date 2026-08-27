@@ -24,6 +24,7 @@ from pathlib import Path
 from unittest import TestCase
 
 from mark.filesystem.security import (
+    Cancelled,
     MAX_FILE_SIZE,
     MAX_READ_BYTES,
     MAX_WRITE_BYTES,
@@ -349,10 +350,8 @@ class TestCancellation(TestCase):
     def test_cancelled_op(self):
         event = threading.Event()
         event.set()  # Pre-set to cancelled
-        _check_cancel(event)
-        with self.assertRaises(Exception):  # Cancelled exception
+        with self.assertRaises(Cancelled):
             _check_cancel(event)
-
 
 class TestUnifiedFilesystemOperation(TestCase):
     """Test the single filesystem_operation dispatcher."""

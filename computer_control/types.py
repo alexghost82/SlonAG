@@ -1,181 +1,261 @@
-"""Types, enums, and dataclasses for computer-control actions."""
+"""Canonical types for the closed-loop visual computer agent.
+
+Every frame, observation, action, and verification carries correlation
+identifiers so the loop can detect stale observations, enforce
+action/observation correlation, and fail-closed.
+"""
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
-from enum import Enum, StrEnum
+import hashlib
+import time
+from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 
-class MouseClickButton(StrEnum):
-    LEFT = "left"
-    RIGHT = "right"
-    MIDDLE = "middle"
+# ---------------------------------------------------------------------------
+# Frame sources
+# ---------------------------------------------------------------------------
 
+class FrameSource(StrEnum):
+    """Where a frame originates."""
 
-class ScrollDirection(StrEnum):
-    UP = "up"
-    DOWN = "down"
-    LEFT = "left"
-    RIGHT = "right"
-
-
-class ComputerControlAction(StrEnum):
-    MOUSE_MOVE = "mouse.move"
-    MOUSE_CLICK = "mouse.click"
-    MOUSE_DOUBLE_CLICK = "mouse.double_click"
-    MOUSE_RIGHT_CLICK = "mouse.right_click"
-    MOUSE_DRAG = "mouse.drag"
-    KEYBOARD_TYPE = "keyboard.type"
-    KEYBOARD_HOTKEY = "keyboard.hotkey"
-    KEYBOARD_PRESS = "keyboard.press"
-    SCROLL = "scroll"
-    CLIPBOARD_READ = "clipboard.read"
-    CLIPBOARD_WRITE = "clipboard.write"
     SCREENSHOT = "screenshot"
-    WINDOW_LIST = "window.list"
-    WINDOW_FOCUS = "window.focus"
-    WINDOW_MINIMIZE = "window.minimize"
-    WINDOW_MAXIMIZE = "window.maximize"
-    WINDOW_CLOSE = "window.close"
-    WINDOW_GET_INFO = "window.info"
-    APP_LAUNCH = "app.launch"
-    APP_KILL = "app.kill"
-    APP_LIST = "app.list"
-    VOLUME_GET = "system.volume.get"
-    VOLUME_SET = "system.volume.set"
-    BRIGHTNESS_GET = "system.brightness.get"
-    BRIGHTNESS_SET = "system.brightness.set"
-    WAIT = "utility.wait"
-    CAPABILITY_CHECK = "capability.check"
+    CAMERA = "camera"
+    RTSP = "rtsp"
+    VIRTUAL = "virtual"
+    GENERATED = "generated"
 
 
-class OSPlatform(StrEnum):
-    LINUX = "linux"
-    MACOS = "macos"
-    WINDOWS = "windows"
-    UNKNOWN = "unknown"
+class ActionCategory(StrEnum):
+    """Risk category of a computer action."""
+
+    NONE = "none"
+    READ = "read"
+    WRITE = "write"
+    IRREVERSIBLE = "irreversible"
 
 
-class Permission(StrEnum):
-    INPUT = "input"
-    SCREENSHOT = "screenshot"
-    WINDOW_MANAGEMENT = "window_management"
-    CLIPBOARD = "clipboard"
-    SYSTEM_SETTINGS = "system_settings"
-    APP_LAUNCH = "app_launch"
+class VerificationStatus(StrEnum):
+    """Outcome of a post-action verification."""
 
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    FAILED = "failed"
+    STALE = "stale"
+    CANCELLED = "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Frame
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class ScreenPosition:
-    width: int
-    height: int
-    dpi: float = 96.0
-    active_display: int = 0
+class Frame:
+    """A single visual observation (raw bytes)."""
 
-
-@dataclass(frozen=True)
-class WindowInfo:
-    title: str
-    pid: int = 0
-    x: int = 0
-    y: int = 0
+    source: FrameSource
+    image_bytes: bytes
+    timestamp: float = field(default_factory=time.time)
+    index: int = 0
+    stream_url: str | None = None
     width: int = 0
     height: int = 0
-    is_minimized: bool = False
-    is_maximized: bool = False
-    is_active: bool = False
-
-
-@dataclass(frozen=True)
-class AppInfo:
-    name: str
-    pid: int = 0
-    path: str = ""
-    is_active: bool = False
-
-
-@dataclass(frozen=True)
-class ExecutionResult:
-    ok: bool
-    code: str
-    message: str = ""
-    data: Any = None
-    warnings: tuple[str, ...] = ()
-    cancelled: bool = False
-
-    @staticmethod
-    def ok_result(message: str = "", data: Any = None, warnings: tuple[str, ...] = ()) -> "ExecutionResult":
-        return ExecutionResult(ok=True, code="ok", message=message, data=data, warnings=warnings)
-
-    @staticmethod
-    def error_result(code: str, message: str) -> "ExecutionResult":
-        return ExecutionResult(ok=False, code=code, message=message)
-
-    @staticmethod
-    def cancelled_result() -> "ExecutionResult":
-        return ExecutionResult(ok=False, code="cancelled", message="Action was cancelled.", cancelled=True)
-
-
-@dataclass(frozen=True)
-class CancellationToken:
-    _cancelled: bool = False
-
-    def cancel(self) -> None:
-        self._cancelled = True
 
     @property
-    def is_cancelled(self) -> bool:
-        return self._cancelled
+    def fingerprint(self) -> str:
+        """Deterministic hash for stale-observation detection."""
+        data = (
+            f"{self.source}:{self.index}:{self.timestamp:.6f}:"
+            f"{len(self.image_bytes)}"
+        ).encode()
+        return hashlib.sha256(data).hexdigest()[:16]
 
-    def check(self) -> None:
-        if self._cancelled:
-            raise asyncio.CancelledError("Computer control action was cancelled.")
+
+# ---------------------------------------------------------------------------
+# Vision observation (output of the vision engine)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class VisionObservation:
+    """Structured output from a vision engine on a single frame."""
+
+    frame_fingerprint: str
+    frame_index: int
+    detected_objects: list[dict[str, Any]] = field(default_factory=list)
+    ocr_text: str = ""
+    description: str = ""
+    ui_elements: list[dict[str, Any]] = field(default_factory=list)
+    confidence: float = 0.0
+    warnings: list[str] = field(default_factory=list)
 
 
-# Action -> required fields mapping for validation
-ACTION_FIELDS: dict[ComputerControlAction, tuple[str, ...]] = {
-    ComputerControlAction.MOUSE_MOVE: ("x", "y"),
-    ComputerControlAction.MOUSE_CLICK: (),
-    ComputerControlAction.MOUSE_DOUBLE_CLICK: (),
-    ComputerControlAction.MOUSE_RIGHT_CLICK: (),
-    ComputerControlAction.MOUSE_DRAG: ("x1", "y1", "x2", "y2"),
-    ComputerControlAction.KEYBOARD_TYPE: ("text",),
-    ComputerControlAction.KEYBOARD_HOTKEY: ("keys",),
-    ComputerControlAction.KEYBOARD_PRESS: ("key",),
-    ComputerControlAction.SCROLL: (),
-    ComputerControlAction.CLIPBOARD_READ: (),
-    ComputerControlAction.CLIPBOARD_WRITE: ("text",),
-    ComputerControlAction.SCREENSHOT: (),
-    ComputerControlAction.WINDOW_LIST: (),
-    ComputerControlAction.WINDOW_FOCUS: ("title",),
-    ComputerControlAction.WINDOW_MINIMIZE: ("title",),
-    ComputerControlAction.WINDOW_MAXIMIZE: ("title",),
-    ComputerControlAction.WINDOW_CLOSE: ("title",),
-    ComputerControlAction.WINDOW_GET_INFO: ("title",),
-    ComputerControlAction.APP_LAUNCH: ("path", "name"),
-    ComputerControlAction.APP_KILL: ("pid", "name"),
-    ComputerControlAction.APP_LIST: (),
-    ComputerControlAction.VOLUME_GET: (),
-    ComputerControlAction.VOLUME_SET: ("value",),
-    ComputerControlAction.BRIGHTNESS_GET: (),
-    ComputerControlAction.BRIGHTNESS_SET: ("value",),
-    ComputerControlAction.WAIT: ("seconds",),
-    ComputerControlAction.CAPABILITY_CHECK: (),
-}
+# ---------------------------------------------------------------------------
+# Proposed / executed action
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ComputerAction:
+    """An action the agent proposes or executes on the computer."""
+
+    action_type: str  # e.g. "click", "type", "scroll", "screenshot"
+    target: str = ""  # element description / coordinates
+    args: dict[str, Any] = field(default_factory=dict)
+    category: ActionCategory = ActionCategory.NONE
+    proposed_by: str = "agent"  # "agent" or "user"
+    id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = hashlib.sha256(
+                f"{self.action_type}:{self.target}:{time.time_ns()}".encode()
+            ).hexdigest()[:12]
+
+    @property
+    def is_write(self) -> bool:
+        return self.category in (ActionCategory.WRITE, ActionCategory.IRREVERSIBLE)
+
+
+# ---------------------------------------------------------------------------
+# Verification
+# ---------------------------------------------------------------------------
+
+@dataclass
+class VerificationResult:
+    """Post-action observation compared against the expected outcome."""
+
+    action_id: str
+    pre_frame_fingerprint: str
+    post_frame_fingerprint: str
+    status: VerificationStatus = VerificationStatus.PENDING
+    changed: bool = False
+    detected_changes: list[dict[str, Any]] = field(default_factory=list)
+    expected_fingerprint: str = ""
+    actual_fingerprint: str = ""
+    reason: str = ""
+    stale: bool = False
+    retryable: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Loop state
+# ---------------------------------------------------------------------------
+
+class LoopPhase(StrEnum):
+    IDLE = "idle"
+    OBSERVE = "observe"
+    REASON = "reason"
+    PROPOSE = "propose"
+    APPROVE = "approve"
+    ACT = "act"
+    VERIFY = "verify"
+    CORRECT = "correct"
+    COMPLETE = "complete"
+    FAILED = "failed"
+
+
+@dataclass
+class LoopBudget:
+    """Resource limits for the closed-loop cycle."""
+
+    max_steps: int = 10
+    max_steps_in_phase: int = 5
+    timeout_seconds: float = 60.0
+    observation_stale_seconds: float = 30.0
+    # Mutable counters
+    step: int = 0
+    phase_step: int = 0
+    start_time: float = field(default_factory=time.time)
+
+    @property
+    def elapsed_seconds(self) -> float:
+        return time.time() - self.start_time
+
+    @property
+    def remaining_seconds(self) -> float:
+        return max(0.0, self.timeout_seconds - self.elapsed_seconds)
+
+    def can_step(self) -> bool:
+        return (
+            self.step < self.max_steps
+            and self.phase_step < self.max_steps_in_phase
+            and self.remaining_seconds > 0
+        )
+
+    def advance_phase(self) -> None:
+        self.step += 1
+        self.phase_step = 0
+
+    def advance_step(self) -> None:
+        self.phase_step += 1
+
+
+@dataclass
+class LoopState:
+    """Mutable state tracked by the closed-loop cycle."""
+
+    phase: LoopPhase = LoopPhase.IDLE
+    current_frame: Frame | None = None
+    current_observation: VisionObservation | None = None
+    proposed_action: ComputerAction | None = None
+    executed_action: ComputerAction | None = None
+    verification: VerificationResult | None = None
+    correction_history: list[str] = field(default_factory=list)
+    cancelled: bool = False
+    error: str | None = None
+    result: str | None = None
+
+    @property
+    def latest_fingerprint(self) -> str:
+        if self.current_frame:
+            return self.current_frame.fingerprint
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Error types
+# ---------------------------------------------------------------------------
+
+class ClosedLoopError(Exception):
+    """Base exception for closed-loop failures."""
+
+
+class StaleObservationError(ClosedLoopError):
+    """Observation is older than the allowed window."""
+
+
+class BudgetExceededError(ClosedLoopError):
+    """Max steps or timeout exceeded."""
+
+
+class CancellationError(ClosedLoopError):
+    """Loop was explicitly cancelled."""
+
+
+class VerificationFailedError(ClosedLoopError):
+    """Post-action verification did not confirm expected change."""
+
+
+class SafetyDenialError(ClosedLoopError):
+    """Safety policy denied the proposed action."""
 
 
 __all__ = [
-    "MouseClickButton",
-    "ScrollDirection",
-    "ComputerControlAction",
-    "OSPlatform",
-    "Permission",
-    "ScreenPosition",
-    "WindowInfo",
-    "AppInfo",
-    "ExecutionResult",
-    "CancellationToken",
-    "ACTION_FIELDS",
+    "ActionCategory",
+    "BudgetExceededError",
+    "CancellationError",
+    "ClosedLoopError",
+    "ComputerAction",
+    "Frame",
+    "FrameSource",
+    "LoopBudget",
+    "LoopPhase",
+    "LoopState",
+    "SafetyDenialError",
+    "StaleObservationError",
+    "VerificationFailedError",
+    "VerificationResult",
+    "VerificationStatus",
+    "VisionObservation",
 ]

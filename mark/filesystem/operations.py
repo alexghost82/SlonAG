@@ -173,9 +173,9 @@ def write(
     except Cancelled:
         return FileSystemResult.err("cancelled", "Operation cancelled.")
 
-    mode = "a" if append else "w"
     try:
-        target.write_text(content, encoding="utf-8")
+        with target.open("a" if append else "w", encoding="utf-8") as f:
+            f.write(content)
         action = "Appended" if append else "Written"
         return FileSystemResult._ok(
             message=f"{action}: {target.name} ({byte_size} bytes)"
@@ -606,15 +606,20 @@ def trash(
     if not target.exists():
         return FileSystemResult.err("not_found", f"Not found: {target}")
 
-    if _send2trash_mod is None:
-        return FileSystemResult.err(
-            "trash_unavailable",
-            "Trash is unavailable. Install send2trash package.",
-        )
+    if _send2trash_mod is not None:
+        try:
+            _send2trash_mod.send2trash(str(target))
+            return FileSystemResult._ok(message=f"Moved to Recycle Bin: {target.name}")
+        except (PermissionError, OSError):
+            pass  # Fall through to fallback deletion
 
+    # Fallback: permanent deletion (already validated by security policy)
     try:
-        _send2trash_mod.send2trash(str(target))
-        return FileSystemResult._ok(message=f"Moved to Recycle Bin: {target.name}")
+        if target.is_dir():
+            shutil.rmtree(str(target))
+        else:
+            target.unlink()
+        return FileSystemResult._ok(message=f"Deleted: {target.name}")
     except PermissionError:
         return FileSystemResult.err("permission_denied", f"Permission denied.")
     except OSError as exc:

@@ -1,525 +1,528 @@
+"""Browser control — delegates to the production BrowserService.
+
+Backward-compatible: same signature as the legacy implementation.
+"""
 from __future__ import annotations
 
-import asyncio
+from collections.abc import Mapping
 
 from i18n import t
 
-import threading
-import concurrent.futures
-import platform
-import shutil
-import subprocess
-from pathlib import Path
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+from mark.tools.contracts import ToolResult
+from runtime.browser.service import get_browser_service
 
-
-def _get_default_browser_id() -> str:
-    """Returns raw default browser identifier string for current OS."""
-    system = platform.system()
-    try:
-        if system == "Windows":
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice"
-            )
-            prog_id = winreg.QueryValueEx(key, "ProgId")[0].lower()
-            winreg.CloseKey(key)
-            return prog_id
-
-        elif system == "Darwin":
-            result = subprocess.run(
-                ["defaults", "read",
-                 "com.apple.LaunchServices/com.apple.launchservices.secure",
-                 "LSHandlers"],
-                capture_output=True, text=True, timeout=5
-            )
-            return result.stdout.lower()
-
-        elif system == "Linux":
-            result = subprocess.run(
-                ["xdg-settings", "get", "default-web-browser"],
-                capture_output=True, text=True, timeout=5
-            )
-            return result.stdout.lower()
-
-    except Exception:
-        pass
-
-    return ""
-
-
-_BROWSER_BINARIES = {
-    "Windows": {
-        "opera":   ["opera.exe"],
-        "brave":   ["brave.exe"],
-        "vivaldi": ["vivaldi.exe"],
-        "chrome":  ["chrome.exe"],
-        "firefox": ["firefox.exe"],
-    },
-    "Darwin": {
-        "opera":   ["opera"],
-        "brave":   ["brave browser", "brave"],
-        "vivaldi": ["vivaldi"],
-        "chrome":  ["google chrome", "google-chrome"],
-        "firefox": ["firefox"],
-    },
-    "Linux": {
-        "opera":   ["opera", "opera-stable"],
-        "brave":   ["brave-browser", "brave"],
-        "vivaldi": ["vivaldi-stable", "vivaldi"],
-        "chrome":  ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"],
-        "firefox": ["firefox"],
-    },
-}
-
-
-def _get_opera_executable() -> str | None:
-    if platform.system() != "Windows":
-        return None
-    try:
-        import winreg
-        candidate_keys = [
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\opera.exe",
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\launcher.exe",
-            r"SOFTWARE\Clients\StartMenuInternet\OperaStable\shell\open\command",
-            r"SOFTWARE\Clients\StartMenuInternet\OperaGXStable\shell\open\command",
-        ]
-        for key_path in candidate_keys:
-            for hive in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
-                try:
-                    key = winreg.OpenKey(hive, key_path)
-                    val = winreg.QueryValue(key, None)
-                    winreg.CloseKey(key)
-                    exe = val.strip().strip('"').split('"')[0].split(" --")[0].strip()
-                    if exe and Path(exe).exists():
-                        print(f"[Browser] 🔍 Opera found via registry: {exe}")
-                        return exe
-                except Exception:
-                    continue
-    except Exception:
-        pass
-    return None
-
-
-def _find_browser_executable(prog_id: str) -> tuple:
-    """
-    Returns (engine_name, exe_path, channel, is_opera).
-    is_opera=True → extra args needed to prevent private-mode launch.
-    """
-    system  = platform.system()
-    os_bins = _BROWSER_BINARIES.get(system, {})
-
-    if any(x in prog_id for x in ["firefox", "mozilla"]):
-        return "firefox", None, None, False
-
-    if "safari" in prog_id:
-        return "webkit", None, None, False
-
-    if "edge" in prog_id:
-        return "chromium", None, "msedge", False
-
-    if "opera" in prog_id:
-        exe = _get_opera_executable()
-        if exe:
-            return "chromium", exe, None, True
-        for binary in os_bins.get("opera", []):
-            path = shutil.which(binary)
-            if path:
-                return "chromium", path, None, True
-
-    browser_patterns = {
-        "brave":   ["brave"],
-        "vivaldi": ["vivaldi"],
-        "chrome":  ["chrome"],
-    }
-    for browser_name, patterns in browser_patterns.items():
-        if not any(p in prog_id for p in patterns):
-            continue
-        binaries = os_bins.get(browser_name, [])
-        for binary in binaries:
-            path = shutil.which(binary)
-            if path:
-                print(f"[Browser] 🔍 Found {browser_name} at: {path}")
-                return "chromium", path, None, False
-
-    if "chrome" in prog_id or not prog_id:
-        return "chromium", None, "chrome", False
-
-    return "chromium", None, None, False
-
-
-class _BrowserThread:
-
-    def __init__(self):
-        self._loop       = None
-        self._thread     = None
-        self._ready      = threading.Event()
-        self._playwright = None
-        self._browser    = None
-        self._context    = None
-        self._page       = None
-        self._engine_name = "chromium"
-        self._exe_path   = None
-        self._channel    = None
-        self._is_opera   = False
-
-    def start(self):
-        if self._thread and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(
-            target=self._run_loop, daemon=True, name="BrowserThread"
-        )
-        self._thread.start()
-        self._ready.wait(timeout=15)
-
-    def _run_loop(self):
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        self._loop.run_until_complete(self._init())
-        self._ready.set()
-        self._loop.run_forever()
-
-    async def _init(self):
-        self._playwright = await async_playwright().start()
-
-    def run(self, coro, timeout: int = 30):
-        if not self._loop:
-            raise RuntimeError(t("error.browser_thread_not_started"))
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=timeout)
-
-    # ── Tarayıcı ve sayfa yönetimi ───────────────────────────────────────────
-
-    async def _launch_browser_if_needed(self):
-        """
-        Tarayıcıyı başlatır. Zaten açıksa hiçbir şey yapmaz.
-        Her zaman default tarayıcıyı kullanır, özel sekme açmaz.
-        """
-        if self._browser and self._browser.is_connected():
-            return
-
-        prog_id = _get_default_browser_id()
-        self._engine_name, self._exe_path, self._channel, self._is_opera = _find_browser_executable(prog_id)
-        engine = getattr(self._playwright, self._engine_name)
-
-        # Temel chromium argümanları
-        chromium_args = ["--start-maximized"]
-
-        if self._is_opera:
-            # Opera GX bazı sürümlerde varsayılan olarak private modda başlar.
-            # Aşağıdaki flag'ler bunu engeller.
-            chromium_args += [
-                "--disable-features=OperaPrivacyMode",
-                "--no-private",
-            ]
-            print("[Browser] 🎭 Opera detected — disabling private-mode flags")
-
-        launch_kwargs = {"headless": False}
-        if self._engine_name == "chromium":
-            launch_kwargs["args"] = chromium_args
-        if self._exe_path:
-            launch_kwargs["executable_path"] = self._exe_path
-        elif self._channel:
-            launch_kwargs["channel"] = self._channel
-
-        try:
-            self._browser = await engine.launch(**launch_kwargs)
-            print(
-                f"[Browser] ✅ Launched ({self._engine_name}"
-                f"{' / ' + self._channel if self._channel else ''}"
-                f"{' / ' + self._exe_path if self._exe_path else ''})"
-            )
-        except Exception as e:
-            print(f"[Browser] ⚠️ Launch failed ({e}), falling back to built-in Chromium")
-            self._browser = await self._playwright.chromium.launch(
-                headless=False,
-                args=["--start-maximized"]
-            )
-
-    async def _get_page(self):
-        """
-        Mevcut sayfayı döndürür.
-        - Tarayıcı kapalıysa açar.
-        - Context yoksa oluşturur.
-        - Sayfa kapalıysa yeni sekme açar (aynı pencerede).
-        - Sayfa zaten açıksa aynı sayfayı döndürür (yeni pencere açmaz).
-        """
-        await self._launch_browser_if_needed()
-
-        if self._context is None:
-            self._context = await self._browser.new_context(
-                viewport=None,
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            )
-
-        if self._page is None or self._page.is_closed():
-            self._page = await self._context.new_page()
-
-        return self._page
-
-    # ── Eylemler ─────────────────────────────────────────────────────────────
-
-    async def _go_to(self, url: str) -> str:
-        if not url.startswith("http"):
-            url = "https://" + url
-        page = await self._get_page()
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-            return f"Opened: {page.url}"
-        except PlaywrightTimeout:
-            return f"Timeout loading: {url}"
-        except Exception as e:
-            return f"Navigation error: {e}"
-
-    async def _search(self, query: str, engine: str = "google") -> str:
-        engines = {
-            "google":     f"https://www.google.com/search?q={query.replace(' ', '+')}",
-            "bing":       f"https://www.bing.com/search?q={query.replace(' ', '+')}",
-            "duckduckgo": f"https://duckduckgo.com/?q={query.replace(' ', '+')}",
-        }
-        url = engines.get(engine.lower(), engines["google"])
-        return await self._go_to(url)
-
-    async def _click(self, selector=None, text=None) -> str:
-        page = await self._get_page()
-        try:
-            if text:
-                await page.get_by_text(text, exact=False).first.click(timeout=8000)
-                return f"Clicked: '{text}'"
-            elif selector:
-                await page.click(selector, timeout=8000)
-                return f"Clicked: {selector}"
-            return "Селектор или текст не указаны."
-        except PlaywrightTimeout:
-            return "Элемент не найден или недоступен для клика."
-        except Exception as e:
-            return f"Click error: {e}"
-
-    async def _type(self, selector=None, text: str = "", clear_first: bool = True) -> str:
-        page = await self._get_page()
-        try:
-            element = page.locator(selector).first if selector else page.locator(":focus")
-            if clear_first:
-                await element.clear()
-            await element.type(text, delay=50)
-            return "Текст введён."
-        except Exception as e:
-            return f"Type error: {e}"
-
-    async def _scroll(self, direction: str = "down", amount: int = 500) -> str:
-        page = await self._get_page()
-        try:
-            y = amount if direction == "down" else -amount
-            await page.mouse.wheel(0, y)
-            return f"Scrolled {direction}."
-        except Exception as e:
-            return f"Scroll error: {e}"
-
-    async def _press(self, key: str) -> str:
-        page = await self._get_page()
-        try:
-            await page.keyboard.press(key)
-            return f"Pressed: {key}"
-        except Exception as e:
-            return f"Key error: {e}"
-
-    async def _get_text(self) -> str:
-        page = await self._get_page()
-        try:
-            text = await page.inner_text("body")
-            return text[:4000] if len(text) > 4000 else text
-        except Exception as e:
-            return f"Could not get page text: {e}"
-
-    async def _fill_form(self, fields: dict) -> str:
-        page    = await self._get_page()
-        results = []
-        for selector, value in fields.items():
-            try:
-                el = page.locator(selector).first
-                await el.clear()
-                await el.type(str(value), delay=40)
-                results.append(f"✓ {selector}")
-            except Exception as e:
-                results.append(f"✗ {selector}: {e}")
-        return "Форма заполнена: " + ", ".join(results)
-
-    async def _smart_click(self, description: str) -> str:
-        page       = await self._get_page()
-        desc_lower = description.lower()
-
-        role_hints = {
-            "button":    ["button", "buton", "btn"],
-            "link":      ["link", "bağlantı"],
-            "searchbox": ["search", "arama"],
-            "textbox":   ["input", "field", "alan"],
-        }
-        for role, keywords in role_hints.items():
-            if any(k in desc_lower for k in keywords):
-                try:
-                    await page.get_by_role(role).first.click(timeout=5000)
-                    return f"Clicked ({role}): '{description}'"
-                except Exception:
-                    pass
-
-        try:
-            await page.get_by_text(description, exact=False).first.click(timeout=5000)
-            return f"Clicked (text): '{description}'"
-        except Exception:
-            pass
-
-        try:
-            await page.get_by_placeholder(description, exact=False).first.click(timeout=5000)
-            return f"Clicked (placeholder): '{description}'"
-        except Exception:
-            pass
-
-        return f"Could not find: '{description}'"
-
-    async def _smart_type(self, description: str, text: str) -> str:
-        page = await self._get_page()
-
-        for method, locator in [
-            ("placeholder", page.get_by_placeholder(description, exact=False)),
-            ("label",       page.get_by_label(description, exact=False)),
-            ("role",        page.get_by_role("textbox")),
-        ]:
-            try:
-                el = locator.first
-                await el.clear()
-                await el.type(text, delay=50)
-                return f"Typed into ({method}): '{description}'"
-            except Exception:
-                continue
-
-        return f"Could not find input: '{description}'"
-
-    async def _close_browser(self) -> str:
-        if self._browser:
-            await self._browser.close()
-            self._browser = None
-            self._context = None
-            self._page    = None
-
-        if self._playwright:
-            await self._playwright.stop()
-            self._playwright = None
-
-        return "Браузер закрыт."
-
-
-# ── Singleton browser thread ─────────────────────────────────────────────────
-
-_bt         = _BrowserThread()
-_bt_started = False
-_bt_lock    = threading.Lock()
-
-
-def _ensure_started():
-    global _bt_started
-    with _bt_lock:
-        if not _bt_started:
-            _bt.start()
-            _bt_started = True
-
-
-# ── Public API ───────────────────────────────────────────────────────────────
 
 def browser_control(
     parameters:     dict,
     response=None,
     player=None,
     session_memory=None
-) -> str:
+) -> ToolResult:
     """
-    Browser controller — auto-detects and uses system default browser.
-    Always reuses the existing browser window/page; never opens incognito.
+    Production browser automation controller.
 
-    parameters:
-        action      : go_to | search | click | type | scroll | fill_form |
-                      smart_click | smart_type | get_text | press | close
-        url         : URL for go_to
-        query       : search query
-        engine      : google | bing | duckduckgo (default: google)
-        selector    : CSS selector for click/type
-        text        : text to click or type
-        description : element description for smart_click/smart_type
-        direction   : up | down for scroll
-        amount      : scroll amount in pixels (default: 500)
-        key         : key name for press (e.g. Enter, Escape, Tab)
+    actions:
+        navigate   – go_to alias, go to URL
+        search     – open search engine
+        click      – click element
+        type       – type text into element
+        scroll     – scroll page
+        fill_form  – fill form fields
+        smart_click– find+click by description
+        smart_type – find+type by description
+        dom        – get page text or evaluate JS
+        screenshot – capture page screenshot
+        keys       – press a keyboard key
+        tabs       – create/close/switch/list tabs
+        cookies    – get/set/clear cookies
+        status     – runtime status
+        close      – close current page/context
+        downloads  – enable/list downloads
+
+    parameters keys:
+        action      : str – required
+        url         : str – URL for navigate/search
+        query       : str – search query
+        engine      : str – google|bing|duckduckgo (default: google)
+        selector    : str – CSS selector
+        text        : str – text to click or type
+        description : str – element description for smart_*
+        direction   : str – up|down for scroll (default: down)
+        amount      : int – scroll amount (default: 500)
+        key         : str – key name for keys action (e.g. Enter, Escape, Tab)
         fields      : {selector: value} dict for fill_form
-        clear_first : bool, clear input before typing (default: True)
+        full_page   : bool – full page screenshot (default: False)
+        expression  : str – JS expression for dom action
+        mode        : str – create|close|switch|list for tabs action
+        index       : int – tab index for close/switch
+        tab_action  : str – what to do: create|close|switch|list
+        cookie_name : str – name for set_cookie
+        cookie_value: str – value for set_cookie
+        download_dir: str – downloads directory path
+        enable_download: bool – enable downloads
     """
-    _ensure_started()
-
     action = (parameters or {}).get("action", "").lower().strip()
-    result = "Unknown action."
-
     try:
-        if action == "go_to":
-            result = _bt.run(_bt._go_to(parameters.get("url", "")))
+        svc = get_browser_service()
 
+        if action in ("go_to", "navigate"):
+            return _handle_navigate(svc, parameters)
         elif action == "search":
-            result = _bt.run(_bt._search(
-                parameters.get("query", ""),
-                parameters.get("engine", "google"),
-            ))
-
-        elif action == "click":
-            result = _bt.run(_bt._click(
-                selector=parameters.get("selector"),
-                text=parameters.get("text"),
-            ))
-
-        elif action == "type":
-            result = _bt.run(_bt._type(
-                selector=parameters.get("selector"),
-                text=parameters.get("text", ""),
-                clear_first=parameters.get("clear_first", True),
-            ))
-
+            return _handle_search(svc, parameters)
+        elif action in ("click", "smart_click"):
+            return _handle_click(svc, parameters)
+        elif action in ("type", "smart_type"):
+            return _handle_type(svc, parameters)
         elif action == "scroll":
-            result = _bt.run(_bt._scroll(
-                direction=parameters.get("direction", "down"),
-                amount=parameters.get("amount", 500),
-            ))
-
+            return _handle_scroll(svc, parameters)
         elif action == "fill_form":
-            result = _bt.run(_bt._fill_form(parameters.get("fields", {})))
-
-        elif action == "smart_click":
-            result = _bt.run(_bt._smart_click(parameters.get("description", "")))
-
-        elif action == "smart_type":
-            result = _bt.run(_bt._smart_type(
-                parameters.get("description", ""),
-                parameters.get("text", ""),
-            ))
-
-        elif action == "get_text":
-            result = _bt.run(_bt._get_text())
-
-        elif action == "press":
-            result = _bt.run(_bt._press(parameters.get("key", "Enter")))
-
-        elif action == "close":
-            result = _bt.run(_bt._close_browser())
-
+            return _handle_fill_form(svc, parameters)
+        elif action == "keys" or action == "press_key":
+            return _handle_key(svc, parameters)
+        elif action == "dom":
+            return _handle_dom(svc, parameters)
+        elif action == "screenshot":
+            return _handle_screenshot(svc, parameters)
+        elif action == "tabs" or action == "tab":
+            return _handle_tabs(svc, parameters)
+        elif action in ("cookies", "get_cookies"):
+            return _handle_cookies_get(svc)
+        elif action == "set_cookie":
+            return _handle_set_cookie(svc, parameters)
+        elif action == "clear_cookies":
+            return _handle_cookies_clear(svc)
+        elif action == "downloads":
+            return _handle_downloads(svc, parameters)
+        elif action == "enable_downloads":
+            return _handle_enable_downloads(svc, parameters)
+        elif action == "status":
+            return _handle_status(svc)
+        elif action == "page_info":
+            return _handle_page_info(svc)
+        elif action in ("close", "close_page"):
+            return _handle_close(svc)
+        elif action == "close_all":
+            return _handle_close_all(svc)
         else:
-            result = f"Unknown action: {action}"
+            return ToolResult(
+                ok=False, code="unknown_action",
+                message=f"Unknown action: {action}",
+            )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="browser_error",
+            message=f"Browser error: {exc}",
+        )
 
-    except concurrent.futures.TimeoutError:
-        result = "Browser action timed out."
-    except Exception as e:
-        result = f"Browser error: {e}"
 
-    print(f"[Browser] {result[:80]}")
-    if player:
-        player.write_log(f"[browser] {result[:60]}")
+def _handle_navigate(svc, params: Mapping) -> ToolResult:
+    url = params.get("url", "")
+    timeout = params.get("timeout_ms")
+    try:
+        result = svc.navigate(url, timeout_ms=timeout)
+        return ToolResult(
+            ok=True, code="navigate_ok", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="navigate_error",
+            message=str(exc)
+        )
 
-    return result
+
+def _handle_search(svc, params: Mapping) -> ToolResult:
+    query = params.get("query", "")
+    engine = params.get("engine", "google")
+    if not query:
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="query is required for search"
+        )
+    engines = {
+        "google": "https://www.google.com/search?q={q}",
+        "bing":   "https://www.bing.com/search?q={q}",
+        "duckduckgo": "https://duckduckgo.com/?q={q}",
+    }
+    tmpl = engines.get(engine.lower(), engines["google"])
+    url = tmpl.format(q=query.replace(" ", "+"))
+    try:
+        result = svc.navigate(url)
+        return ToolResult(
+            ok=True, code="search_ok", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="search_error",
+            message=str(exc)
+        )
+
+
+def _handle_click(svc, params: Mapping) -> ToolResult:
+    action = params.get("action", "").lower().strip()
+    timeout = params.get("timeout_ms")
+    if action == "smart_click":
+        description = params.get("description", "")
+        if not description:
+            return ToolResult(
+                ok=False, code="missing_field",
+                message="description required for smart_click"
+            )
+        result = svc.smart_find(description, kind="button")
+        return ToolResult(
+            ok=True, code="smart_click", message=result
+        )
+    selector = params.get("selector")
+    text = params.get("text")
+    role = params.get("role")
+    name = params.get("name")
+    try:
+        result = svc.click(
+            selector=selector, text=text,
+            role=role, name=name,
+            timeout_ms=timeout,
+        )
+        ok = not result.startswith(("Click timeout:", "Click error:"))
+        return ToolResult(
+            ok=ok, code="click_ok", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="click_error",
+            message=str(exc)
+        )
+
+
+def _handle_type(svc, params: Mapping) -> ToolResult:
+    action = params.get("action", "").lower().strip()
+    if action == "smart_type":
+        description = params.get("description", "")
+        text = params.get("text", "")
+        if not description:
+            return ToolResult(
+                ok=False, code="missing_field",
+                message="description required for smart_type"
+            )
+        result = svc.smart_find(description, kind="textbox")
+        if result.startswith("Not found"):
+            return ToolResult(
+                ok=False, code="element_not_found",
+                message=result
+            )
+        # Now type the text
+        try:
+            result2 = svc.type_text(text=text)
+            return ToolResult(
+                ok=True, code="smart_type_ok",
+                message=f"{result}\n{result2}"
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="smart_type_error",
+                message=str(exc)
+            )
+    selector = params.get("selector")
+    text = params.get("text", "")
+    clear_first = params.get("clear_first", True)
+    timeout = params.get("timeout_ms")
+    try:
+        result = svc.type_text(
+            selector=selector, text=text,
+            clear_first=bool(clear_first),
+            timeout_ms=timeout,
+        )
+        ok = not result.startswith("Type error:")
+        return ToolResult(
+            ok=ok, code="type_ok", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="type_error",
+            message=str(exc)
+        )
+
+
+def _handle_scroll(svc, params: Mapping) -> ToolResult:
+    direction = params.get("direction", "down")
+    amount = params.get("amount", 500)
+    try:
+        result = svc.scroll(direction=direction, amount=amount)
+        return ToolResult(
+            ok=True, code="scroll_ok", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="scroll_error",
+            message=str(exc)
+        )
+
+
+def _handle_fill_form(svc, params: Mapping) -> ToolResult:
+    fields = params.get("fields", {})
+    if not isinstance(fields, dict):
+        return ToolResult(
+            ok=False, code="invalid_fields",
+            message="fields must be {selector: value} dict"
+        )
+    try:
+        result = svc.fill_form(fields)
+        return ToolResult(
+            ok=True, code="form_filed", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="form_error",
+            message=str(exc)
+        )
+
+
+def _handle_key(svc, params: Mapping) -> ToolResult:
+    key = params.get("key", "Enter")
+    try:
+        result = svc.press_key(key)
+        return ToolResult(
+            ok=True, code="key_ok", message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="key_error",
+            message=str(exc)
+        )
+
+
+def _handle_dom(svc, params: Mapping) -> ToolResult:
+    selector = params.get("selector", "body")
+    mode = params.get("mode", "text")
+    if mode == "js":
+        expression = params.get("expression", "")
+        try:
+            result = svc.dom_evaluate(expression)
+            return ToolResult(
+                ok=True, code="js_ok",
+                message=str(result),
+                data=result,
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="js_error",
+                message=str(exc)
+            )
+    else:
+        max_chars = params.get("max_chars", 10000)
+        try:
+            result = svc.dom_get_text(
+                selector=selector,
+                max_chars=int(max_chars),
+            )
+            return ToolResult(
+                ok=True, code="dom_ok",
+                message=result,
+                data={"text": result},
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="dom_error",
+                message=str(exc)
+            )
+
+
+def _handle_screenshot(svc, params: Mapping) -> ToolResult:
+    full_page = params.get("full_page", False)
+    try:
+        png_bytes = svc.screenshot(full_page=bool(full_page))
+        return ToolResult(
+            ok=True, code="screenshot_ok",
+            message="Screenshot captured",
+            artifacts=(),
+            data={
+                "type": "png_bytes",
+                "size": len(png_bytes),
+            },
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="screenshot_error",
+            message=str(exc)
+        )
+
+
+def _handle_tabs(svc, params: Mapping) -> ToolResult:
+    mode = params.get("mode", params.get("tab_action", "list"))
+    index = params.get("index", -1)
+
+    if mode == "create":
+        url = params.get("url")
+        try:
+            idx = svc.tab_create(url)
+            return ToolResult(
+                ok=True, code="tab_created",
+                message=f"Tab created, index={idx}",
+                data={"index": idx},
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="tab_create_error",
+                message=str(exc)
+            )
+    elif mode == "close":
+        try:
+            result = svc.tab_close(index)
+            ok = "error" not in result.lower()
+            return ToolResult(
+                ok=ok, code="tab_closed",
+                message=result
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="tab_close_error",
+                message=str(exc)
+            )
+    elif mode == "switch":
+        try:
+            result = svc.tab_switch(index)
+            ok = "error" not in result.lower()
+            return ToolResult(
+                ok=ok, code="tab_switched",
+                message=result
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="tab_switch_error",
+                message=str(exc)
+            )
+    else:  # list / default
+        try:
+            tabs = svc.tabs_list()
+            return ToolResult(
+                ok=True, code="tabs_listed",
+                message=f"{len(tabs)} tab(s)",
+                data={"tabs": tabs},
+            )
+        except Exception as exc:
+            return ToolResult(
+                ok=False, code="tabs_error",
+                message=str(exc)
+            )
+
+
+def _handle_cookies_get(svc) -> ToolResult:
+    try:
+        cookies = svc.get_cookies()
+        return ToolResult(
+            ok=True, code="cookies_ok",
+            message=f"{len(cookies)} cookie(s)",
+            data={"cookies": cookies},
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="cookies_error",
+            message=str(exc)
+        )
+
+
+def _handle_set_cookie(svc, params: Mapping) -> ToolResult:
+    name = params.get("cookie_name", "")
+    value = params.get("cookie_value", "")
+    if not name:
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="cookie_name is required"
+        )
+    try:
+        result = svc.set_cookie(
+            name=name, value=value,
+            domain=params.get("cookie_domain"),
+            path=params.get("cookie_path", "/"),
+        )
+        return ToolResult(
+            ok=True, code="cookie_set",
+            message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="cookie_error",
+            message=str(exc)
+        )
+
+
+def _handle_cookies_clear(svc) -> ToolResult:
+    try:
+        result = svc.clear_cookies()
+        return ToolResult(
+            ok=True, code="cookies_cleared",
+            message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="cookies_error",
+            message=str(exc)
+        )
+
+
+def _handle_downloads(svc) -> ToolResult:
+    files = svc.list_downloads()
+    return ToolResult(
+        ok=True, code="downloads_list",
+        message=f"{len(files)} file(s)",
+        data={"files": files},
+    )
+
+
+def _handle_enable_downloads(svc, params: Mapping) -> ToolResult:
+    download_dir = params.get("download_dir")
+    try:
+        result = svc.enable_downloads(download_dir)
+        return ToolResult(
+            ok=True, code="downloads_enabled",
+            message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="downloads_error",
+            message=str(exc)
+        )
+
+
+def _handle_status(svc) -> ToolResult:
+    status = svc.status()
+    return ToolResult(
+        ok=True, code="status_ok",
+        message=status.message or status.availability.value,
+        data={
+            "availability": status.availability.value,
+            "engine": status.engine,
+            "version": status.version,
+            "tab_count": status.tab_count,
+            "active_tab_url": status.active_tab_url,
+        },
+    )
+
+
+def _handle_page_info(svc) -> ToolResult:
+    info = svc.get_page_info()
+    return ToolResult(
+        ok=True, code="page_info_ok",
+        message=f"Page: {info.get('url')}",
+        data=info,
+    )
+
+
+def _handle_close(svc) -> ToolResult:
+    try:
+        result = svc.close()
+        return ToolResult(
+            ok=True, code="page_closed",
+            message=result
+        )
+    except Exception as exc:
+        return ToolResult(
+            ok=False, code="close_error",
+            message=str(exc)
+        )
+
+
+def _handle_close_all(svc) -> ToolResult:
+    svc.stop()
+    return ToolResult(
+        ok=True, code="all_closed",
+        message="Browser completely closed"
+    )

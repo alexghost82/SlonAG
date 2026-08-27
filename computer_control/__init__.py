@@ -1,37 +1,76 @@
-"""computer_control — platform-agnostic desktop automation for SlonAG.
+"""Closed-loop visual computer agent.
 
 Exports:
-    - CapabilityDetector  — OS / display / permission detection
-    - PlatformAdapter     — base adapter class
-    - MockPlatformAdapter — deterministic E2E adapter (no real desktop)
-    - build_platform_adapter — factory that selects platform adapter
-    - CapabilityResult    — capability detection result
-    - ComputerControlAction — enum of supported actions
-    - MouseClickButton    — click button type
-    - ScrollDirection     — scroll direction type
+    types – canonical dataclasses (Frame, VisionObservation, ComputerAction,
+            LoopBudget, LoopState, VerificationResult, error types).
+    adapter – VirtualScreenAdapter (deterministic E2E), ScreenshotAdapter.
+    closed_loop – VisionComputerAgent (observe→reason→act→verify→correct).
 """
 
-from __future__ import annotations
+from computer_control import types, adapter, closed_loop
 
-from computer_control.capabilities import CapabilityDetector, CapabilityResult
-from computer_control.executor import computer_control, build_computer_control_executor
-from computer_control.platform import MouseClickButton, ScrollDirection, PlatformAdapter
-from computer_control.deterministic import MockPlatformAdapter
-from computer_control.platform import (
-    build_linux_adapter,
-    build_macos_adapter,
-    build_windows_adapter,
-    build_platform_adapter,
+__all__ = ["types", "adapter", "closed_loop"]
+
+# Re-export key symbols for convenience
+from computer_control.types import (
+    ActionCategory,
+    BudgetExceededError,
+    CancellationError,
+    ClosedLoopError,
+    ComputerAction,
+    Frame,
+    FrameSource,
+    LoopBudget,
+    LoopPhase,
+    LoopState,
+    SafetyDenialError,
+    StaleObservationError,
+    VerificationFailedError,
+    VerificationResult,
+    VerificationStatus,
+    VisionObservation,
+)
+from computer_control.adapter import (
+    ComputerAdapter,
+    DeterministicVisionEngine,
+    VirtualScreenAdapter,
+    ScreenshotAdapter,
+    VirtualElement,
+    VirtualScreenState,
+)
+from computer_control.closed_loop import (
+    DefaultReasoner,
+    DefaultVerifier,
+    TargetGroundingResult,
+    VisionComputerAgent,
 )
 
-__all__ = [
-    "CapabilityDetector",
-    "CapabilityResult",
-    "PlatformAdapter",
-    "MockPlatformAdapter",
-    "build_platform_adapter",
-    "MouseClickButton",
-    "ScrollDirection",
-    "computer_control",
-    "build_computer_control_executor",
+__all__ += [
+    "ActionCategory",
+    "BudgetExceededError",
+    "CancellationError",
+    "ClosedLoopError",
+    "ComputerAction",
+    "ComputerAdapter",
+    "DefaultReasoner",
+    "DefaultVerifier",
+    "DeterministicVisionEngine",
+    "Frame",
+    "FrameSource",
+    "LoopBudget",
+    "LoopPhase",
+    "LoopState",
+    "SafetyDenialError",
+    "ScreenshotAdapter",
+    "StaleObservationError",
+    "TargetGroundingResult",
+    "VerificationFailedError",
+    "VerificationResult",
+    "VerificationStatus",
+    "VerificationStatus",
+    "VirtualElement",
+    "VirtualScreenAdapter",
+    "VirtualScreenState",
+    "VisionComputerAgent",
+    "VisionObservation",
 ]

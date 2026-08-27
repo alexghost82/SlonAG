@@ -140,22 +140,39 @@ class AllowlistRoots:
 
 def _normalize_posix(raw: str) -> str:
     """Normalize a path string for comparison."""
-    return raw.strip().replace("\\", "/").rstrip("/")
+    result = raw.strip().replace("\\", "/").rstrip("/")
+    # Preserve root "/" — rstrip('/') would turn "/" into ""
+    if result == "" and raw.strip() in ("/", "/ "):
+        return "/"
+    return result
 
 
 def _raw_is_forbidden(raw: str) -> bool:
     """Check against the global forbidden list."""
-    norm = _normalize_posix(raw).lower()
-    return norm in {p.lower() for p in _FORBIDDEN_POSIX} or norm in {
+    norm = _normalize_posix(raw)
+    if norm == "":
+        return False  # Empty string → check resolved path instead
+    norm_lower = norm.lower()
+    return norm_lower in {p.lower() for p in _FORBIDDEN_POSIX} or norm_lower in {
         w.lower().replace("\\", "/").rstrip("/") for w in _FORBIDDEN_WINDOWS
     }
 
 
 def _is_forbidden_system_path(path: Path) -> bool:
-    """Reject root, home root, and well-known system directories."""
+    """Reject root, home root, and well-known system directories.
+
+    Checks BOTH the raw path and the resolved path against the
+    forbidden set. This matters on systems where /bin, /sbin, /lib,
+    etc. are symlinks to /usr/... (Debian/Ubuntu merged-usr).
+    """
     try:
         resolved = path.resolve()
     except OSError:
+        return True
+
+    # Check the raw (unresolved) path first
+    raw_as_posix = path.as_posix().lower()
+    if raw_as_posix in {p.lower() for p in _FORBIDDEN_POSIX}:
         return True
 
     # Root parent == self → cannot resolve further → forbidden
@@ -170,6 +187,7 @@ def _is_forbidden_system_path(path: Path) -> bool:
     except OSError:
         pass
 
+    # Check the resolved path
     posix = resolved.as_posix().lower()
     if posix in {p.lower() for p in _FORBIDDEN_POSIX}:
         return True
@@ -225,6 +243,9 @@ def validate_path(
 
     Returns the fully-resolved Path.
     Raises PathDenied, SymlinkEscape, or TraversalDetected on failure.
+
+    Relative paths are resolved relative to the first root so that
+    operations like ``write("new.txt", roots=(workspace,))`` work as expected.
     """
     if not path_raw or not path_raw.strip():
         raise PathDenied("Path is empty.")
@@ -238,6 +259,14 @@ def validate_path(
     except (TypeError, ValueError):
         raise PathDenied("Invalid path string.")
 
+    # If the path is relative, resolve it relative to the first root.
+    # This ensures that "new.txt" with roots=(workspace,) resolves to
+    # workspace/new.txt instead of cwd/new.txt.
+    if not base.is_absolute():
+        if roots:
+            base = (roots[0] / path_raw).expanduser()
+        # If no roots, let Path.resolve() use cwd (will fail allowlist check)
+
     # Resolve (handles symlinks, .., .)
     try:
         resolved = base.resolve(strict=False)
@@ -248,7 +277,7 @@ def validate_path(
     if _has_traversal_component(resolved.as_posix()):
         raise PathDenied("Resolved path contains traversal components.")
 
-    # System path check
+    # System path check (raw + resolved)
     if _is_forbidden_system_path(resolved):
         raise PathDenied("System path is forbidden.")
 
