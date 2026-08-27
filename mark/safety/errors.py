@@ -22,13 +22,13 @@ ERROR_CODES = frozenset(
 )
 
 _MESSAGES: dict[str, str] = {
-    CODE_OK: "Политика безопасности приняла запрос.",
-    CODE_UNKNOWN_TOOL: "Неизвестный инструмент.",
-    CODE_INVALID_ARGS: "Аргументы инструмента не прошли проверку.",
-    CODE_UNSAFE_URL: "URL запрещён.",
+    CODE_OK: t("safety.ok"),
+    CODE_UNKNOWN_TOOL: t("safety.unknown_tool"),
+    CODE_INVALID_ARGS: t("safety.invalid_args"),
+    CODE_UNSAFE_URL: t("safety.unsafe_url"),
 }
 
-_UNKNOWN = "Политика безопасности отклонила запрос."
+_UNKNOWN = t("safety.policy_violation")
 
 
 def safety_message(code: str) -> str:

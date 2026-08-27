@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 #flight_finder.py
-import jsonfrom i18n import t
+import json
+
+from i18n import t
 
 import re
 import subprocess

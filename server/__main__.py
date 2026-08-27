@@ -16,6 +16,8 @@ Pairing and auth remain mandatory. TLS is optional (personal LAN).
 
 from __future__ import annotations
 
+from i18n import t
+
 import argparse
 import signal
 import sys

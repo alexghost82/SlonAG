@@ -1,6 +1,8 @@
 """Schedule reminders from a JSON store. Never interpolates user text into Python."""
 
-from __future__ import annotationsfrom i18n import t
+from __future__ import annotations
+
+from i18n import t
 
 
 import json

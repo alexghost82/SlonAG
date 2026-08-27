@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from i18n import t
+
 import json
 import re
 import sys

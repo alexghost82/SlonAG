@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from i18n import t
 import sys
 import time
@@ -317,7 +319,11 @@ class OpenRouterClient:
             "total_vision":  len(VISION_MODELS),
         }
 
-client = OpenRouterClient()
+try:
+    client = OpenRouterClient()
+except RuntimeError:
+    # API key not configured — client will be created on demand
+    client = None  # type: ignore[assignment]
 
 if __name__ == "__main__":
     print("=" * 55)

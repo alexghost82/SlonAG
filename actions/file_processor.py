@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 file_processor.py — Slon Universal File Processor
 
@@ -16,7 +18,9 @@ Supported types:
   pptx    → summarize, extract_text, to_pdf
 """
 
-import osfrom i18n import t
+import os
+
+from i18n import t
 
 import re
 import json

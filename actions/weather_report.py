@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 # actions/weather_report.py
 
-import webbrowserfrom i18n import t
+import webbrowser
+
+from i18n import t
 
 from urllib.parse import quote_plus
 

@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 #youtube_video.py
-import jsonfrom i18n import t
+import json
+
+from i18n import t
 
 import re
 import sys

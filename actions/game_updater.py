@@ -1,4 +1,8 @@
-import osfrom i18n import t
+from __future__ import annotations
+
+import os
+
+from i18n import t
 
 import re
 import sys

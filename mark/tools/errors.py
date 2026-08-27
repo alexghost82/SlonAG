@@ -7,8 +7,8 @@ CODE_DUPLICATE_TOOL = "duplicate_tool"
 CODE_UNKNOWN_TOOL = "unknown_tool"
 
 _MESSAGES: dict[str, str] = {
-    CODE_DUPLICATE_TOOL: "Tool is already registered.",
-    CODE_UNKNOWN_TOOL: "Unknown tool.",
+    CODE_DUPLICATE_TOOL: t("tools.already_registered"),
+    CODE_UNKNOWN_TOOL: t("tools.unknown"),
 }
 
 

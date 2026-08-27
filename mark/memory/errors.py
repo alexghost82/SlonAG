@@ -29,13 +29,13 @@ ERROR_CODES = frozenset(
 )
 
 _MESSAGES = {
-    CODE_OK: "Memory store is ready.",
-    CODE_SECRET_REJECTED: "Memory refused a secret-like value.",
-    CODE_UNKNOWN_PROPOSAL: "Proposal id is not pending.",
-    CODE_UNKNOWN_TYPE: "Unknown memory record type.",
-    CODE_INVALID_RECORD: "Memory record is missing required fields.",
-    CODE_INVALID_MIGRATION: "Legacy memory payload is not a mapping.",
-    CODE_NOT_FOUND: "Memory record was not found.",
+    CODE_OK: t("memory.ok"),
+    CODE_SECRET_REJECTED: t("memory.secret_rejected"),
+    CODE_UNKNOWN_PROPOSAL: t("memory.unknown_proposal"),
+    CODE_UNKNOWN_TYPE: t("memory.unknown_type"),
+    CODE_INVALID_RECORD: t("memory.invalid_record"),
+    CODE_INVALID_MIGRATION: t("memory.invalid_migration"),
+    CODE_NOT_FOUND: t("memory.not_found"),
 }
 
 _UNKNOWN = "Memory store error."

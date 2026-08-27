@@ -25,15 +25,15 @@ ERROR_CODES = frozenset(
 )
 
 _MESSAGES: dict[str, str] = {
-    CODE_OK: "Document ingest succeeded.",
-    CODE_TOO_LARGE: "Document exceeds the configured size limit.",
-    CODE_BAD_MIME: "Document type is not on the MIME or extension allow-list.",
-    CODE_PATH_TRAVERSAL: "Document path escapes the injected root.",
-    CODE_ZIP_BOMB: "Archive rejected as a zip bomb.",
-    CODE_MISSING_HOOK: "Parser hook is not configured.",
+    CODE_OK: t("documents.ok"),
+    CODE_TOO_LARGE: t("documents.too_large"),
+    CODE_BAD_MIME: t("documents.bad_mime"),
+    CODE_PATH_TRAVERSAL: t("documents.path_traversal"),
+    CODE_ZIP_BOMB: t("documents.zip_bomb"),
+    CODE_MISSING_HOOK: t("documents.missing_hook"),
 }
 
-_UNKNOWN = "Document ingest failed."
+_UNKNOWN = t("documents.failed")
 
 
 def document_message(code: str) -> str:

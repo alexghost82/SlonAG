@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # actions/code_helper.py
 # AI-powered code assistant — writes, edits, explains, runs, builds, debugs, and optimizes code.
 #
@@ -11,7 +13,9 @@
 #   optimize     → Mevcut kodu Gemini ile optimize et (performans, okunabilirlik, best practices)
 #   auto         → (default) Intent auto-detected from context
 
-import subprocessfrom i18n import t
+import subprocess
+
+from i18n import t
 
 import sys
 import json

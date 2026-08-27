@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 #computer_settings.py
-import jsonfrom i18n import t
+import json
+
+from i18n import t
 
 import re
 import sys

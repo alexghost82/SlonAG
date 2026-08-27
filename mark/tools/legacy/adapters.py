@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from mark.tools.contracts import ToolResult
+from mark.filesystem.operations import filesystem_operation, FileSystemResult
 
 
 LegacyHandler = Callable[[Mapping[str, object]], ToolResult]
@@ -101,7 +102,6 @@ computer_control_handler = _action_handler(
 computer_settings_handler = _action_handler(
     "actions.computer_settings", "computer_settings"
 )
-cmd_control_handler = _action_handler("actions.cmd_control", "cmd_control")
 screen_process_handler = _action_handler("actions.screen_processor", "screen_process")
 reminder_handler = _action_handler("actions.reminder", "reminder")
 weather_report_handler = _action_handler("actions.weather_report", "weather_action")
@@ -127,12 +127,21 @@ dev_agent_handler = _action_handler(
 
 
 def read_file_handler(args: Mapping[str, object]) -> ToolResult:
-    """Canonical narrow read helper used by the iterative agent runtime."""
-    try:
-        content = Path(str(args["path"])).read_text(encoding="utf-8")
-    except (OSError, UnicodeError, KeyError) as exc:
-        return ToolResult(ok=False, code="read_error", message=str(exc))
-    return ToolResult(ok=True, code="ok", data=content)
+    """Canonical narrow read helper used by the iterative agent runtime.
+
+    Delegated to the unified filesystem security layer.
+    """
+    result = filesystem_operation(
+        "read",
+        path=str(args.get("path", "")),
+        max_chars=int(args.get("max_chars", 2097152)),
+    )
+    return ToolResult(
+        ok=result.ok,
+        code=result.code,
+        message=result.message,
+        data=result.data,
+    )
 
 
 def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
@@ -161,15 +170,23 @@ shell_exec_handler = _action_handler("actions.shell_exec", "shell_exec")
 
 # cmd_control is deprecated/broken; delegate to shell_exec for backward compat.
 def _cmd_control_deprecated_handler(args: Mapping[str, object]) -> ToolResult:
-    """Deprecated shim: route broken cmd_control to shell_exec."""
+    """Deprecated shim: route broken cmd_control to canonical shell_exec.
+
+    Maps legacy argument names (``cmd`` → ``command``) so callers
+    using the old tool name still work through the approved pipeline.
+    """
     cmd = args.get("command", args.get("cmd", ""))
     if isinstance(cmd, str) and cmd.strip():
-        return shell_exec_handler({"command": cmd, "cwd": args.get("cwd")})
-    return ToolResult(
-        ok=False,
-        code="missing_field",
-        message="cmd_control is deprecated. Use 'shell_exec' instead.",
-    )
+        kwargs: dict[str, object] = {"command": cmd}
+        cwd = args.get("cwd")
+        if cwd is not None:
+            kwargs["cwd"] = cwd
+        timeout = args.get("timeout")
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return shell_exec_handler(kwargs)
+    # No command at all — shell_exec will produce the proper error.
+    return shell_exec_handler({"command": ""})
 
 
 # === Wave 24: Vision + STT + TTS tool handlers ===

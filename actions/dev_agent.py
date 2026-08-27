@@ -1,4 +1,8 @@
-import subprocessfrom i18n import t
+from __future__ import annotations
+
+import subprocess
+
+from i18n import t
 
 import sys
 import json

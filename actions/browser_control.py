@@ -1,4 +1,8 @@
-import asynciofrom i18n import t
+from __future__ import annotations
+
+import asyncio
+
+from i18n import t
 
 import threading
 import concurrent.futures

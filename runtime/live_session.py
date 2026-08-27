@@ -1,4 +1,5 @@
 """Gemini Live response, transcription, and tool-response processing."""
+nfrom i18n import t
 
 from __future__ import annotations
 
@@ -55,7 +56,7 @@ async def receive_live_session(
             interrupted_assistant = " ".join(output_transcript).strip()
             accept_playback = False
             invalidated = interrupt_playback()
-            ui.write_log(f"SYS: playback interrupted cleared={invalidated}")
+            ui.write_log(t("chat.playback_cleared", inv=str(invalidated)))
             input_transcript.clear()
             output_transcript.clear()
             cancel_turn = getattr(latency_trace, "cancel_turn", None)
@@ -142,15 +143,15 @@ async def receive_live_session(
                     if inspect.isawaitable(outcome):
                         await outcome
                 if user_text:
-                    ui.write_log(f"You: {user_text}")
+                    ui.write_log(t("chat.user", text=user_text))
                 if assistant_text:
-                    ui.write_log(f"Slon: {assistant_text}")
+                    ui.write_log(t("chat.assistant", text=assistant_text))
                 if breakdown:
                     rendered = " ".join(
                         f"{name}={value:.1f}ms"
                         for name, value in breakdown.items()
                     )
-                    ui.write_log(f"SYS: latency {rendered}")
+                    ui.write_log(t("chat.latency", lat=rendered))
                 if len(user_text) > 5:
                     threading.Thread(
                         target=update_memory,

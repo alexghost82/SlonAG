@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from runtime.events import RuntimeEventKind
+from i18n import t
 
 
 class _SessionTaskEnded(Exception):
@@ -50,7 +51,7 @@ async def run_live_lifecycle(
                     ui.set_state("LISTENING")
                 else:
                     emit_event(RuntimeEventKind.LISTENING)
-                ui.write_log("SYS: Slon online.")
+                ui.write_log(t("chat.online"))
                 try:
                     async with asyncio.TaskGroup() as task_group:
                         for operation in tasks():

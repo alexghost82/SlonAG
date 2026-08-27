@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from i18n import t
+
 import argparse
 import asyncio
 import os

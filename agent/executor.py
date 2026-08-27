@@ -5,8 +5,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from agent.runtime import AgentLoop
-from i18n import t, AgentLoopResult, LoopBudget
+from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
+from i18n import t
+
 from agent.steering import SteeringQueue
 from mark.safety import (
     SafetyDecision,

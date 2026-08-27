@@ -1213,15 +1213,15 @@ class MainWindow(QMainWindow):
             elapsed = time.time() - boot_t
             h = int(elapsed // 3600)
             m = int((elapsed % 3600) // 60)
-            self._uptime_lbl.setText(f"UP  {h:02d}:{m:02d}")
+            self._uptime_lbl.setText(t("ui.uptime", h=h, m=m))
         except Exception:
-            self._uptime_lbl.setText("UP  --:--")
+            self._uptime_lbl.setText(t("ui.uptime_none"))
 
         try:
             proc_count = len(psutil.pids())
-            self._proc_lbl.setText(f"PROC  {proc_count}")
+            self._proc_lbl.setText(t("ui.proc_count", n=proc_count))
         except Exception:
-            self._proc_lbl.setText("PROC  --")
+            self._proc_lbl.setText(t("ui.proc_none"))
 
         plane = getattr(self, "_control_plane", None)
         if plane is not None:
@@ -1853,7 +1853,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "_stt_btn"):
             return
         if self._local_stt_ready:
-            self._stt_btn.setText("🎤  LOCAL STT LISTEN")
+            self._stt_btn.setText(t("ui.stt_listen"))
             self._stt_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent; color: {C.TEXT_MED};
@@ -1863,7 +1863,7 @@ class MainWindow(QMainWindow):
             """)
             self._stt_btn.setEnabled(True)
         else:
-            self._stt_btn.setText("🎤  LOCAL STT N/A")
+            self._stt_btn.setText(t("ui.stt_na"))
             self._stt_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent; color: {C.TEXT_DIM};
@@ -2014,7 +2014,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "_tts_btn"):
             return
         if self._local_tts_enabled and self._local_tts_ready:
-            self._tts_btn.setText("🗣  LOCAL TTS ON")
+            self._tts_btn.setText(t("ui.tts_on"))
             self._tts_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #00140a; color: {C.GREEN};
@@ -2022,7 +2022,7 @@ class MainWindow(QMainWindow):
                 }}
             """)
         elif self._local_tts_ready:
-            self._tts_btn.setText("🗣  LOCAL TTS OFF")
+            self._tts_btn.setText(t("ui.tts_off"))
             self._tts_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent; color: {C.TEXT_MED};
@@ -2031,7 +2031,7 @@ class MainWindow(QMainWindow):
                 QPushButton:hover {{ color: {C.PRI}; border: 1px solid {C.BORDER_B}; }}
             """)
         else:
-            self._tts_btn.setText("🗣  LOCAL TTS N/A")
+            self._tts_btn.setText(t("ui.tts_na"))
             self._tts_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent; color: {C.TEXT_DIM};
@@ -2067,7 +2067,7 @@ class MainWindow(QMainWindow):
                 }}
             """)
         else:
-            self._api_btn.setText("📡  DESKTOP API OFF")
+            self._api_btn.setText(t("ui.desktop_api_off"))
             self._api_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent; color: {C.TEXT_MED};
@@ -2182,7 +2182,7 @@ class MainWindow(QMainWindow):
         cat  = _file_category(p)
         icon, _ = _FILE_ICONS.get(cat, _FILE_ICONS["unknown"])
         size = _fmt_size(p.stat().st_size)
-        self._file_hint.setText(f"{icon}  {p.name}  ·  {size}  ·  Tell Slon what to do with it")
+        self._file_hint.setText(f"{icon}  {p.name}  ·  {size}  ·  {t("ui.file_hint_default")}")
         self._log_sig.emit(f"FILE: {p.name} ({size}) loaded")
         if self.on_text_command:
             msg = (
@@ -2212,7 +2212,7 @@ class MainWindow(QMainWindow):
 
     def _style_mute_btn(self):
         if self._muted:
-            self._mute_btn.setText("🔇  MICROPHONE MUTED")
+            self._mute_btn.setText(t("ui.mic_muted"))
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #140006; color: {C.MUTED_C};
@@ -2220,7 +2220,7 @@ class MainWindow(QMainWindow):
                 }}
             """)
         else:
-            self._mute_btn.setText("🎙  MICROPHONE ACTIVE")
+            self._mute_btn.setText(t("ui.mic_active"))
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #00140a; color: {C.GREEN};

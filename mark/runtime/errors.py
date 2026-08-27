@@ -28,16 +28,16 @@ ERROR_CODES = frozenset(
 )
 
 _MESSAGES_RU: dict[str, str] = {
-    CODE_OK: "Локальный runtime работает.",
-    CODE_OOM: "Недостаточно памяти для запуска локальной модели.",
-    CODE_NOT_RUNNING: "Локальный runtime не запущен.",
-    CODE_START_FAILED: "Не удалось запустить локальный runtime.",
-    CODE_STOP_FAILED: "Не удалось остановить локальный runtime.",
-    CODE_REMOTE_URL: "Удалённый адрес runtime запрещён. Разрешены только локальные адреса.",
-    CODE_PULL_UNCONFIRMED: "Загрузка модели требует подтверждения размера и лицензии.",
+    CODE_OK: t("runtime.ok"),
+    CODE_OOM: t("runtime.oom"),
+    CODE_NOT_RUNNING: t("runtime.not_running"),
+    CODE_START_FAILED: t("runtime.start_failed"),
+    CODE_STOP_FAILED: t("runtime.stop_failed"),
+    CODE_REMOTE_URL: t("runtime.remote_url"),
+    CODE_PULL_UNCONFIRMED: t("runtime.pull_unconfirmed"),
 }
 
-_UNKNOWN_RU = "Ошибка локального runtime."
+_UNKNOWN_RU = t("runtime.failed")
 
 
 def runtime_message_ru(code: str) -> str:

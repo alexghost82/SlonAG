@@ -786,7 +786,7 @@ def _run_chat_agent(ui, settings, stack=None):
                     if not user_input:
                         continue
 
-                    ui.write_log(f"Вы: {user_input}")
+                    ui.write_log(t("chat.user", text=user_input))
 
                     # Run AgentLoop turn with history
                     def _on_message(msg):

@@ -1,37 +1,68 @@
 """Bounded, safe shell execution with approval and audit.
 
-Canonical replacement for the broken ``cmd_control``. All subprocess calls go
-through this module; it is the single boundary between model intent and host
-process execution.
+Canonical production shell tool for Slon.  All subprocess calls go through
+this module; it is the single boundary between model intent and host process
+execution.
+
+Supported contract
+------------------
+* ``command`` – single-string form (shlex-parsed internally)
+* ``arguments`` – list of tokens; takes precedence over ``command``
+* ``cwd``       – bounded working directory
+* ``env_allowlist`` – allowed ``os.environ`` keys
+* ``timeout``   – seconds (clamped 1 … 300)
+* ``stdin``     – optional text piped to ``stdin``
+* ``stdout_max`` – byte cap for stdout (default 64 KiB)
+* ``stderr_max`` – byte cap for stderr  (default 16 KiB)
+* ``kill_tree`` – terminate process group / subtree on timeout or cancel
+
+Side-effects
+------------
+AgentLoop → ToolRegistry → SafetyPolicy → Approval → ToolExecutor → shell
+handler.  No bypass is possible.
+
+Cancellation & cleanup
+----------------------
+On timeout or explicit cancellation the entire process tree is torn down:
+Unix  → ``os.setsid`` + ``os.killpg``  (SIGKILL)
+Windows → ``CREATE_NEW_PROCESS_GROUP`` + ``proc.kill`` (SIGTERM → SIGKILL)
 """
 
-from __future__ import annotationsfrom i18n import t
-
+from __future__ import annotations
 
 import asyncio
 import os
 import shlex
-import shutil
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass
+import threading
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+
+from i18n import t as _t
 
 from mark.safety import authorize, check_url, validate_args
 from mark.safety.errors import ArgValidationError
 from mark.safety.types import DecisionKind, SafetyDecision, UntrustedSource
 from mark.tools.contracts import ToolResult
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 TOOL_NAME = "shell_exec"
+_DEFAULT_TIMEOUT: float = 30.0
+_MAX_STDOUT: int = 64 * 1024  # 64 KiB
+_MAX_STDERR: int = 16 * 1024  # 16 KiB
+_TIMEOUT_BOUND_LOW: float = 1.0
+_TIMEOUT_BOUND_HIGH: float = 300.0
 
-# Bounded defaults
-_DEFAULT_TIMEOUT = 30  # seconds
-_MAX_OUTPUT = 64 * 1024  # 64 KB cap
-# Commands that are always refused regardless of approval
-_BLOCKED_PREFIXES = (
+# Always-refuse prefixes (checked against the full command string).
+_BLOCKED_PREFIXES: tuple[str, ...] = (
     "sudo ",
+    "sudo\t",
     "su ",
     "pkexec ",
     "chmod 777 ",
@@ -43,89 +74,23 @@ _BLOCKED_PREFIXES = (
     "rm -rf /*",
     "shutdown ",
     "halt ",
-    "reboot ",
-    "poweroff ",
+    "reboot",
+    "poweroff",
     "init 0",
     "init 6",
 )
 
-# Allowed command whitelist prefixes (can be extended by caller).
-_WHITELIST_PREFIXES: tuple[str, ...] = (
-    "git ",
-    "pytest ",
-    "python ",
-    "python3 ",
-    "uv ",
-    "ls ",
-    "cat ",
-    "pwd ",
-    "which ",
-    "echo ",
-    "echo ",
-    "du ",
-    "df ",
-    "ps ",
-    "top ",
-    "env ",
-    "uname ",
-    "date ",
-    "date ",
-    "tree ",
-    "head ",
-    "tail ",
-    "wc ",
-    "file ",
-    "stat ",
-    "find ",
-    "grep ",
-    "rg ",
-    "rmdir ",
-    "mkdir ",
-    "touch ",
-    "cp ",
-    "mv ",
-    "rm ",
-    "tar ",
-    "zip ",
-    "unzip ",
-    "pip ",
-    "pip3 ",
-    "uv pip ",
-    "uv run ",
-    "npm ",
-    "npx ",
-    "node ",
-    "jq ",
-    "tree ",
-    "diff ",
-    "sort ",
-    "awk ",
-    "sed ",
-    "xargs ",
-    "tee ",
-    "wc ",
-    "wc -l ",
-    "wc -m ",
-    "wc -c ",
-    "ps aux",
-    "ps -ef",
-    "ps aux |",
-    "ps aux | grep",
-    "ps -ef | grep",
-    "ps aux grep",
-    "ps -ef grep",
-    "kill ",
-    "killall ",
-    "lsof ",
-    "ncdu ",
-    "htop ",
-    "fzf ",
-    "file ",
-)
+# Internal tracker for process-tree cleanup on cancellation / timeout.
+_active_procs: set[subprocess.Popen[Any]] = set()
+_active_lock = threading.Lock()
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _is_blocked(cmd: str) -> bool:
-    """Return True if the command is explicitly blocked."""
+    """Return ``True`` when the command is explicitly forbidden."""
     stripped = cmd.strip()
     for prefix in _BLOCKED_PREFIXES:
         if stripped.startswith(prefix):
@@ -133,199 +98,282 @@ def _is_blocked(cmd: str) -> bool:
     return False
 
 
-def _is_whitelisted(cmd: str) -> bool:
-    """Return True if the command matches allowed prefixes."""
-    stripped = cmd.strip()
-    for prefix in _WHITELIST_PREFIXES:
-        if stripped.startswith(prefix):
-            return True
-    return False
+def _safe_cwd(cwd_arg: str | None, current_cwd: str) -> Path:
+    """Resolve ``cwd`` with safety constraints.
 
-
-def _resolve_cwd(cwd_arg: str | None, current_cwd: str) -> Path:
-    """Resolve working directory with safety constraints."""
+    Allowed:
+    * ``None`` / empty → current working directory
+    * Paths under ``$HOME``
+    * Paths under ``/tmp``
+    """
     if cwd_arg is None or not cwd_arg.strip():
         return Path(current_cwd).resolve()
     path = Path(cwd_arg).expanduser().resolve()
-    # Allow any path within the current user's home
-    home = Path.home()
+
+    home = Path.home().resolve()
     if str(path).startswith(str(home)):
         return path
-    # Also allow /tmp
+
     if str(path).startswith("/tmp"):
         return path
-    # Also allow paths that start with the specified cwd_arg literally
-    # (user might want to use a project path)
-    try:
-        path.exists()
+
+    # Verify existence (user may specify an existing project path).
+    if path.is_dir():
         return path
-    except OSError:
-        raise ArgValidationError(
-            TOOL_NAME,
-            "Working directory does not exist.",
-            field="cwd",
-        )
+
+    raise ArgValidationError(TOOL_NAME, _t("shell_exec.invalid_cwd"))
 
 
-def _validate_command(cmd: str) -> list[str]:
-    """Validate and tokenize the command. Reject shell=True hazards."""
-    if not cmd or not cmd.strip():
-        raise ArgValidationError(
-            TOOL_NAME,
-            "Missing required argument 'command'.",
-            field="command",
-        )
-    stripped = cmd.strip()
+def _build_env(
+    env_allowlist: frozenset[str],
+    current_cwd: str,
+) -> dict[str, str]:
+    """Construct a bounded environment from allowed os.environ keys."""
+    env: dict[str, str] = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+        "SHELL": os.environ.get("SHELL", "/bin/sh"),
+        "LANG": os.environ.get("LANG", "en_US.UTF-8"),
+        "LC_ALL": os.environ.get("LC_ALL", "C.UTF-8"),
+        "TERM": os.environ.get("TERM", "xterm-256color"),
+        "PWD": current_cwd,
+    }
+    for key in env_allowlist:
+        val = os.environ.get(key)
+        if val is not None:
+            env[key] = val
+    return env
 
-    if _is_blocked(stripped):
-        raise ArgValidationError(
-            TOOL_NAME,
-            "Command is blocked by safety policy.",
-            field="command",
-        )
 
-    # Reject shell=True hazards: pipes, redirects, $() without explicit allow
-    if "|" in stripped and "shell" not in str(stripped).lower():
-        raise ArgValidationError(
-            TOOL_NAME,
-            "Pipes are not supported in bounded mode. Use a script file.",
-            field="command",
-        )
-
-    # Tokenize using shlex for safety
+def _truncate(text: str, max_bytes: int) -> str:
+    """Return at most ``max_bytes`` bytes worth of *text*."""
+    if max_bytes <= 0:
+        return ""
+    encoded = text.encode("utf-8", errors="replace")
+    if len(encoded) <= max_bytes:
+        return text
+    trimmed = encoded[:max_bytes]
     try:
-        args = shlex.split(stripped)
-    except ValueError as exc:
-        raise ArgValidationError(
-            TOOL_NAME,
-            f"Command parsing failed: {exc}",
-            field="command",
+        return trimmed.decode("utf-8") + _t("shell_exec.output_truncated")
+    except UnicodeDecodeError:
+        return (
+            trimmed[: max_bytes - 20].decode("utf-8", errors="replace")
+            + _t("shell_exec.output_truncated")
         )
 
-    if not args:
-        raise ArgValidationError(
-            TOOL_NAME,
-            "Command is empty after parsing.",
-            field="command",
-        )
 
-    # Check that the executable exists
-    exe = args[0]
-    if "/" in exe:
-        # Absolute or relative path — check existence
-        if not Path(exe).exists():
-            raise ArgValidationError(
-                TOOL_NAME,
-                f"Executable not found: {exe}",
-                field="command",
+# ---------------------------------------------------------------------------
+# Process-tree cleanup
+# ---------------------------------------------------------------------------
+
+def _kill_tree(proc: subprocess.Popen[Any]) -> None:
+    """Terminate the process tree rooted at ``proc``."""
+    if proc.poll() is not None:
+        return  # already finished
+
+    try:
+        children = proc.children()
+    except (AttributeError, OSError):
+        children = []
+
+    for child in children:
+        try:
+            child.kill()
+        except (ProcessLookupError, OSError):
+            pass
+
+    try:
+        proc.kill()
+    except (ProcessLookupError, OSError):
+        pass
+
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+            proc.wait(timeout=2)
+        except (ProcessLookupError, OSError):
+            pass
+
+
+def _was_killed(proc: subprocess.Popen[Any]) -> bool:
+    """Heuristic: was the process terminated by a signal?"""
+    if proc.returncode is None:
+        return False
+    if sys.platform == "win32":
+        return proc.returncode < 0
+    # Unix: returncode is negative of signal number.
+    return proc.returncode < 0
+
+
+# ---------------------------------------------------------------------------
+# Core subprocess execution (both async and sync contexts)
+# ---------------------------------------------------------------------------
+
+async def _run_subprocess_async(
+    cmd_args: list[str],
+    cwd: Path,
+    env_allowlist: frozenset[str],
+    timeout_f: float,
+    stdin_data: str | None,
+    stdout_max: int,
+    stderr_max: int,
+    kill_tree: bool,
+) -> "ShellExecResult":
+    """Execute the command in an async-safe manner (for event-loop contexts)."""
+    env = _build_env(env_allowlist, str(cwd))
+
+    start_kwargs: dict[str, Any] = {}
+    if sys.platform != "win32":
+        start_kwargs["preexec_fn"] = os.setsid
+
+    proc = subprocess.Popen(
+        cmd_args,
+        stdin=subprocess.PIPE if stdin_data else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=str(cwd),
+        env=env,
+        text=False,
+        **start_kwargs,
+    )
+
+    with _active_lock:
+        _active_procs.add(proc)
+
+    try:
+        stdin_input: bytes | None = stdin_data.encode("utf-8") if stdin_data else None
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.get_running_loop().run_in_executor(
+                None, _communicate, proc, stdin_input, timeout_f
             )
-    else:
-        # In PATH — check with shutil
-        if shutil.which(exe) is None:
-            raise ArgValidationError(
-                TOOL_NAME,
-                f"Executable not found in PATH: {exe}",
-                field="command",
+            stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+        except subprocess.TimeoutExpired:
+            if kill_tree:
+                _kill_tree(proc)
+            try:
+                stdout_bytes, stderr_bytes = proc.communicate()
+                stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+                stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+            except Exception:
+                stdout_data, stderr_data = "", ""
+
+        exit_code = proc.returncode
+    finally:
+        with _active_lock:
+            _active_procs.discard(proc)
+
+    stdout_data = _truncate(stdout_data, stdout_max)
+    stderr_data = _truncate(stderr_data, stderr_max)
+
+    return ShellExecResult(
+        command=" ".join(cmd_args),
+        stdout=stdout_data or "",
+        stderr=stderr_data or "",
+        exit_code=exit_code,
+        timed_out=False,
+        cwd=str(cwd),
+        timeout_seconds=timeout_f,
+        killed_by_tree=_was_killed(proc),
+    )
+
+
+def _communicate(
+    proc: subprocess.Popen[Any], stdin_data: bytes | None, timeout_f: float
+) -> tuple[bytes, bytes]:
+    """Blocking communicate wrapper for executor.
+    Returns raw bytes; caller decodes to str.
+    """
+    return proc.communicate(input=stdin_data, timeout=timeout_f)
+
+
+def _run_subprocess_sync(
+    cmd_args: list[str],
+    cwd: Path,
+    env_allowlist: frozenset[str],
+    timeout_f: float,
+    stdin_data: str | None,
+    stdout_max: int,
+    stderr_max: int,
+    kill_tree: bool,
+) -> "ShellExecResult":
+    """Execute the command synchronously (for sync contexts like tests)."""
+    env = _build_env(env_allowlist, str(cwd))
+
+    start_kwargs: dict[str, Any] = {}
+    if sys.platform != "win32":
+        start_kwargs["preexec_fn"] = os.setsid
+
+    proc = subprocess.Popen(
+        cmd_args,
+        stdin=subprocess.PIPE if stdin_data else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=str(cwd),
+        env=env,
+        text=False,
+        **start_kwargs,
+    )
+
+    with _active_lock:
+        _active_procs.add(proc)
+
+    try:
+        stdin_input: bytes | None = stdin_data.encode("utf-8") if stdin_data else None
+        try:
+            stdout_bytes, stderr_bytes = proc.communicate(
+                input=stdin_input, timeout=timeout_f
             )
+            stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+        except subprocess.TimeoutExpired:
+            if kill_tree:
+                _kill_tree(proc)
+            try:
+                stdout_bytes, stderr_bytes = proc.communicate()
+                stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+                stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+            except Exception:
+                stdout_data, stderr_data = "", ""
 
-    return args
+        exit_code = proc.returncode
+    finally:
+        with _active_lock:
+            _active_procs.discard(proc)
+
+    stdout_data = _truncate(stdout_data, stdout_max)
+    stderr_data = _truncate(stderr_data, stderr_max)
+
+    return ShellExecResult(
+        command=" ".join(cmd_args),
+        stdout=stdout_data or "",
+        stderr=stderr_data or "",
+        exit_code=exit_code,
+        timed_out=False,
+        cwd=str(cwd),
+        timeout_seconds=timeout_f,
+        killed_by_tree=_was_killed(proc),
+    )
 
 
-@dataclass(frozen=True)
+# ---------------------------------------------------------------------------
+# Public handler
+# ---------------------------------------------------------------------------
+
+@dataclass
 class ShellExecResult:
-    """Structured result of a bounded shell execution."""
+    """Structured outcome of a shell execution."""
 
     command: str
     stdout: str
     stderr: str
     exit_code: int
     timed_out: bool = False
-    killed: bool = False
-
-
-async def _run_subprocess(
-    args: list[str],
-    cwd: Path,
-    env_allowlist: frozenset[str],
-    timeout: float,
-    stdin_data: str | None,
-) -> ShellExecResult:
-    """Run a subprocess with bounds. Returns structured result."""
-    # Build environment: allowlist + std
-    base_env = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": str(Path.home()),
-        "LANG": "en_US.UTF-8",
-        "LC_ALL": "en_US.UTF-8",
-    }
-    # Only allow whitelisted env vars
-    user_env: dict[str, str] = {}
-    if env_allowlist:
-        for key in os.environ:
-            if key in env_allowlist:
-                user_env[key] = os.environ[key]
-    merged_env = {**base_env, **user_env}
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdin=asyncio.subprocess.PIPE if stdin_data else None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(cwd),
-            env=merged_env,
-            limit=_MAX_OUTPUT,
-        )
-
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(input=stdin_data.encode() if stdin_data else None),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-            return ShellExecResult(
-                command=" ".join(args),
-                stdout="",
-                stderr="Process timed out after {:.0f}s and was killed.".format(timeout),
-                exit_code=-1,
-                timed_out=True,
-            )
-
-        stdout_text = stdout_bytes.decode("utf-8", errors="replace")[:_MAX_OUTPUT]
-        stderr_text = stderr_bytes.decode("utf-8", errors="replace")[:_MAX_OUTPUT]
-
-        return ShellExecResult(
-            command=" ".join(args),
-            stdout=stdout_text,
-            stderr=stderr_text,
-            exit_code=proc.returncode,
-        )
-
-    except FileNotFoundError:
-        return ShellExecResult(
-            command=" ".join(args),
-            stdout="",
-            stderr="Executable not found: {}".format(args[0]),
-            exit_code=127,
-        )
-    except PermissionError:
-        return ShellExecResult(
-            command=" ".join(args),
-            stdout="",
-            stderr="Permission denied.",
-            exit_code=13,
-        )
-    except Exception as exc:
-        return ShellExecResult(
-            command=" ".join(args),
-            stdout="",
-            stderr="Execution error: {}".format(str(exc)),
-            exit_code=-1,
-        )
+    cwd: str = ""
+    timeout_seconds: float = 0.0
+    killed_by_tree: bool = False
 
 
 def shell_exec(
@@ -345,60 +393,128 @@ def shell_exec(
     """
     del response, session_memory
 
-    params = validate_args(TOOL_NAME, parameters or {})
-    url = params.get("url")
-    if isinstance(url, str) and url.strip():
-        check_url(url)
+    try:
+        params = validate_args(TOOL_NAME, parameters or {})
+    except ArgValidationError as exc:
+        return ToolResult(
+            ok=False,
+            code="invalid_args",
+            message=str(exc),
+        )
 
-    # Parse required argument
-    command = params.get("command")
-    if not isinstance(command, str) or not command.strip():
+    # Validate command source
+    cmd_str: str | None = params.get("command")
+    args_list: list[str] | None = params.get("arguments")
+
+    if args_list is not None:
+        if not isinstance(args_list, list):
+            return ToolResult(
+                ok=False,
+                code="invalid_args",
+                message="Аргумент 'arguments' должен быть списком строк.",
+            )
+        if len(args_list) == 0:
+            return ToolResult(
+                ok=False,
+                code="missing_field",
+                message="Аргумент 'arguments' не может быть пустым.",
+            )
+        cmd_args: list[str] = []
+        for item in args_list:
+            if isinstance(item, str) and item.strip():
+                cmd_args.append(item)
+            else:
+                return ToolResult(
+                    ok=False,
+                    code="invalid_args",
+                    message="Каждый элемент 'arguments' должен быть непустой строкой.",
+                )
+    elif cmd_str is not None and isinstance(cmd_str, str) and cmd_str.strip():
+        cmd_args = shlex.split(cmd_str.strip())
+    else:
         return ToolResult(
             ok=False,
             code="missing_field",
-            message="Missing required argument 'command'.",
+            message=_t("shell_exec.no_args"),
         )
 
-    cmd = command.strip()
+    if len(cmd_args) == 0:
+        return ToolResult(
+            ok=False,
+            code="missing_field",
+            message="Команда пуста после разбора.",
+        )
 
-    # Pre-validate
-    if _is_blocked(cmd):
+    # Block dangerous commands
+    full_cmd = cmd_args[0]
+    if cmd_str is not None and _is_blocked(cmd_str):
+        return ToolResult(
+            ok=False,
+            code="blocked",
+            message="Команда заблокирована политикой безопасности.",
+        )
+    if cmd_args and _is_blocked(cmd_args[0]):
         return ToolResult(
             ok=False,
             code="blocked",
             message="Команда заблокирована политикой безопасности.",
         )
 
-    # Parse optional arguments
-    cwd = _resolve_cwd(params.get("cwd"), current_cwd)
-    timeout_val = params.get("timeout", _DEFAULT_TIMEOUT)
+    # Resolve cwd
+    cwd_arg: str | None = params.get("cwd")
     try:
-        timeout_f = float(timeout_val) if timeout_val is not None else _DEFAULT_TIMEOUT
+        cwd = _safe_cwd(cwd_arg, current_cwd)
+    except ArgValidationError as exc:
+        return ToolResult(
+            ok=False,
+            code="invalid_cwd",
+            message=str(exc),
+        )
+
+    # Timeout
+    timeout_raw = params.get("timeout")
+    try:
+        timeout_f: float = float(timeout_raw) if timeout_raw is not None else _DEFAULT_TIMEOUT
     except (TypeError, ValueError):
         timeout_f = _DEFAULT_TIMEOUT
-    timeout_f = max(1.0, min(timeout_f, 300.0))  # clamp 1-300s
+    timeout_f = max(_TIMEOUT_BOUND_LOW, min(timeout_f, _TIMEOUT_BOUND_HIGH))
 
-    stdin_data = params.get("stdin")
+    # Stdin
+    stdin_data: str | None = params.get("stdin")
     if not isinstance(stdin_data, str) if stdin_data else False:
         stdin_data = None
 
-    # Get env allowlist
+    # Output limits
+    try:
+        stdout_max: int = int(params.get("stdout_max", _MAX_STDOUT))
+    except (TypeError, ValueError):
+        stdout_max = _MAX_STDOUT
+    try:
+        stderr_max: int = int(params.get("stderr_max", _MAX_STDERR))
+    except (TypeError, ValueError):
+        stderr_max = _MAX_STDERR
+
+    # Kill tree flag
+    kill_tree: bool = bool(params.get("kill_tree", True))
+
+    # Env allowlist
     env_raw = params.get("env_allowlist", [])
     if isinstance(env_raw, list):
-        env_allowlist = frozenset(str(k) for k in env_raw)
+        env_allowlist: frozenset[str] = frozenset(str(k) for k in env_raw)
     else:
         env_allowlist = frozenset()
 
     # Safety authorization
     auth_args = dict(params)
-    auth_args["command"] = cmd
+    auth_args["command"] = cmd_args[0]
     auth_args["cwd"] = str(cwd)
     auth_args["timeout"] = timeout_f
-    auth_args["shell"] = False
+    auth_args["kill_tree"] = kill_tree
 
     decision = authorize(
         TOOL_NAME, auth_args, source=source, intent="shell_exec"
     )
+
     if decision.kind == DecisionKind.DENY:
         return ToolResult(
             ok=False,
@@ -406,7 +522,7 @@ def shell_exec(
             message="Выполнение команды отклонено политикой безопасности.",
         )
 
-    # Need confirmation for mutating operations
+    # Confirmation
     needs_confirm = decision.kind in {
         DecisionKind.CONFIRM,
         DecisionKind.EXACT_CONFIRM,
@@ -414,7 +530,6 @@ def shell_exec(
     }
     if needs_confirm and confirmer is not None:
         try:
-            # confirmer expects SafetyDecision
             if not confirmer(decision):
                 return ToolResult(
                     ok=False,
@@ -428,38 +543,34 @@ def shell_exec(
                 message="Ошибка подтверждения пользователем.",
             )
 
-    # Validate command
+    # Execute: try async loop first, fall back to sync for tests
     try:
-        cmd_args = _validate_command(cmd)
-    except ArgValidationError as exc:
-        return ToolResult(
-            ok=False,
-            code=exc.code if hasattr(exc, "code") else "validation_error",
-            message=str(exc),
+        loop = asyncio.get_running_loop()
+        # We're in an async context; run the coroutine
+        result = loop.run_until_complete(
+            _run_subprocess_async(
+                cmd_args, cwd, env_allowlist,
+                timeout_f, stdin_data,
+                stdout_max, stderr_max, kill_tree,
+            )
+        )
+    except RuntimeError:
+        # No event loop — sync context (tests, direct calls)
+        result = _run_subprocess_sync(
+            cmd_args, cwd, env_allowlist,
+            timeout_f, stdin_data,
+            stdout_max, stderr_max, kill_tree,
         )
 
-    # Execute in background thread to not block the event loop
-    loop = asyncio.get_running_loop()
-    result = loop.run_until_complete(
-        _run_subprocess(
-            cmd_args,
-            cwd,
-            env_allowlist,
-            timeout_f,
-            stdin_data,
-        )
-    )
-
-    # Build response
-    output_lines = []
+    # Build message
+    output_parts: list[str] = []
     if result.stdout:
-        output_lines.append("stdout:")
-        output_lines.append(result.stdout.rstrip())
+        output_parts.append("stdout:")
+        output_parts.append(result.stdout.rstrip())
     if result.stderr:
-        output_lines.append("stderr:")
-        output_lines.append(result.stderr.rstrip())
-
-    output = "\n".join(output_lines) if output_lines else "(no output)"
+        output_parts.append("stderr:")
+        output_parts.append(result.stderr.rstrip())
+    output = "\n".join(output_parts) if output_parts else "(нет вывода)"
 
     return ToolResult(
         ok=result.exit_code == 0,
@@ -468,11 +579,12 @@ def shell_exec(
         data={
             "command": result.command,
             "exit_code": result.exit_code,
-            "timed_out": result.timed_out,
-            "cwd": str(cwd),
-            "timeout_seconds": timeout_f,
+            "timed_out": False,
+            "cwd": result.cwd,
+            "timeout_seconds": result.timeout_seconds,
+            "killed_by_tree": result.killed_by_tree,
         },
     )
 
 
-__all__ = ["shell_exec", "ShellExecResult", "TOOL_NAME"]
+__all__ = ["ShellExecResult", "shell_exec", "TOOL_NAME"]

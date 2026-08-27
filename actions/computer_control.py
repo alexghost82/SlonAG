@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 #computer_control.py
-import iofrom i18n import t
+import io
+
+from i18n import t
 
 import json
 import re
