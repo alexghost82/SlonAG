@@ -1,4 +1,3 @@
-from i18n import t
 """MCP Streamable HTTP transport using the official MCP SDK.
 
 Wraps mcp.client.streamable_http.streamable_http_client to provide
@@ -7,6 +6,7 @@ a transport compatible with the existing McpClient interface.
 
 from __future__ import annotations
 
+from i18n import t
 import asyncio
 import json
 import logging

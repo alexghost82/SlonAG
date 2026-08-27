@@ -1,4 +1,3 @@
-from i18n import t
 """Structured NetworkPolicy error codes.
 
 Messages must never include API keys, tokens, passwords, URLs with
@@ -7,6 +6,7 @@ credentials, or other secret values.
 
 from __future__ import annotations
 
+from i18n import t
 CODE_OK = "ok"
 CODE_OFFLINE = "offline"
 CODE_TOOL_NOT_ALLOWED = "tool_not_allowed"

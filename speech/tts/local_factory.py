@@ -1,4 +1,3 @@
-from i18n import t
 """Build a Piper-backed ``LocalTTSProvider`` for the desktop UI.
 
 Resolves binary/model paths under ``models/piper/`` (see ``piper.py``).
@@ -7,6 +6,7 @@ Never downloads models or API keys. Missing assets degrade gracefully.
 
 from __future__ import annotations
 
+from i18n import t
 from dataclasses import dataclass
 from pathlib import Path
 

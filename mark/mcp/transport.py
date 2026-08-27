@@ -1,8 +1,8 @@
-from i18n import t
 """MCP stdio transport wrapper for SlonAG."""
 
 from __future__ import annotations
 
+from i18n import t
 import asyncio
 import json
 import os

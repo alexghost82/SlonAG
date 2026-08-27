@@ -1,4 +1,3 @@
-from i18n import t
 """Headless runtime bridge: assemble new-stack pieces with graceful degrade.
 
 Does not import UI, open sockets, or download models. Secrets are read only
@@ -8,6 +7,7 @@ through an injected ``key_provider`` callable — this package never opens
 
 from __future__ import annotations
 
+from i18n import t
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path

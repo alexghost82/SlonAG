@@ -1,4 +1,3 @@
-from i18n import t
 """MCP integration with SlonAG AgentLoop, ToolRegistry and SafetyPolicy.
 
 MCP tools flow through the canonical execution pipeline:
@@ -11,6 +10,7 @@ MCP tools never bypass SlonAG security boundaries.
 
 from __future__ import annotations
 
+from i18n import t
 import asyncio
 import threading
 import time

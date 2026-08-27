@@ -1,4 +1,3 @@
-from i18n import t
 """Structured local-runtime error codes and Russian messages.
 
 Messages live in this package so the manager does not edit i18n catalogs.
@@ -7,6 +6,7 @@ They must never include API keys, tokens, or other secrets.
 
 from __future__ import annotations
 
+from i18n import t
 CODE_OK = "ok"
 CODE_OOM = "oom"
 CODE_NOT_RUNNING = "not_running"

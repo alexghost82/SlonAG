@@ -1,8 +1,8 @@
-from i18n import t
 """Install Slon runtime dependencies for the current OS."""
 
 from __future__ import annotations
 
+from i18n import t
 import subprocess
 import sys
 from pathlib import Path

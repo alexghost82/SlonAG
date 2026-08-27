@@ -1,8 +1,8 @@
-from i18n import t
 """Gateway composition without creating a second RuntimeStack or SessionStore."""
 
 from __future__ import annotations
 
+from i18n import t
 import base64
 from pathlib import Path
 from typing import Callable

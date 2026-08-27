@@ -1,8 +1,8 @@
-from i18n import t
 """Bounded RFC 6455 frame codec for the Gateway socket adapter."""
 
 from __future__ import annotations
 
+from i18n import t
 import struct
 from dataclasses import dataclass
 

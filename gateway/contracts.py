@@ -1,8 +1,8 @@
-from i18n import t
 """Strict public wire contracts for the Slon Gateway."""
 
 from __future__ import annotations
 
+from i18n import t
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone

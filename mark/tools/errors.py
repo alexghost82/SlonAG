@@ -1,8 +1,8 @@
-from i18n import t
 """Structured errors raised by the canonical tool runtime."""
 
 from __future__ import annotations
 
+from i18n import t
 CODE_DUPLICATE_TOOL = "duplicate_tool"
 CODE_UNKNOWN_TOOL = "unknown_tool"
 

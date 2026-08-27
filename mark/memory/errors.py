@@ -1,4 +1,3 @@
-from i18n import t
 """Structured memory-store error codes.
 
 Messages must never include API keys, tokens, passwords, or card numbers.
@@ -6,6 +5,7 @@ Messages must never include API keys, tokens, passwords, or card numbers.
 
 from __future__ import annotations
 
+from i18n import t
 from providers.errors import redact_secrets
 
 CODE_OK = "ok"
