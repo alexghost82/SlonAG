@@ -31,6 +31,7 @@ from mark.filesystem.operations import (
 )
 from mark.safety import ArgValidationError, DecisionKind, authorize, validate_args
 from mark.safety.types import SafetyDecision
+from i18n import _
 
 try:
     import send2trash as send2trash_mod
@@ -127,7 +128,7 @@ def _run_action(checked: dict[str, object], hooks: _Hooks) -> str:
         case "read":
             max_chars = int(checked.get("max_chars", 2097152))
             result = read(path_raw, max_chars=max_chars, roots=roots)
-            return {"message": result.message, "data": result.data}
+            return str(result.data) if result.data else result.message
         case "write":
             append = bool(checked.get("append", False))
             result = write(path_raw, content, append=append, roots=roots)
@@ -138,6 +139,11 @@ def _run_action(checked: dict[str, object], hooks: _Hooks) -> str:
         case "delete":
             recursive = bool(checked.get("recursive", False))
             result = trash(path_raw, roots=roots)  # Legacy: delete → trash
+            if result.ok and hooks.trash is not None:
+                try:
+                    hooks.trash(Path(path_raw))
+                except Exception:
+                    pass
         case "move":
             result = filesystem_operation("move", path=path_raw, destination=dest, roots=roots)
         case "copy":
@@ -206,9 +212,9 @@ def file_controller(
 
     if decision.kind in _NEEDS_CONFIRM:
         if hooks.confirmer is None:
-            return "Confirmation is required."
+            return _("action.confirmation_required")
         if not hooks.confirmer(decision):
-            return "Confirmation declined."
+            return _("action.confirmation_declined")
 
     try:
         return _run_action(checked, hooks)

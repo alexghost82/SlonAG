@@ -570,5 +570,9 @@
     "test_fail": "✗ Failed",
     "field_language": "Language",
     "voice_stt_vosk": "Vosk"
+  },
+  "action": {
+    "confirmation_declined": "Confirmation declined.",
+    "confirmation_required": "Confirmation is required."
   }
 }

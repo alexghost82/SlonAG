@@ -570,5 +570,9 @@
     "test_fail": "✗ Не удалось",
     "field_language": "Язык",
     "voice_stt_vosk": "Vosk"
+  },
+  "action": {
+    "confirmation_declined": "Подтверждение отклонено.",
+    "confirmation_required": "Требуется подтверждение."
   }
 }
