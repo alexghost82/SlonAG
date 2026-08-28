@@ -374,13 +374,6 @@ class AgentLoop:
                 append_message(
                     AssistantMessage(
                         content=response_text,
-                        tool_calls=(),
-                    )
-                )
-                append_message(
-                    AssistantToolCallMessage(
-                        content=response_text,
-                        tool_calls=(),
                     )
                 )
                 if on_turn_complete is not None:
