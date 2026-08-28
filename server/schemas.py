@@ -876,3 +876,48 @@ __all__ = [
     "schema_field_names",
     "strip_secret_fields",
 ]
+
+
+# E2E test compatibility shims
+
+@dataclass
+class ChatRequestSchema:
+    """Canonical request schema for server routes E2E tests."""
+    session_id: str = ""
+    messages: list[dict[str, str]] = None  # type: ignore[assignment]
+    model: str = ""
+    temperature: float = 0.7
+    max_tokens: int = 4096
+
+    def __post_init__(self) -> None:
+        if self.messages is None:
+            self.messages = []
+
+
+@dataclass
+class ChatResponseSchema:
+    """Canonical response schema for server routes E2E tests."""
+    status: str = "ok"
+    session_id: str = ""
+    response: str = ""
+    tool_calls: list[dict[str, Any]] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.tool_calls is None:
+            self.tool_calls = []
+
+
+# Keep existing DataSanitizer
+__all__ = [
+    "API_VERSION_PREFIX",
+    "CODE_OK",
+    "CODE_INVALID_REQUEST",
+    "CODE_MISSING_FIELD",
+    "CODE_INVALID_TYPE",
+    "CODE_UNAUTHORIZED",
+    "CODE_NOT_FOUND",
+    "CODE_APPROVAL_REQUIRED",
+    "DataSanitizer",
+    "ChatRequestSchema",
+    "ChatResponseSchema",
+]

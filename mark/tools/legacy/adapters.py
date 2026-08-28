@@ -558,18 +558,29 @@ def legacy_handler_factory(
         _speak: Callable[..., object] | None = None,
         _player: object | None = None,
     ) -> ToolResult:
-        # Forward _speak and _player to the sync handler via partial.
+        # Filter _speak and _player only if the handler accepts them.
+        try:
+            sig = inspect.signature(handler)
+            accepts = set(sig.parameters.keys())
+        except Exception:  # pragma: no cover
+            accepts = set()
+        filtered_kwargs: dict[str, object] = {}
+        if "_speak" in accepts:
+            filtered_kwargs["_speak"] = _speak
+        if "_player" in accepts:
+            filtered_kwargs["_player"] = _player
+
         # Uses run_in_executor to keep the handler in a thread pool.
         try:
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
-                None, partial(handler, dict(args), _speak=_speak, _player=_player)
+                None, partial(handler, dict(args), **filtered_kwargs)
             )
         except RuntimeError:
             # No running event loop (e.g. called from a worker thread).
             # Run the coroutine synchronously with asyncio.run.
             async def _run() -> ToolResult:
-                return partial(handler, dict(args), _speak=_speak, _player=_player)()
+                return partial(handler, dict(args), **filtered_kwargs)()
             return asyncio.run(_run())
 
     _async_handler.__name__ = f"{handler.__name__}_async" if hasattr(handler, "__name__") else "legacy_async"  # type: ignore[attr-defined]

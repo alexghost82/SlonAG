@@ -58,7 +58,7 @@ class BoundedFrameQueue:
         return len(self._queue) == 0
 
 
-class BoundedDetectionQueue:class BoundedDetectionQueue:
+class BoundedDetectionQueue:
     """Bounded async queue for detection results."""
 
     def __init__(self, maxlen: int = 60) -> None:

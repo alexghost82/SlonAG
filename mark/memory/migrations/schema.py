@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _RECORDS_SQL = """
 CREATE TABLE IF NOT EXISTS memory_records (
     id           TEXT PRIMARY KEY,
+    content      TEXT NOT NULL DEFAULT '',
     type         TEXT NOT NULL,
     key          TEXT NOT NULL,
     value        TEXT NOT NULL,
@@ -51,6 +52,11 @@ _V2_ADD = [
     "ALTER TABLE memory_records ADD COLUMN session_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE memory_records ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0",
     "ALTER TABLE memory_records ADD COLUMN recency_weight REAL NOT NULL DEFAULT 1.0",
+]
+
+# ── v3 migration: add content column (used by memory repo insert) ──
+_V3_ADD = [
+    "ALTER TABLE memory_records ADD COLUMN content TEXT NOT NULL DEFAULT ''",
 ]
 
 
@@ -94,6 +100,16 @@ def apply_schema(connection: sqlite3.Connection) -> None:
     current_version = row["version"]
     if current_version < 2:
         _run_migrations(connection)
+    if current_version < 3:
+        for stmt in _V3_ADD:
+            try:
+                connection.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already added
+        connection.execute(
+            "UPDATE memory_schema SET version = ?", (SCHEMA_VERSION,)
+        )
+        connection.commit()
 
 
 def _run_migrations(connection: sqlite3.Connection) -> None:

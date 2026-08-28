@@ -208,6 +208,10 @@ class AgentLoop:
         on_turn_complete: Callable[[str, str], None] | None = None,
     ) -> AgentLoopResult:
         """Executes the multi-turn agent loop until a final answer or termination condition is reached."""
+        # Check for pre-set cancellation at loop start
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise asyncio.CancelledError("Agent cancelled before start")
+
         steps: list[AgentLoopStepResult] = []
         trace = LatencyTrace()
         messages: list[ConversationMessage] = list(history)
@@ -270,6 +274,14 @@ class AgentLoop:
                 return AgentLoopResult(False, steps=steps, reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded")
             except asyncio.CancelledError:
                 raise
+            except Exception as exc:
+                # Transient error — skip this turn and retry on next turn
+                # (e.g., temporary provider outage, rate limit, etc.)
+                trace.mark("provider_request_failed")
+                import logging
+                logging.getLogger(__name__).warning("Provider call failed, will retry: %s", exc)
+                self.budget.turn_count -= 1  # don't count the failed turn
+                continue
             trace.mark("provider_first_response")
 
             if not (hasattr(response, "text") and hasattr(response, "tool_calls") and hasattr(response, "provider_id") and hasattr(response, "model_id")):

@@ -127,6 +127,7 @@ def _run_action(checked: dict[str, object], hooks: _Hooks) -> str:
         case "read":
             max_chars = int(checked.get("max_chars", 2097152))
             result = read(path_raw, max_chars=max_chars, roots=roots)
+            return {"message": result.message, "data": result.data}
         case "write":
             append = bool(checked.get("append", False))
             result = write(path_raw, content, append=append, roots=roots)

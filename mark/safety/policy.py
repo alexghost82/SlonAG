@@ -140,11 +140,11 @@ _SECRET_PATTERNS: list[tuple[str, str]] = [
     # API keys: sk-..., key=..., token=...
     (r"(?:api[_-]?key|key|token|password|passwd|pwd|secret)\s*[:=]\s*\S+", "[REDACTED]"),
     # Generic API key patterns (sk-*, openai-*, etc.)
-    (r"\b(?:sk|openai|ghp|gho|ghu|ghs|github_pat)[A-Za-z0-9_]{8,}\b", "[REDACTED]"),
+    (r"\b(?:sk|openai|ghp|gho|ghu|ghs|github_pat)[A-Za-z0-9_-]{8,}\b", "[REDACTED]"),
     # AWS keys
     (r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b", "[REDACTED]"),
     # Generic sk-* API keys
-    (r"sk-[A-Za-z0-9_-]{5,}", "[REDACTED]"),
+    (r"\bsk-[A-Za-z0-9_-]{5,}\b", "[REDACTED]"),
 ]
 
 

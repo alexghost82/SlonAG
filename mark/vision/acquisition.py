@@ -277,7 +277,15 @@ class RTSPSource(FrameSourceBase):
         )
 
     def _stop_impl(self) -> None:
-        if self._process is not None:
+        if self._use_tcp_mock:
+            try:
+                if self._tcp_writer is not None:
+                    self._tcp_writer.close()
+                    self._tcp_writer = None
+            except Exception:
+                pass
+            self._tcp_reader = None
+        elif self._process is not None:
             try:
                 self._process.terminate()
                 self._process.wait(timeout=3)
@@ -287,6 +295,24 @@ class RTSPSource(FrameSourceBase):
             self._process = None
 
     async def acquire_frame(self) -> Frame | None:
+        if self._use_tcp_mock:
+            if self._tcp_writer is None or self._tcp_reader is None:
+                await self._tcp_connect()
+            if self._tcp_reader is None or self._tcp_writer is None:
+                return None
+            try:
+                size_data = await self._tcp_reader.readexactly(4)
+                size = int.from_bytes(size_data, "big")
+                raw = await self._tcp_reader.readexactly(size)
+                self._frame_index += 1
+                return Frame(
+                    index=self._frame_index,
+                    source=FrameSource.RTSP_STREAM,
+                    raw=raw,
+                    stream_url=self.stream_url,
+                )
+            except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
+                return None
         if self._process is None or self._process.stdout is None:
             return None
         try:
@@ -304,8 +330,28 @@ class RTSPSource(FrameSourceBase):
             return None
 
     def is_connected(self) -> bool:
+        if self._use_tcp_mock:
+            return (
+                self._tcp_writer is not None
+                and self._tcp_reader is not None
+                and not self._tcp_writer.is_closing()
+            )
         return (
             self._process is not None
             and self._process.poll() is None
             and self._process.stdout is not None
         )
+
+    async def _tcp_connect(self) -> None:
+        """Connect to the mock RTSP server via TCP."""
+        import socket
+        port = self._parse_rtsp_port()
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port), timeout=3.0
+            )
+            self._tcp_reader = reader
+            self._tcp_writer = writer
+        except Exception:
+            self._tcp_reader = None
+            self._tcp_writer = None

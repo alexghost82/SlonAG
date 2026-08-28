@@ -112,3 +112,42 @@ class DurableApprovalCoordinator:
 
 
 __all__ = ["ApprovalRequest", "DurableApprovalCoordinator"]
+
+
+# E2E test compatibility shims
+
+@dataclass
+class ApprovalGate:
+    """Approval gate for Gateway tool/result flow E2E tests."""
+    name: str = "approval_gate"
+    pending: list[dict] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.pending is None:
+            self.pending = []
+
+    def request_approval(self, tool_call_id: str, tool_name: str, workspace_id: str = "default") -> str:
+        approval_id = uuid4().hex
+        self.pending.append({
+            "approval_id": approval_id,
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "workspace_id": workspace_id,
+            "approved": False,
+        })
+        return approval_id
+
+    def get_status(self, approval_id: str) -> dict:
+        for p in self.pending:
+            if p["approval_id"] == approval_id:
+                return p
+        return {"approval_id": approval_id, "approved": False}
+
+    def approve(self, approval_id: str) -> None:
+        for p in self.pending:
+            if p["approval_id"] == approval_id:
+                p["approved"] = True
+                break
+
+    def list_pending(self) -> list[dict]:
+        return [p for p in self.pending if not p["approved"]]

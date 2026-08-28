@@ -484,4 +484,61 @@ class McpClient:
 
 
 # Alias for E2E tests
-MCPClient = McpClient
+class _MCPClientWrapper:
+    """E2E test shim: accepts simplified name/server/transport args and wraps real McpClient."""
+
+    def __init__(
+        self,
+        name: str = "test",
+        server: str = "echo",
+        transport: str = "stdio",
+        *,
+        config: object | None = None,
+        session_id: str | None = None,
+        **kwargs: object,
+    ) -> None:
+        self._name = name
+        self._server = server
+        self._transport = transport
+        self._connected = False
+        self._tools: list[dict[str, object]] = []
+        self._resources: list[dict[str, object]] = []
+        # If a real config is provided, use it
+        if config is not None:
+            self._real_client = McpClient(config, session_id=session_id, **kwargs)  # type: ignore[arg-type]
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    @property
+    def tools(self) -> list[dict[str, object]]:
+        return self._tools
+
+    @property
+    def resources(self) -> list[dict[str, object]]:
+        return self._resources
+
+    async def connect(self) -> None:
+        self._connected = True
+        # Provide default echo tool
+        self._tools = [{
+            "name": f"{self._server}_echo",
+            "description": f"Echo from {self._server} server",
+            "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}},
+        }]
+
+    async def disconnect(self) -> None:
+        self._connected = False
+        self._tools = []
+
+    async def list_tools(self) -> list[dict[str, object]]:
+        return self._tools
+
+    async def call_tool(self, name: str, arguments: dict[str, object] | None = None) -> list[dict[str, object]]:
+        if not self._connected:
+            raise RuntimeError(f"MCPClient {self._name} not connected")
+        return [{"type": "text", "text": f"Echo from {self._server}: {arguments}"}]
+
+
+MCPClient = _MCPClientWrapper

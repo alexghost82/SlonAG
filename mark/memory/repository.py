@@ -505,48 +505,55 @@ class MemoryRepository:
     def __init__(self, db_path: str | Path) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn: sqlite3.Connection | None = None
 
-    def _connect(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._conn = sqlite3.connect(str(self._db_path))
-            self._conn.execute("""
-                CREATE TABLE IF NOT EXISTS memory_records (
-                    id TEXT PRIMARY KEY,
-                    content TEXT,
-                    metadata TEXT,
-                    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00'))
-                )
-            """)
-            self._conn.commit()
-        return self._conn
+    def _init_db(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS memory_records (
+                id TEXT PRIMARY KEY,
+                content TEXT,
+                metadata TEXT,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00'))
+            )
+        """)
+        conn.commit()
 
     async def insert(self, *, content: str, metadata: dict[str, str] | None = None) -> str:
         loop = asyncio.get_running_loop()
         doc_id = uuid.uuid4().hex
         meta_json = json.dumps(metadata) if metadata else "{}"
-        conn = self._connect()
-        await loop.run_in_executor(None, conn.execute,
-            "INSERT INTO memory_records (id, content, metadata) VALUES (?, ?, ?)",
-            (doc_id, content, meta_json))
-        conn.commit()
+
+        def _insert():
+            conn = sqlite3.connect(str(self._db_path))
+            try:
+                self._init_db(conn)
+                conn.execute(
+                    "INSERT INTO memory_records (id, content, metadata) VALUES (?, ?, ?)",
+                    (doc_id, content, meta_json))
+                conn.commit()
+            finally:
+                conn.close()
+
+        await loop.run_in_executor(None, _insert)
         return doc_id
 
     async def get(self, doc_id: str) -> dict[str, str] | None:
-        loop = asyncio.get_running_loop()
+        db_path = str(self._db_path)
 
-        async def _get() -> dict[str, str] | None:
-            conn = self._connect()
-            row = conn.execute("SELECT content, metadata FROM memory_records WHERE id = ?", (doc_id,)).fetchone()
-            if row is None:
-                return None
-            return {"content": row[0], "metadata": json.loads(row[1])}
+        def _get() -> dict[str, str] | None:
+            conn = sqlite3.connect(db_path)
+            try:
+                self._init_db(conn)
+                row = conn.execute(
+                    "SELECT content, metadata FROM memory_records WHERE id = ?", (doc_id,)).fetchone()
+                if row is None:
+                    return None
+                return {"content": row[0], "metadata": json.loads(row[1])}
+            finally:
+                conn.close()
 
-        return await loop.run_in_executor(None, _get)
+        return await asyncio.get_running_loop().run_in_executor(None, _get)
 
     async def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        pass
 
 

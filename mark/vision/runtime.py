@@ -318,10 +318,10 @@ class VisionRuntime:
     # ── query API ────────────────────────────────────────────────
 
     async def get_recent_detections(self, n: int = 20) -> list[DetectionResult]:
-        return await self._detection_queue.drain()[:n]
+        return (await self._detection_queue.drain())[:n]
 
     async def get_recent_events(self, n: int = 20) -> list[FrameEvent]:
-        return await self._event_queue.drain()[:n]
+        return (await self._event_queue.drain())[:n]
 
     def get_active_tracks(self) -> dict[str, TrackingState]:
         return self._tracker.get_tracks()

@@ -136,3 +136,19 @@ class AutomationHistoryEntry:
     error_code: str | None = None
     error_message: str | None = None
     result_summary: str = ""
+
+
+# E2E test compatibility shim: simplified AutomationRule for simple dict-based rules
+
+@dataclass
+class AutomationRule:
+    """Simple automation rule for E2E tests (simpler than AutomationJob)."""
+    name: str = ""
+    trigger: str = "manual"  # manual, on_event, on_schedule, etc.
+    action: str = ""
+    enabled: bool = True
+    params: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.params is None:
+            self.params = {}

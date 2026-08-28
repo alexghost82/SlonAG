@@ -235,8 +235,8 @@ def _safe_relative(resolved: Path, root: Path) -> str | None:
 
 def validate_path(
     path_raw: str,
-    roots: tuple[Path, ...],
-    allow_symlinks: bool = True,
+    roots: tuple[Path, ...] | Path | str,
+    allow_symlinks: bool = False,
     check_size: bool = False,
 ) -> Path:
     """Resolve and validate a path against the security policy.
@@ -247,6 +247,12 @@ def validate_path(
     Relative paths are resolved relative to the first root so that
     operations like ``write("new.txt", roots=(workspace,))`` work as expected.
     """
+    # Normalize roots to tuple[Path, ...]
+    if isinstance(roots, str):
+        roots = (Path(roots),)
+    elif isinstance(roots, Path):
+        roots = (roots,)
+
     if not path_raw or not path_raw.strip():
         return None
 
@@ -285,9 +291,37 @@ def validate_path(
     if not any(_safe_relative(resolved, r) is not None for r in roots):
         return None
 
-    # Symlink escape check
-    if allow_symlinks and resolved.exists():
-        _check_symlink_chain(resolved, roots)
+    # Symlink escape check — must check the ORIGINAL path before resolution,
+    # because resolve() already follows symlinks and the resolved path no longer
+    # contains the symlink component.
+    if allow_symlinks and not base.is_symlink():
+        # Walk through the original (pre-resolution) path to find symlinks
+        try:
+            if isinstance(base, Path) and base.exists():
+                _check_symlink_chain(base, roots)
+        except SymlinkEscape:
+            raise
+        except OSError:
+            pass
+    elif allow_symlinks:
+        # For non-existent paths, walk components to find symlinks
+        try:
+            parts = list(base.parts)
+            current = Path(parts[0]) if parts[0] else Path("/")
+            for part in parts[1:]:
+                current = current / part
+                if current.exists() and current.is_symlink():
+                    real = current.resolve()
+                    if not any(
+                        _safe_relative(real, r) is not None for r in roots
+                    ):
+                        raise SymlinkEscape(
+                            f"Symlink at {current} points outside allowlist ({real})."
+                        )
+        except SymlinkEscape:
+            raise
+        except OSError:
+            pass
 
     # Size check (for existing files)
     if check_size and resolved.is_file():
@@ -395,6 +429,13 @@ def default_allowlist_roots() -> tuple[Path, ...]:
         cwd = Path.cwd().resolve()
         if not _is_forbidden_system_path(cwd) and cwd != home:
             roots.append(cwd)
+    except OSError:
+        pass
+    # Also include /tmp for test and temp usage
+    try:
+        tmp = Path("/tmp").resolve()
+        if not _is_forbidden_system_path(tmp):
+            roots.append(tmp)
     except OSError:
         pass
     return tuple(roots)

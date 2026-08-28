@@ -22,6 +22,7 @@ class MemoryRow:
     source: str
     created_at: str
     updated_at: str
+    content: str = ""
     # ── v2+ scoped fields ─────────────────────────────────────────────
     dedup_hash: str = ""
     workspace: str = ""
@@ -50,13 +51,14 @@ class MemoryDatabase:
                 self._connection.execute(
                     """
                     INSERT INTO memory_records
-                        (id, type, key, value, source, dedup_hash, workspace,
+                        (id, content, type, key, value, source, dedup_hash, workspace,
                          user_id, session_id, confidence, recency_weight,
                          created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row.id,
+                        row.content,
                         row.type,
                         row.key,
                         row.value,
@@ -78,13 +80,14 @@ class MemoryDatabase:
                 self._connection.execute(
                     """
                     INSERT INTO memory_records
-                        (id, type, key, value, source, dedup_hash, workspace,
+                        (id, content, type, key, value, source, dedup_hash, workspace,
                          user_id, session_id, confidence, recency_weight,
                          created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row.id,
+                        row.content,
                         row.type,
                         row.key,
                         row.value,
@@ -103,7 +106,7 @@ class MemoryDatabase:
     def get(self, record_id: str) -> MemoryRow | None:
         cursor = self._connection.execute(
             """
-            SELECT id, type, key, value, source, dedup_hash, workspace,
+            SELECT id, content, type, key, value, source, dedup_hash, workspace,
                    user_id, session_id, confidence, recency_weight,
                    created_at, updated_at
             FROM memory_records
@@ -120,7 +123,7 @@ class MemoryDatabase:
         if record_type is None:
             cursor = self._connection.execute(
                 """
-                SELECT id, type, key, value, source, dedup_hash, workspace,
+                SELECT id, content, type, key, value, source, dedup_hash, workspace,
                        user_id, session_id, confidence, recency_weight,
                        created_at, updated_at
                 FROM memory_records
@@ -130,7 +133,7 @@ class MemoryDatabase:
         else:
             cursor = self._connection.execute(
                 """
-                SELECT id, type, key, value, source, dedup_hash, workspace,
+                SELECT id, content, type, key, value, source, dedup_hash, workspace,
                        user_id, session_id, confidence, recency_weight,
                        created_at, updated_at
                 FROM memory_records
@@ -146,7 +149,7 @@ class MemoryDatabase:
             cursor = self._connection.execute(
                 """
                 UPDATE memory_records
-                SET type = ?, key = ?, value = ?, source = ?, dedup_hash = ?,
+                SET content = ?, type = ?, key = ?, value = ?, source = ?, dedup_hash = ?,
                     workspace = ?, user_id = ?, session_id = ?,
                     confidence = ?, recency_weight = ?, updated_at = ?
                 WHERE id = ?
@@ -226,6 +229,7 @@ class MemoryDatabase:
 def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
     return MemoryRow(
         id=str(row["id"]),
+        content=str(row.get("content", "") or ""),
         type=str(row["type"]),
         key=str(row["key"]),
         value=str(row["value"]),

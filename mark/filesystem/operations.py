@@ -99,6 +99,15 @@ def _log_message(action: str, *paths: Path, roots: tuple[Path, ...]) -> str:
 # ---------------------------------------------------------------------------
 
 
+
+def _validate(path_raw: str, roots, **kwargs) -> Path:
+    """Validate path and convert None return to FileSystemResult.err."""
+    result = validate_path(path_raw, roots, **kwargs)
+    if result is None:
+        raise PathDenied(f"Path denied or denied by allowlist: {path_raw}")
+    return result
+
+
 def read(
     path_raw: str,
     roots: tuple[Path, ...] | None = None,
@@ -109,7 +118,7 @@ def read(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots, check_size=True)
+        target = _validate(path_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except SizeExceeded as exc:
@@ -163,7 +172,7 @@ def write(
 
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots)
+        target = _validate(path_raw, roots)
         # Ensure parent exists
         target.parent.mkdir(parents=True, exist_ok=True)
     except (PathDenied, TraversalDetected) as exc:
@@ -206,7 +215,7 @@ def create_file(
 
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots)
+        target = _validate(path_raw, roots)
         target.parent.mkdir(parents=True, exist_ok=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
@@ -241,7 +250,7 @@ def create_directory(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots)
+        target = _validate(path_raw, roots)
         target.mkdir(parents=True, exist_ok=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
@@ -268,7 +277,7 @@ def list_directory(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots)
+        target = _validate(path_raw, roots)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except Cancelled:
@@ -318,7 +327,7 @@ def search(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        search_path = validate_path(path_raw, roots, check_size=True)
+        search_path = _validate(path_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except SizeExceeded as exc:
@@ -379,7 +388,7 @@ def metadata(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots, check_size=True)
+        target = _validate(path_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except SizeExceeded as exc:
@@ -424,7 +433,7 @@ def disk_usage(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots)
+        target = _validate(path_raw, roots)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except Cancelled:
@@ -459,7 +468,7 @@ def copy(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        src = validate_path(source_raw, roots, check_size=True)
+        src = _validate(source_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("source_path_denied", exc.message)
     except SizeExceeded as exc:
@@ -468,7 +477,7 @@ def copy(
         return FileSystemResult.err("cancelled", "Operation cancelled.")
 
     try:
-        dest = validate_path(dest_raw, roots)
+        dest = _validate(dest_raw, roots)
         if dest.exists() and dest.is_dir():
             dest = (dest / src.name).resolve()
     except (PathDenied, TraversalDetected) as exc:
@@ -509,7 +518,7 @@ def move(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        src = validate_path(source_raw, roots, check_size=True)
+        src = _validate(source_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("source_path_denied", exc.message)
     except SizeExceeded as exc:
@@ -518,7 +527,7 @@ def move(
         return FileSystemResult.err("cancelled", "Operation cancelled.")
 
     try:
-        dest = validate_path(dest_raw, roots)
+        dest = _validate(dest_raw, roots)
         if dest.exists() and dest.is_dir():
             dest = (dest / src.name).resolve()
     except (PathDenied, TraversalDetected) as exc:
@@ -552,7 +561,7 @@ def rename(
 
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots, check_size=True)
+        target = _validate(path_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except SizeExceeded as exc:
@@ -595,7 +604,7 @@ def trash(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots, check_size=True)
+        target = _validate(path_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except SizeExceeded as exc:
@@ -636,7 +645,7 @@ def delete(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        target = validate_path(path_raw, roots, check_size=True)
+        target = _validate(path_raw, roots, check_size=True)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except SizeExceeded as exc:
@@ -677,7 +686,7 @@ def organize_desktop(
     _check_cancel(cancel_event)
     try:
         roots = roots or default_allowlist_roots()
-        desktop = validate_path("desktop", roots)
+        desktop = _validate("desktop", roots)
     except (PathDenied, TraversalDetected) as exc:
         return FileSystemResult.err("path_denied", exc.message)
     except Cancelled:
