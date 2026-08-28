@@ -31,6 +31,7 @@ Windows → ``CREATE_NEW_PROCESS_GROUP`` + ``proc.kill`` (SIGTERM → SIGKILL)
 from __future__ import annotations
 
 import asyncio
+import re
 import os
 import shlex
 import signal
@@ -173,7 +174,9 @@ def _is_blocked(cmd: str) -> bool:
     """Return ``True`` when the command is explicitly forbidden.
 
     Handles leading whitespace, null bytes, newline injections, and
-    backtick / $() prefix obfuscation.
+    backtick / $() prefix obfuscation.  Also catches command separators
+    (;  |  &&  ||  >  >>  <) and subshell/backtick patterns that are
+    common shell-injection vectors.
     """
     if not isinstance(cmd, str):
         return False
@@ -181,20 +184,136 @@ def _is_blocked(cmd: str) -> bool:
     stripped = cmd.strip()
     # Remove null bytes (C-string injection)
     stripped = stripped.replace("\x00", "")
-    # Remove backtick and $() prefix tricks
-    while stripped and stripped[0] in ("$", "`", "\x0a", "\x0d"):
-        stripped = stripped.lstrip("$`\x0a\x0d\x00")
+
+    # Normalize whitespace to catch obfuscation (e.g. "rm  -rf  /")
+    stripped = re.sub(r'[\s]+', ' ', stripped).strip()
+
+    # Block unquoted subshell and backtick patterns BEFORE stripping
+    if stripped and (stripped[0] == "$" or stripped[0] == "`"):
+        return True
+
+    # Strip leading $ or ` (obfuscation) and check what remains
+    clean = stripped.lstrip("$`\x0a\x0d\x00")
+
+    # Block command separators that enable injection (;  |  >  >>  <)
+    sep = clean.lstrip()
+    if sep and sep[0] in (";", "|", ">", "<"):
+        return True
+
+    # Block && / || prefix tricks
+    for sep_prefix in ("&& ", "&&\t", "|| ", "||\t"):
+        if clean.startswith(sep_prefix):
+            return True
+
     # Check each blocked prefix
     for prefix in _BLOCKED_PREFIXES:
-        if stripped.startswith(prefix):
+        if clean.startswith(prefix):
             return True
         # Also match if the command token itself is a blocked word
-        # even when followed by spaces (e.g. "reboot" at end of string)
-        first_token = stripped.split()[0] if stripped.split() else stripped
+        first_token = clean.split()[0] if clean.split() else clean
         if first_token in {"reboot", "poweroff", "halt"}:
             return True
+
+    # Block middle command separators when followed by sensitive commands
+    # Safe: "echo | grep", "echo && ls" (normal commands on both sides)
+    # Unsafe: "cmd; sudo", "cmd | cat /etc/shadow", "cmd && rm -rf"
+    sensitive_words = frozenset((
+        "sudo", "su", "id", "chmod", "chown", "rm", "dd", "mkfs",
+        "mount", "umount", "shutdown", "reboot", "poweroff", "halt",
+        "iptables", "nmap", "nc", "ncat", "socat", "wget", "curl",
+        "arp", "kill", "killall", "pkill", "ping", "ifconfig",
+        "fdisk", "blkid", "fsck", "reboot", "init",
+    ))
+    # Check after each separator; what follows is a separate command
+    for part in re.split(r"[;|]|\s+&&\s+|\s+\|\|\s+", clean):
+        part = part.strip()
+        if not part:
+            continue
+        first_word = part.split()[0]
+        if first_word in sensitive_words:
+            return True
+
     return False
 
+
+
+def _block_injection(cmd: str, action_type: str) -> bool:
+    """Public API for security tests: detect injection in a command string."""
+    if _is_blocked(cmd):
+        return True
+
+    normalised = cmd.strip()
+
+    # Command separators: ;  |  >  >>  <
+    for sep_char in [";", "|", ">", "<"]:
+        parts = normalised.split(sep_char, 1)
+        if len(parts) > 1:
+            after = parts[1].strip()
+            if after and after[0] not in ("'", '"', "`", " "):
+                return True
+
+    # && / || chaining
+    for chain in ["&&", "||"]:
+        idx = normalised.find(chain)
+        if idx != -1:
+            after = normalised[idx + len(chain):].strip()
+            if after and after[0] not in ("'", '"', "`", " "):
+                return True
+
+    # Backtick substitution anywhere
+    if "`" in normalised:
+        return True
+
+    # $(...) subshell anywhere (unquoted)
+    i = 0
+    while i < len(normalised):
+        if normalised[i] == "$" and i + 1 < len(normalised) and normalised[i + 1] == "(":
+            quote_ctx = None
+            j = 0
+            while j < i:
+                if normalised[j] in ("'", '"', "`"):
+                    quote_ctx = normalised[j]
+                elif normalised[j] == "\\" and j + 1 < i:
+                    j += 1
+                j += 1
+            if quote_ctx is None:
+                return True
+        i += 1
+
+    # Markdown/link injection: [link](url?cmd=...) pattern
+    # Detect dangerous URL params that look like shell commands
+    import re
+    if re.search(r"\?cmd=", normalised):
+        # Check if there's a command-like value after cmd=
+        m = re.search(r"cmd=([^-\s][\w+\-]+)", normalised)
+        if m and m.group(1):
+            param_val = m.group(1)
+            for dangerous in ["rm", "curl", "wget", "bash", "sh", "cat", "sudo"]:
+                if dangerous in param_val:
+                    return True
+
+    # Unicode normalization: NFKC converts fullwidth/homoglyph chars
+    import unicodedata
+    nfkc = unicodedata.normalize("NFKC", normalised)
+    if nfkc != normalised:
+        # Unicode substitution occurred; re-check in normalized form
+        if _is_blocked(nfkc):
+            return True
+
+    # Check Cyrillic/other lookalikes that NFKC does not normalize
+    _HOMOGLYPH_MAP = {
+        "а": "a", "в": "b", "е": "e", "к": "k",
+        "м": "m", "н": "n", "о": "o", "р": "p",
+        "с": "c", "т": "t", "у": "y", "х": "x",
+        "і": "i", "ј": "j", "қ": "g",
+    }
+    has_homo = any(c in _HOMOGLYPH_MAP for c in nfkc)
+    if has_homo:
+        latin = "".join(_HOMOGLYPH_MAP.get(c, c) for c in nfkc)
+        if _is_blocked(latin):
+            return True
+
+    return False
 
 def _safe_cwd(cwd_arg: str | None, current_cwd: str) -> Path:
     """Resolve ``cwd`` with safety constraints.
