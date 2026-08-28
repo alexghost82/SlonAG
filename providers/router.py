@@ -199,7 +199,7 @@ class Router:
     def _validate_response(
         response: ChatResponse, request: ChatRequest
     ) -> ChatResponse:
-        if not isinstance(response, ChatResponse):
+        if not (hasattr(response, "text") and hasattr(response, "tool_calls") and hasattr(response, "provider_id") and hasattr(response, "model_id")):
             raise ProviderError("provider returned an invalid chat response")
         if (
             response.provider_id != request.model.provider_id
