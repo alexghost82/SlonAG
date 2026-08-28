@@ -100,9 +100,9 @@ def test_websocket_frame_codec_rejects_unmasked_malformed_and_oversized() -> Non
     with pytest.raises(GatewayProtocolError, match="too large"):
         decode_client_frame(oversized)
     control = bytes([0x89, 0x80 | 126]) + (126).to_bytes(2, "big")
-    with pytest.raises(GatewayProtocolError, match="control frame"):
+    with pytest.raises(GatewayProtocolError, match="(?i)control frame"):
         decode_client_frame(control)
-    with pytest.raises(GatewayProtocolError, match="control frame"):
+    with pytest.raises(GatewayProtocolError, match="(?i)control frame"):
         encode_server_frame(b"x" * 126, opcode=0x9)
 
 

@@ -389,10 +389,27 @@ class LocalVisionProvider:
 
     def _resolve_kind(self, prompt: str, explicit_kind: str) -> str:
         """Determine kind: explicit kind must be in VISION_KINDS,
-        otherwise try to infer from prompt."""
+        otherwise try to infer from prompt.
+        "general" is treated as a placeholder — prompt inference is tried first.
+        Unknown explicit kinds raise ProviderError.
+        """
         kind = explicit_kind.strip()
-        if kind and kind in VISION_KINDS:
+        # "general" is a placeholder — infer from prompt first
+        if kind == "general":
+            lower = prompt.lower()
+            for k in VISION_KINDS:
+                if k in lower:
+                    return k
+            # No match in prompt -> treat as DEFAULT_KIND
+            return DEFAULT_KIND
+        elif kind and kind in VISION_KINDS:
             return kind
+        # Unknown explicit kind -> reject
+        if kind:
+            raise ProviderError(
+                provider_id=PROVIDER_ID,
+                message=f"Неподдерживаемый тип vision: {kind!r}",
+            )
         # Infer from prompt: "ocr", "object_detection", etc.
         lower = prompt.lower()
         for k in VISION_KINDS:
@@ -400,6 +417,12 @@ class LocalVisionProvider:
                 return k
         return DEFAULT_KIND
 
+
+
+def register_factory() -> None:
+    """Register ``LocalVisionProvider`` factory with the providers registry."""
+    from providers.registry import register
+    register(PROVIDER_ID, LocalVisionProvider)
 
 __all__ = [
     "DEFAULT_KIND",
@@ -414,4 +437,5 @@ __all__ = [
     "create_runtime",
     "detect_capabilities",
     "wrap_untrusted_image_text",
+    "register_factory",
 ]

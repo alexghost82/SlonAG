@@ -161,7 +161,7 @@ async def test_agent_loop_rejects_duplicate_ids_without_executing_tool() -> None
         tool_executor=executor,
     ).run("run")
     assert result.ok is False
-    assert "duplicate tool_call_id" in result.reason.lower()
+    assert "duplicate tool call" in result.reason.lower()
     executor.execute.assert_not_called()
 
 

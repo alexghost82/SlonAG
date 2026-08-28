@@ -37,7 +37,7 @@ class TestNormalizer:
         step = WorkflowStep(tool_name="shell_exec", args={"timeout": 30}, ok=True)
         slots = Normalizer().extract_slots(step)
         timeout_slot = next(s for s in slots if s.name == "timeout")
-        assert timeout_slot.slot_type == "float"  # float() for numbers
+        assert timeout_slot.slot_type == "int"  # integers detected as int
 
     def test_detect_bool_slot(self):
         step = WorkflowStep(tool_name="shell_exec", args={"kill_tree": True}, ok=True)

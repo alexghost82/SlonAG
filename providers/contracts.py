@@ -212,6 +212,7 @@ class VisionRequest:
     model: ModelInfo
     image: bytes
     prompt: str = ""
+    kind: str = "general"
 
 
 @dataclass(frozen=True)

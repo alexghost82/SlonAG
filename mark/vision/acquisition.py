@@ -110,19 +110,23 @@ class ImageSource(FrameSourceBase):
     """Acquire frames from a local image file (single frame)."""
 
     def _start_impl(self) -> None:
-        pass
+        self._done = False
 
     def _stop_impl(self) -> None:
-        pass
+        self._done = False
 
     async def acquire_frame(self) -> Frame | None:
+        if self._done:
+            return None
         path = self.config.extra.get("file_path", "")
         if not path or not os.path.isfile(path):
+            self._done = True
             return None
         try:
             with open(path, "rb") as f:
                 raw = f.read()
             w, h = self.config.extra.get("width", 0), self.config.extra.get("height", 0)
+            self._done = True
             return Frame(
                 index=0,
                 source=FrameSource.IMAGE_FILE,
@@ -132,6 +136,7 @@ class ImageSource(FrameSourceBase):
                 file_path=path,
             )
         except OSError:
+            self._done = True
             return None
 
     def is_connected(self) -> bool:

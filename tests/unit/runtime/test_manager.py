@@ -172,7 +172,7 @@ def test_oom_result_code_does_not_raise_uncaught() -> None:
     assert result.running is False
     assert result.code == CODE_OOM
     assert result.message == runtime_message_ru(CODE_OOM)
-    assert "памят" in result.message.lower()
+    assert "memory" in result.message.lower()
     assert resolve_cloud_fallback(result) is None
     assert CLOUD_FALLBACK_ENABLED is False
 

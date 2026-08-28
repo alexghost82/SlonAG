@@ -664,8 +664,8 @@ class TestWorkflowLearning:
 
     @pytest.mark.asyncio
     async def test_workflow_observer(self):
-        from workflow_learning.observer import WorkflowObserver
-        from workflow_learning.store import WorkflowStore
+        from mark.workflow_learning.observer import WorkflowObserver
+        from mark.workflow_learning.store import WorkflowStore
 
         store = WorkflowStore()
         observer = WorkflowObserver(store)
@@ -683,7 +683,7 @@ class TestControlledImprovement:
 
     @pytest.mark.asyncio
     async def test_confidence_tracking(self):
-        from workflow_learning.confidence import ConfidenceTracker
+        from mark.workflow_learning.confidence import ConfidenceTracker
 
         tracker = ConfidenceTracker()
         tracker.record("shell_exec", 0.9)

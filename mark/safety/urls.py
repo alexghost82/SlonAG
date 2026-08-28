@@ -140,3 +140,6 @@ def is_safe_url(url: str) -> bool:
         return False
 
 
+
+# Alias for external consumers
+is_url_safe = is_safe_url

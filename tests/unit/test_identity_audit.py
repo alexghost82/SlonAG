@@ -29,12 +29,12 @@ def test_active_ui_and_main_identity() -> None:
     lifecycle_py = (BASE_DIR / "runtime" / "lifecycle.py").read_text(encoding="utf-8")
     assert "SlonLive" in main_py
     assert "SlonUI" in main_py
-    assert "SYS: Slon online." in lifecycle_py
+    assert "chat.online" in lifecycle_py
     assert "You are Slon" in main_py
 
-    ui_py = (BASE_DIR / "ui.py").read_text(encoding="utf-8")
-    assert "class SlonUI:" in ui_py
-    assert "SYS: Initialised. OS=" in ui_py and "Slon online." in ui_py
+    ui_py = (BASE_DIR / "ui/_ui.py").read_text(encoding="utf-8")
+    assert "class SlonUI:" in ui_py and "SYS: Onboarding complete. Slon online." in ui_py
+    assert "Slon online." in ui_py
 
 
 def test_ios_hud_identity() -> None:

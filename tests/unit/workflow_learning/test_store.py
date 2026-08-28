@@ -90,9 +90,9 @@ class TestWorkflowStore:
 
     def test_list_templates(self, tmp_path):
         store = WorkflowStore(store_path=tmp_path / "wf.json")
-        t1 = WorkflowTemplate(id="t1", version=1, name="active", state=WorkflowState.ACTIVE,
+        t1 = WorkflowTemplate(id="t1", version=1, name="active", description="active", state=WorkflowState.ACTIVE,
                               parameter_slots=[], step_descriptors=[])
-        t2 = WorkflowTemplate(id="t2", version=1, name="draft", state=WorkflowState.DRAFT,
+        t2 = WorkflowTemplate(id="t2", version=1, name="draft", description="draft", state=WorkflowState.DRAFT,
                               parameter_slots=[], step_descriptors=[])
         store.save_template(t1)
         store.save_template(t2)
@@ -103,7 +103,7 @@ class TestWorkflowStore:
 
     def test_delete_template(self, tmp_path):
         store = WorkflowStore(store_path=tmp_path / "wf.json")
-        t = WorkflowTemplate(id="del-tmpl", version=1, name="to delete",
+        t = WorkflowTemplate(id="del-tmpl", version=1, name="to delete", description="to delete",
                              state=WorkflowState.DRAFT, parameter_slots=[], step_descriptors=[])
         store.save_template(t)
         assert store.delete_template("del-tmpl") is True

@@ -87,6 +87,7 @@ from mark.vision.provider import (
     LocalVisionProvider,
     VisionTaskRequest,
     wrap_untrusted_image_text,
+    register_factory,
 )
 
 __all__ = [
@@ -141,4 +142,8 @@ __all__ = [
     "LocalVisionProvider",
     "VisionTaskRequest",
     "wrap_untrusted_image_text",
+    "register_factory",
 ]
+
+# Auto-register so ``providers.registry.get("vision_local")`` works.
+register_factory()

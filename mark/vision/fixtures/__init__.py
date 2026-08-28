@@ -14,10 +14,14 @@ from mark.vision.fixtures.image import (
 from mark.vision.fixtures.video import (
     create_test_video,
 )
-from mark.vision.fixtures.rtsp import (
-    create_rtsp_fixture,
-    RTSPFixture,
-)
+try:
+    from mark.vision.fixtures.rtsp import (
+        create_rtsp_fixture,
+        RTSPFixture,
+    )
+except ImportError:
+    # cv2/rtsp unavailable without OpenCV installed
+    pass
 
 __all__ = [
     "create_test_image",

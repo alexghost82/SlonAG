@@ -133,7 +133,7 @@ class VisionRuntime:
             self._ocr = _build_ocr()
 
     def _build_source(self, source_type: str) -> FrameSourceBase:
-        src_cfg = {}  # Will be set in create_runtime
+        src_cfg = dict(self.config.source_config)
         cfg = AcquisitionConfig(
             source=FrameSource(source_type),
             extra=src_cfg,

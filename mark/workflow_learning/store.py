@@ -50,6 +50,8 @@ class WorkflowStore:
         }
         if self._path and self._path.exists():
             self._load()
+        else:
+            self._flush()
 
     @property
     def path(self) -> Path | None:
