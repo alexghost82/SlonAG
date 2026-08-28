@@ -68,10 +68,11 @@ class Observation:
         """Factory method mapping canonical ToolResult to an Observation."""
         if kind is not None:
             obs_kind = ObservationKind(kind)
-        elif result.ok:
+        elif getattr(result, "ok", True):
+            # ad-hoc result objects without .ok are treated as success
             obs_kind = ObservationKind.SUCCESS
         else:
-            code = (result.code or "").lower()
+            code = (getattr(result, "code", "") or "").lower()
             if "timeout" in code or "timed_out" in code:
                 obs_kind = ObservationKind.TIMEOUT
             elif any(
@@ -85,20 +86,23 @@ class Observation:
                 obs_kind = ObservationKind.TOOL_ERROR
 
         content: str | dict | None = None
+        result_ok = getattr(result, "ok", True)
         if result.data is not None:
             if isinstance(result.data, (str, dict)):
                 content = result.data
             else:
                 content = str(result.data)
-        elif result.ok and result.message:
+        elif result_ok and getattr(result, "message", None):
             content = result.message
+        elif getattr(result, "content", None):
+            content = result.content
 
         error: str | None = None
-        if not result.ok:
-            error = result.message if result.message else (result.code or "tool_error")
+        if not result_ok:
+            error = getattr(result, "message", None) or (getattr(result, "code", "") or "tool_error")
 
         artifacts_list: list[dict] = []
-        for art in result.artifacts:
+        for art in getattr(result, "artifacts", ()) or []:
             if isinstance(art, dict):
                 artifacts_list.append(art)
             elif hasattr(art, "__dataclass_fields__"):
