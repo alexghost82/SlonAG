@@ -124,7 +124,7 @@ class Observation:
             tool_call_id=tool_call_id,
             tool_name=tool_name,
             kind=obs_kind,
-            ok=result.ok,
+            ok=result_ok,
             content=content,
             artifacts=artifacts_list,
             error=error,
