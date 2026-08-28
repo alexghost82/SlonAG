@@ -204,8 +204,21 @@ def _reject_duplicate_ids(calls: Sequence[ToolCall], provider_id: str) -> None:
         raise ProviderError("provider returned duplicate tool call ids", provider_id=provider_id)
 
 
+from providers.openai.provider import OpenAIChatProvider
+
+
+def create_openai_provider(
+    api_key: str = "",
+    *,
+    base_url: str = "http://localhost:1234/v1",
+) -> OpenAIChatProvider:
+    """Create an OpenAI-compatible provider (LM Studio, Ollama, etc.)."""
+    return OpenAIChatProvider(api_key=api_key, base_url=base_url)
+
+
 __all__ = [
     "ToolCallStreamAssembler",
+    "create_openai_provider",
     "finish_reason",
     "message_payload",
     "messages_payload",
