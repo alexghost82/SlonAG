@@ -1,7 +1,7 @@
 """Gemini Live response, transcription, and tool-response processing."""
-nfrom i18n import t
-
 from __future__ import annotations
+from i18n import t
+
 
 import asyncio
 import inspect

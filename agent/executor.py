@@ -144,7 +144,7 @@ def _legacy_result(tool: str, result: ToolResult) -> str:
             raise ToolDeniedError(tool, result.message)
         if result.code == "unknown_tool":
             raise UnknownToolError(tool)
-        raise RuntimeError(t("error.tool_execution_failed", code=str(result.code)))
+        raise RuntimeError(t("error.tool_execution_failed", code=str(result.code)) + (": " + result.message if result.message else ""))
     if result.message:
         return result.message
     if result.data is None:
