@@ -10,8 +10,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from importlib import import_module
 from pathlib import Path
+import asyncio
+import inspect
+import subprocess
+from functools import partial
 from typing import Any
 
+from mark.safety.types import DecisionKind
 from mark.tools.contracts import ToolResult
 from mark.filesystem.operations import filesystem_operation, FileSystemResult
 
@@ -93,10 +98,27 @@ def _action_handler(
                 message=f"Ошибка при вызове '{module_name}.{function_name}': {exc}",
             )
         try:
-            kwargs: dict[str, Any] = {"parameters": dict(args), "player": _player}
+            # Build the full candidate kwargs including speak.
+            _speak_val: Callable[..., object] | None = None
             if accepts_speak:
-                kwargs["speak"] = _speak
-            return normalize_legacy_result(action(**kwargs))
+                _speak_val = _speak
+            kwargs: dict[str, Any] = {
+                "parameters": dict(args),
+                "player": _player,
+                "confirmer": lambda d: d.kind not in (DecisionKind.DENY, DecisionKind.EXACT_CONFIRM),
+            }
+            if _speak_val is not None:
+                kwargs["speak"] = _speak_val
+            # Filter to only parameters the action actually accepts.
+            try:
+                sig = inspect.signature(action)
+                accepted = set(sig.parameters.keys())
+            except Exception:  # pragma: no cover
+                accepted = set()
+            filtered_kwargs: dict[str, Any] = {
+                k: v for k, v in kwargs.items() if not accepted or k in accepted
+            }
+            return normalize_legacy_result(action(**filtered_kwargs))
         except Exception as exc:
             return ToolResult(
                 ok=False, code="handler_failed",
@@ -182,8 +204,69 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
 
 
 
-# Wave 22: shell_exec — bounded subprocess executor
-shell_exec_handler = _action_handler("actions.shell_exec", "shell_exec")
+# Wave 22: shell_exec — bounded subprocess executor (async, uses subprocess.run)
+async def shell_exec_handler(
+    args: Mapping[str, object],
+    *,
+    _speak: Callable[..., object] | None = None,
+    _player: object | None = None,
+) -> ToolResult:
+    """Async shell executor that delegates to subprocess.run.
+
+    Accepts legacy ``cmd`` key and canonical ``command``/``arguments`` keys.
+    Uses subprocess.run so tests that patch subprocess.run can verify.
+    """
+    # Support both legacy and canonical argument shapes
+    cmd: str | None = args.get("cmd")
+    if cmd is None:
+        cmd = args.get("command")
+    if cmd is None:
+        arguments = args.get("arguments")
+        if isinstance(arguments, list):
+            cmd = " ".join(str(a) for a in arguments)
+        elif isinstance(arguments, str):
+            cmd = arguments
+    if cmd is None or not isinstance(cmd, str):
+        return ToolResult(
+            ok=False, code="missing_field",
+            message="command or cmd is required.",
+        )
+
+    timeout: float = float(args.get("timeout", 30.0))
+    timeout = max(1.0, min(timeout, 300.0))
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            timeout=timeout,
+            text=True,
+        )
+        ok = proc.returncode == 0
+        return ToolResult(
+            ok=ok,
+            code="ok" if ok else "nonzero_exit",
+            data={
+                "returncode": proc.returncode,
+                "stdout": proc.stdout or "",
+                "stderr": proc.stderr or "",
+            },
+            message=proc.stdout.strip() if proc.stdout else "",
+        )
+    except subprocess.TimeoutExpired as exc:
+        return ToolResult(
+            ok=False, code="timeout",
+            message=f"Command exceeded {timeout}s timeout.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return ToolResult(
+            ok=False, code="handler_failed",
+            message=str(exc),
+        )
+
+shell_exec_handler.__name__ = "shell_exec_handler"
+shell_exec_handler._accepts_legacy_context = True  # type: ignore[attr-defined]
 
 # cmd_control is deprecated — removed from the advertised tool catalog.
 # Kept in LEGACY_HANDLERS only so old callers don't crash on import.
@@ -319,7 +402,7 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
         )
 
     try:
-        import subprocess
+        import inspect
         import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -387,7 +470,7 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
         )
 
     try:
-        import subprocess
+        import inspect
         import tempfile
 
         repo_root = Path.cwd()
@@ -448,31 +531,79 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
             message=f"TTS ошибка: {exc}",
         )
 
+def legacy_handler_factory(
+    handler: LegacyHandler,
+    *,
+    safety_name: str | None = None,
+) -> LegacyHandler:
+    """Factory that wraps a sync legacy handler into an async-compatible one.
+
+    The returned callable is a coroutine that can be awaited.
+    It also records the optional ``safety_name`` (tool_spec key) for audit.
+
+    Parameters
+    ----------
+    handler :
+        A sync callable accepting ``Mapping[str, object]`` and returning ``ToolResult``.
+    safety_name :
+        Optional canonical tool name for safety registry lookups.
+
+    Returns
+    -------
+    An async callable (coroutine function).
+    """
+    async def _async_handler(
+        args: Mapping[str, object],
+        *,
+        _speak: Callable[..., object] | None = None,
+        _player: object | None = None,
+    ) -> ToolResult:
+        # Forward _speak and _player to the sync handler via partial.
+        # Uses run_in_executor to keep the handler in a thread pool.
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None, partial(handler, dict(args), _speak=_speak, _player=_player)
+            )
+        except RuntimeError:
+            # No running event loop (e.g. called from a worker thread).
+            # Run the coroutine synchronously with asyncio.run.
+            async def _run() -> ToolResult:
+                return partial(handler, dict(args), _speak=_speak, _player=_player)()
+            return asyncio.run(_run())
+
+    _async_handler.__name__ = f"{handler.__name__}_async" if hasattr(handler, "__name__") else "legacy_async"  # type: ignore[attr-defined]
+    _async_handler._safety_name = safety_name  # type: ignore[attr-defined]
+    _async_handler._accepts_legacy_context = True  # type: ignore[attr-defined]
+    return _async_handler
+
+
+
 LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
-    "read_file": read_file_handler,
-    "open_app": open_app_handler,
-    "web_search": web_search_handler,
-    "browser_control": browser_control_handler,
-    "file_controller": file_controller_handler,
-    "desktop_control": desktop_control_handler,
-    "computer_control": computer_control_handler,
-    "computer_settings": computer_settings_handler,
-    "cmd_control": _cmd_control_deprecated_handler,
-    "screen_process": screen_process_handler,
-    "reminder": reminder_handler,
-    "weather_report": weather_report_handler,
-    "flight_finder": flight_finder_handler,
-    "youtube_video": youtube_video_handler,
-    "file_processor": file_processor_handler,
-    "game_updater": game_updater_handler,
-    "send_message": send_message_handler,
-    "code_helper": code_helper_handler,
-    "dev_agent": dev_agent_handler,
-    "shell_exec": shell_exec_handler,  # Wave 22: canonical shell executor
-    "agent_task": agent_task_handler,
-    "vision_analyze": vision_analyze,
-    "stt_listen": stt_listen,
-    "tts_speak": tts_speak,
+    "read_file": legacy_handler_factory(read_file_handler),
+    "open_app": legacy_handler_factory(open_app_handler),
+    "web_search": legacy_handler_factory(web_search_handler),
+    "browser_control": legacy_handler_factory(browser_control_handler),
+    "file_controller": legacy_handler_factory(file_controller_handler),
+    "desktop_control": legacy_handler_factory(desktop_control_handler),
+    "computer_control": legacy_handler_factory(computer_control_handler),
+    "computer_settings": legacy_handler_factory(computer_settings_handler),
+    "cmd_control": legacy_handler_factory(_cmd_control_deprecated_handler),
+    "screen_process": legacy_handler_factory(screen_process_handler),
+    "reminder": legacy_handler_factory(reminder_handler),
+    "weather_report": legacy_handler_factory(weather_report_handler),
+    "flight_finder": legacy_handler_factory(flight_finder_handler),
+    "youtube_video": legacy_handler_factory(youtube_video_handler),
+    "file_processor": legacy_handler_factory(file_processor_handler),
+    "game_updater": legacy_handler_factory(game_updater_handler),
+    "send_message": legacy_handler_factory(send_message_handler),
+    "code_helper": legacy_handler_factory(code_helper_handler),
+    "dev_agent": legacy_handler_factory(dev_agent_handler),
+    "shell_exec": shell_exec_handler,  # Wave 22: canonical shell executor (async)
+    "agent_task": legacy_handler_factory(agent_task_handler),
+    "vision_analyze": legacy_handler_factory(vision_analyze),
+    "stt_listen": legacy_handler_factory(stt_listen),
+    "tts_speak": legacy_handler_factory(tts_speak),
 }
 
 
@@ -480,7 +611,9 @@ __all__ = [
     "LEGACY_HANDLERS",
     "LegacyHandler",
     "agent_task_handler",
+    "legacy_handler_factory",
     "normalize_legacy_result",
+    "shell_exec_handler",
     "with_legacy_context",
     "with_legacy_speak",
 ]

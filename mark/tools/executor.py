@@ -407,7 +407,16 @@ class ToolExecutor:
 
         def run() -> None:
             try:
-                results.put(handler(arguments))
+                raw_result = handler(arguments)
+                # Await if handler returned a coroutine (e.g. sync wrapper around async)
+                if asyncio.iscoroutine(raw_result):
+                    async def _async_call() -> object:
+                        return await asyncio.wait_for(raw_result, timeout=timeout_seconds)
+                    results.put(asyncio.run(_async_call()))
+                else:
+                    results.put(raw_result)
+            except asyncio.TimeoutError:
+                results.put(_TIMED_OUT)
             except Exception as exc:
                 results.put(
                     _HandlerFailure(
