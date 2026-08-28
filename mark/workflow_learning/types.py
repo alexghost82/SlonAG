@@ -153,14 +153,14 @@ class WorkflowCandidate:
         """Return True if workflow is in a terminal state."""
         return self.state in (
             WorkflowState.DEPRECATED,
+            WorkflowState.APPROVED,
             WorkflowState.PARAMETERIZED,
-            WorkflowState.ACTIVE,
         )
 
     def transition_to(self, new_state: WorkflowState) -> None:
         """Move to a new state, enforcing the state machine."""
         allowed = {
-            WorkflowState.DRAFT: {WorkflowState.CANDIDATE, WorkflowState.DEPRECATED},
+            WorkflowState.DRAFT: {WorkflowState.CANDIDATE, WorkflowState.APPROVED, WorkflowState.ACTIVE},
             WorkflowState.CANDIDATE: {
                 WorkflowState.APPROVED,
                 WorkflowState.DEPRECATED,
@@ -174,7 +174,7 @@ class WorkflowCandidate:
                 WorkflowState.DEPRECATED,
             },
             WorkflowState.ACTIVE: {WorkflowState.DEPRECATED},
-            WorkflowState.DEPRECATED: set(),
+            WorkflowState.DEPRECATED: {WorkflowState.PARAMETERIZED},
         }
         if new_state not in allowed.get(self.state, set()):
             raise ValueError(
