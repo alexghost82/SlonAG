@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _RECORDS_SQL = """
 CREATE TABLE IF NOT EXISTS memory_records (
@@ -60,6 +60,12 @@ _V3_ADD = [
 ]
 
 
+# ── v4 migration: add metadata column (used by memory repo insert) ──
+_V4_ADD = [
+    "ALTER TABLE memory_records ADD COLUMN metadata TEXT",
+]
+
+
 def apply_schema(connection: sqlite3.Connection) -> None:
     """Create tables and record the schema version when the file is new."""
     connection.execute("PRAGMA foreign_keys = ON")
@@ -102,6 +108,16 @@ def apply_schema(connection: sqlite3.Connection) -> None:
         _run_migrations(connection)
     if current_version < 3:
         for stmt in _V3_ADD:
+            try:
+                connection.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already added
+        connection.execute(
+            "UPDATE memory_schema SET version = ?", (SCHEMA_VERSION,)
+        )
+        connection.commit()
+    if current_version < 4:
+        for stmt in _V4_ADD:
             try:
                 connection.execute(stmt)
             except sqlite3.OperationalError:

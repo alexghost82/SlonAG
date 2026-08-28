@@ -322,3 +322,18 @@ def get_file_info(path: str, **hooks: Any) -> str:
     return file_controller(
         parameters={"action": "info", "path": path}, **hooks
     )
+
+
+# E2E test compatibility: FileController class shim
+class FileController:
+    """Minimal file controller for E2E tests."""
+
+    def _read_file(self, path: str) -> str:
+        return Path(path).read_text(encoding="utf-8")
+
+    def _write_file(self, path: str, content: str) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(content, encoding="utf-8")
+
+    def _list_dir(self, path: str, pattern: str = "*") -> list[str]:
+        return [p.name for p in Path(path).glob(pattern)]

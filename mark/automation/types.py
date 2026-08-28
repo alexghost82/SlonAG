@@ -144,8 +144,8 @@ class AutomationHistoryEntry:
 class AutomationRule:
     """Simple automation rule for E2E tests (simpler than AutomationJob)."""
     name: str = ""
-    trigger: str = "manual"  # manual, on_event, on_schedule, etc.
-    action: str = ""
+    trigger: str | dict[str, Any] = "manual"
+    action: str | dict[str, Any] = ""
     enabled: bool = True
     params: dict = field(default_factory=dict)
 

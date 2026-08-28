@@ -139,7 +139,7 @@ class AutomationEngine:
     ) -> None:
         if store_path is None:
             import tempfile
-            self._store_path = Path(tempfile.mkdtemp(prefix="automation_"))
+            self._store_path = Path(tempfile.mkdtemp(prefix="automation_")) / "automation_store.json"
         else:
             self._store_path = Path(store_path) if isinstance(store_path, str) else store_path
             self._store_path.mkdir(parents=True, exist_ok=True)
@@ -150,6 +150,31 @@ class AutomationEngine:
         self._running = False
         self._thread: threading.Thread | None = None
         self._load()
+
+    def register(self, rule: object) -> str:
+        """Register an automation rule (object or dict). Returns rule name."""
+        if hasattr(rule, 'name') and hasattr(rule, 'trigger') and hasattr(rule, 'action'):
+            name = getattr(rule, 'name')
+            trigger = getattr(rule, 'trigger')
+            action = getattr(rule, 'action')
+        elif isinstance(rule, dict):
+            name = rule['name']
+            trigger = rule['trigger']
+            action = rule['action']
+        else:
+            raise ValueError(f"Unknown rule type: {type(rule)}")
+        self.create(
+            name=name,
+            trigger_type=TriggerType.ONE_SHOT,
+            payload={"trigger": trigger, "action": action},
+            goal=f"Automation: {name}",
+        )
+        return name
+
+    def list_rules(self) -> list[str]:
+        """Return list of registered automation rule names."""
+        with self._lock:
+            return list(self._records.keys())
 
     def create(
         self,

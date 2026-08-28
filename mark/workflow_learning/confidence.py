@@ -133,3 +133,19 @@ class ConfidenceEngine:
         # Fewer unique args relative to total steps = higher variability
         determinism = 1.0 - (unique_slots / total_slots) if total_slots > 0 else 1.0
         return max(0.0, determinism)
+
+
+# E2E compatibility: ConfidenceTracker wrapper for simple tests
+class ConfidenceTracker:
+    """Simple confidence tracker for E2E tests."""
+    def __init__(self) -> None:
+        self._scores: dict[str, float] = {}
+
+    def add(self, name: str, confidence: float) -> None:
+        self._scores[name] = confidence
+
+    def get(self, name: str) -> float:
+        return self._scores.get(name, 0.0)
+
+    def list_all(self) -> dict[str, float]:
+        return dict(self._scores)

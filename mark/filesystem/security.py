@@ -294,8 +294,19 @@ def validate_path(
     # Symlink escape check — must check the ORIGINAL path before resolution,
     # because resolve() already follows symlinks and the resolved path no longer
     # contains the symlink component.
-    if allow_symlinks and not base.is_symlink():
-        # Walk through the original (pre-resolution) path to find symlinks
+    if not allow_symlinks:
+        # When symlinks are not allowed, check if any component is a symlink.
+        try:
+            parts = list(base.parts)
+            current = Path(parts[0]) if parts[0] else Path("/")
+            for part in parts[1:]:
+                current = current / part
+                if current.exists() and current.is_symlink():
+                    return None  # Block all symlinks when not allowed
+        except OSError:
+            pass
+    else:
+        # allow_symlinks is True — only block if the symlink escapes the allowlist.
         try:
             if isinstance(base, Path) and base.exists():
                 _check_symlink_chain(base, roots)
@@ -303,25 +314,24 @@ def validate_path(
             raise
         except OSError:
             pass
-    elif allow_symlinks:
-        # For non-existent paths, walk components to find symlinks
-        try:
-            parts = list(base.parts)
-            current = Path(parts[0]) if parts[0] else Path("/")
-            for part in parts[1:]:
-                current = current / part
-                if current.exists() and current.is_symlink():
-                    real = current.resolve()
-                    if not any(
-                        _safe_relative(real, r) is not None for r in roots
-                    ):
-                        raise SymlinkEscape(
-                            f"Symlink at {current} points outside allowlist ({real})."
-                        )
-        except SymlinkEscape:
-            raise
-        except OSError:
-            pass
+        if not base.exists():
+            try:
+                parts = list(base.parts)
+                current = Path(parts[0]) if parts[0] else Path("/")
+                for part in parts[1:]:
+                    current = current / part
+                    if current.exists() and current.is_symlink():
+                        real = current.resolve()
+                        if not any(
+                            _safe_relative(real, r) is not None for r in roots
+                        ):
+                            raise SymlinkEscape(
+                                f"Symlink at {current} points outside allowlist ({real})."
+                            )
+            except SymlinkEscape:
+                raise
+            except OSError:
+                pass
 
     # Size check (for existing files)
     if check_size and resolved.is_file():

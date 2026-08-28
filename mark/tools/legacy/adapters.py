@@ -211,12 +211,10 @@ async def shell_exec_handler(
     _speak: Callable[..., object] | None = None,
     _player: object | None = None,
 ) -> ToolResult:
-    """Async shell executor that delegates to subprocess.run.
+    """Async shell executor using asyncio.create_subprocess_shell.
 
     Accepts legacy ``cmd`` key and canonical ``command``/``arguments`` keys.
-    Uses subprocess.run so tests that patch subprocess.run can verify.
     """
-    # Support both legacy and canonical argument shapes
     cmd: str | None = args.get("cmd")
     if cmd is None:
         cmd = args.get("command")
@@ -236,29 +234,44 @@ async def shell_exec_handler(
     timeout = max(1.0, min(timeout, 300.0))
 
     try:
-        proc = subprocess.run(
+        proc = await asyncio.create_subprocess_shell(
             cmd,
-            shell=True,
-            capture_output=True,
-            timeout=timeout,
-            text=True,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=1024 * 1024,
         )
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return ToolResult(
+                ok=False, code="timeout",
+                message=f"Command exceeded {timeout}s timeout.",
+            )
+
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
         ok = proc.returncode == 0
         return ToolResult(
             ok=ok,
             code="ok" if ok else "nonzero_exit",
             data={
                 "returncode": proc.returncode,
-                "stdout": proc.stdout or "",
-                "stderr": proc.stderr or "",
+                "stdout": stdout or "",
+                "stderr": stderr or "",
             },
-            message=proc.stdout.strip() if proc.stdout else "",
+            message=stdout.strip() if stdout else "",
         )
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         return ToolResult(
             ok=False, code="timeout",
             message=f"Command exceeded {timeout}s timeout.",
         )
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # noqa: BLE001
         return ToolResult(
             ok=False, code="handler_failed",

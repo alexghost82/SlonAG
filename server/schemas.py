@@ -921,3 +921,17 @@ __all__ = [
     "ChatRequestSchema",
     "ChatResponseSchema",
 ]
+
+
+# Additional E2E schemas
+@dataclass
+class SessionCreateSchema:
+    """Schema for session creation in E2E tests."""
+    session_id: str = ""
+    agent_id: str = ""
+
+@dataclass
+class ToolResultSchema:
+    """Schema for tool result in E2E tests."""
+    tool_name: str = ""
+    content: str = ""

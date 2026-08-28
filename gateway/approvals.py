@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from dataclasses import dataclass
@@ -148,6 +149,27 @@ class ApprovalGate:
             if p["approval_id"] == approval_id:
                 p["approved"] = True
                 break
+
+    async def request(self, tool: str, args: dict,
+        user_id: str = "", workspace: str = "",
+    ) -> str:
+        """Alias for request_approval with E2E-friendly kwargs."""
+        return self.request_approval(
+            tool_call_id=f"{tool}-{uuid4().hex[:8]}",
+            tool_name=tool,
+            workspace_id=workspace or "default",
+        )
+
+    async def await_one(self, request_id: str, timeout: float = 5.0) -> dict | None:
+        """Wait for approval with timeout. Returns status dict or None on timeout."""
+        import time
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status = self.get_status(request_id)
+            if status.get("approved"):
+                return status
+            await asyncio.sleep(0.05)
+        return None  # timeout
 
     def list_pending(self) -> list[dict]:
         return [p for p in self.pending if not p["approved"]]

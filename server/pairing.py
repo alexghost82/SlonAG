@@ -306,5 +306,11 @@ class PairingStore:
             return None
         return {"device_id": device_id, "pairing_code": entry["code"]}
 
+    def generate_token(self, device_name: str) -> str:
+        """Generate a unique pairing token for a device."""
+        token = secrets.token_hex(10)
+        self._pairs[device_name] = {"token": token, "created_at": time.time()}
+        return token
+
     def list_registered(self) -> list[dict[str, Any]]:
         return list(self._pairs.values())
