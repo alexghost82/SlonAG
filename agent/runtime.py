@@ -315,6 +315,16 @@ class AgentLoop:
 
                 observations: list[Observation] = []
                 tool_result_messages: list[ToolResultMessage] = []
+
+                # Record the assistant's tool call request so the provider sees
+                # AssistantToolCallMessage before each ToolResultMessage
+                append_message(
+                    AssistantToolCallMessage(
+                        tool_calls=tuple(tool_calls),
+                        content=response_text or "",
+                    )
+                )
+
                 for tool_call in tool_calls:
                     tool_id = tool_call.id
                     tool_name = tool_call.name
@@ -337,6 +347,13 @@ class AgentLoop:
                                 tool_name=tool_name,
                                 result="Cancelled",
                                 error="Tool execution cancelled",
+                            )
+                        )
+                        steps.append(
+                            AgentLoopStepResult(
+                                turn_index=self.budget.turn_count,
+                                tool_name=tool_name,
+                                observation=observations[-1],
                             )
                         )
                         continue
@@ -363,6 +380,13 @@ class AgentLoop:
                                 error=str(exc),
                             )
                         )
+                        steps.append(
+                            AgentLoopStepResult(
+                                turn_index=self.budget.turn_count,
+                                tool_name=tool_name,
+                                observation=observations[-1],
+                            )
+                        )
                         continue
 
                     trace.mark("tool_execution_end")
@@ -379,6 +403,13 @@ class AgentLoop:
                     )
                     trace.mark("observation_returned")
 
+                    steps.append(
+                        AgentLoopStepResult(
+                            turn_index=self.budget.turn_count,
+                            tool_name=tool_call.name,
+                            observation=obs,
+                        )
+                    )
                 messages.extend(tool_result_messages)
 
             else:
@@ -399,7 +430,7 @@ class AgentLoop:
                     ok=True,
                     final_answer=str(response_text) if response_text else None,
                     steps=steps,
-                    reason="",
+                    reason="Completed successfully",
                     latency_ms=trace.to_dict(),
                 )
 
@@ -439,16 +470,7 @@ class AgentLoop:
                 )
 
             # Append observations back to messages for the next model turn
-            for obs in observations:
-                append_message(
-                    AssistantToolCallMessage(
-                        tool_calls=(ToolCall(
-                                id=obs.tool_call_id or "",
-                                name=obs.tool_name or "",
-                                arguments={},
-                            ),),
-                    )
-                )
+            # Tool results are already in messages after messages.extend(tool_result_messages)
 
     async def _call_provider(
         self, messages: list[ConversationMessage], user_goal: str
@@ -533,6 +555,15 @@ class AgentLoop:
 
         if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
             res = await res
+
+        # Wrap non-ToolResult results (e.g. plain strings from lambdas)
+        if not isinstance(res, ToolResult):
+            res = ToolResult(
+                ok=True,
+                code="OK",
+                message=str(res) if res else "",
+                data=res if res else None,
+            )
 
         return res
 
