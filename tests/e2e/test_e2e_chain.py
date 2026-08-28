@@ -183,7 +183,7 @@ class TestProviderOpenAIToolContinuation:
             })(),
             # Second turn: model responds with the answer (after we inject the tool result)
             type("ChatResponse", (), {
-                "text": "Сегодня солнечно, +25°C.",
+                "text": "Солнечно, +25°C.",
                 "provider_id": "openai", "model_id": "gpt-4o",
                 "tool_calls": ()
             })(),
