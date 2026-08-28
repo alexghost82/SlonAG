@@ -34,20 +34,19 @@ import asyncio
 import re
 import os
 import shlex
-import signal
 import subprocess
 import sys
 import threading
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from i18n import t as _t
 
-from mark.safety import authorize, check_url, validate_args
+from mark.safety import authorize, validate_args
 from mark.safety.errors import ArgValidationError
-from mark.safety.types import DecisionKind, SafetyDecision, UntrustedSource
+from mark.safety.types import DecisionKind, UntrustedSource
 from mark.tools.contracts import ToolResult
 
 # ---------------------------------------------------------------------------
@@ -180,6 +179,12 @@ def _is_blocked(cmd: str) -> bool:
     """
     if not isinstance(cmd, str):
         return False
+    # Normalize Unicode (fullwidth → ASCII, homoglyph → ASCII)
+    cmd = unicodedata.normalize('NFKC', cmd)
+    # Block non-ASCII in first token (homoglyph / fullwidth obfuscation)
+    first_token = cmd.split()[0] if cmd.split() else cmd
+    if first_token and not first_token.isascii():
+        return True
     # Strip leading whitespace, null bytes, and newlines
     stripped = cmd.strip()
     # Remove null bytes (C-string injection)
