@@ -87,11 +87,12 @@ class Observation:
 
         content: str | dict | None = None
         result_ok = getattr(result, "ok", True)
-        if result.data is not None:
-            if isinstance(result.data, (str, dict)):
-                content = result.data
+        result_data = getattr(result, "data", None)
+        if result_data is not None:
+            if isinstance(result_data, (str, dict)):
+                content = result_data
             else:
-                content = str(result.data)
+                content = str(result_data)
         elif result_ok and getattr(result, "message", None):
             content = result.message
         elif getattr(result, "content", None):
