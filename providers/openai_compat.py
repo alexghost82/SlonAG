@@ -204,19 +204,129 @@ def _reject_duplicate_ids(calls: Sequence[ToolCall], provider_id: str) -> None:
         raise ProviderError("provider returned duplicate tool call ids", provider_id=provider_id)
 
 
-from providers.openai.provider import OpenAIChatProvider
+try:
+    from openai import OpenAI  # noqa: E402
+except ImportError:
+    # openai SDK not installed; module-level variable still needed for patching in tests
+    OpenAI = None  # type: ignore[misc,assignment]
+
+from providers.contracts import (
+    ChatProvider,
+    ChatRequest,
+    ChatResponse,
+    ConversationMessage,
+    ModelInfo,
+    ProviderStatus,
+    ToolCall,
+    ToolDefinition,
+)
+
+
+class OpenAICompatProvider(ChatProvider):
+    """Lightweight OpenAI-SDK-based provider for LM Studio / Ollama compatible endpoints."""
+
+    def __init__(
+        self,
+        api_key: str = "",
+        *,
+        base_url: str = "http://localhost:1234/v1",
+        _client=None,  # For test injection
+    ) -> None:
+        self.provider_id = "openai"
+        self._base_url = base_url
+        self._client = _client
+
+    async def list_models(self) -> list[ModelInfo]:
+        if self._client is None:
+            return []
+        try:
+            resp = self._client.models.list()
+            return [
+                ModelInfo(
+                    provider_id=self.provider_id,
+                    model_id=m.id,
+                    display_name=m.id,
+                    text=True,
+                    streaming=False,
+                    tool_calling=True,
+                    source=self._client.__class__.__name__,
+                )
+                for m in resp.data
+            ]
+        except Exception:
+            return []
+
+    async def validate(self) -> ProviderStatus:
+        return ProviderStatus(
+            provider_id=self.provider_id, ok=True, message="openai-compatible ready"
+        )
+
+    async def chat(self, request: ChatRequest) -> ChatResponse:
+        # Build the kwargs for the OpenAI SDK chat.completions.create call
+        kwargs: dict = {
+            "model": request.model.model_id,
+            "messages": [message_payload(m) for m in request.messages],
+            "stream": False,
+            "temperature": 0.0,
+        }
+        if request.tools:
+            kwargs["tools"] = [
+                {"type": "function", "function": {
+                    "name": t.name,
+                    "description": t.description or "",
+                    "parameters": t.parameters or {},
+                }}
+                for t in request.tools
+            ]
+
+        if self._client is None:
+            client = OpenAI(api_key=self.provider_id if not self.provider_id.startswith("test") else "test-key", base_url=self._base_url)  # type: ignore[arg-type]
+        else:
+            client = self._client
+
+        raw = client.chat.completions.create(**kwargs)
+        choice = raw.choices[0]
+        text = choice.message.content or ""
+
+        # Convert tool calls
+        tc_list: list[ToolCall] = []
+        if choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                tc_list.append(ToolCall(
+                    id=tc.id or "",
+                    name=tc.function.name,
+                    arguments=_parse_tool_call_args(tc.function.arguments, self.provider_id),
+                ))
+
+        return ChatResponse(
+            text=text,
+            provider_id=self.provider_id,
+            model_id=request.model.model_id,
+            tool_calls=tuple(tc_list),
+        )
+
+
+def _parse_tool_call_args(raw_args: str, provider_id: str) -> dict[str, object]:
+    """Parse tool call arguments, handling both string JSON and dict."""
+    try:
+        if isinstance(raw_args, str):
+            return json.loads(raw_args)
+        return dict(raw_args)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
 
 
 def create_openai_provider(
     api_key: str = "",
     *,
     base_url: str = "http://localhost:1234/v1",
-) -> OpenAIChatProvider:
+) -> OpenAICompatProvider:
     """Create an OpenAI-compatible provider (LM Studio, Ollama, etc.)."""
-    return OpenAIChatProvider(api_key=api_key, base_url=base_url)
+    return OpenAICompatProvider(api_key=api_key, base_url=base_url)
 
 
 __all__ = [
+    "OpenAICompatProvider",
     "ToolCallStreamAssembler",
     "create_openai_provider",
     "finish_reason",

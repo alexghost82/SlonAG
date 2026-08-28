@@ -260,3 +260,9 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if mag_a == 0.0 or mag_b == 0.0:
         return 0.0
     return _dot_product(a, b) / (mag_a * mag_b)
+
+
+def init_db(db_path: str | Path) -> None:
+    """Create the database file and apply the schema."""
+    db = MemoryDatabase(Path(db_path))
+    db.close()

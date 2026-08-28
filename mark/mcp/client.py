@@ -481,3 +481,7 @@ class McpClient:
 
     async def __aexit__(self, *exc: object) -> None:
         await self.stop()
+
+
+# Alias for E2E tests
+MCPClient = McpClient

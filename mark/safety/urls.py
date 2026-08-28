@@ -126,3 +126,17 @@ def _parse_ip(
 
 
 __all__ = ["check_url"]
+
+
+def is_safe_url(url: str) -> bool:
+    """Return True if *url* is a safe public destination.
+
+    This is the bool-returning variant of ``check_url``.
+    """
+    try:
+        check_url(url)
+        return True
+    except UnsafeUrlError:
+        return False
+
+

@@ -58,7 +58,7 @@ class BoundedFrameQueue:
         return len(self._queue) == 0
 
 
-class BoundedDetectionQueue:
+class BoundedDetectionQueue:class BoundedDetectionQueue:
     """Bounded async queue for detection results."""
 
     def __init__(self, maxlen: int = 60) -> None:
@@ -76,10 +76,15 @@ class BoundedDetectionQueue:
                 return self._queue.popleft()
             return None
 
+    async def drain(self) -> list[DetectionResult]:
+        async with self._lock:
+            items = list(self._queue)
+            self._queue.clear()
+            return items
+
     @property
     def count(self) -> int:
         return len(self._queue)
-
 
 class BoundedEventQueue:
     """Bounded async queue for frame events."""

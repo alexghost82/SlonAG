@@ -131,3 +131,27 @@ __all__ = [
     "risk_for",
     "validate_args",
 ]
+
+
+import re
+
+# Patterns to redact from log outputs
+_SECRET_PATTERNS: list[tuple[str, str]] = [
+    # API keys: sk-..., key=..., token=...
+    (r"(?:api[_-]?key|key|token|password|passwd|pwd|secret)\s*[:=]\s*\S+", "[REDACTED]"),
+    # Generic API key patterns (sk-*, openai-*, etc.)
+    (r"\b(?:sk|openai|ghp|gho|ghu|ghs|github_pat)[A-Za-z0-9_]{8,}\b", "[REDACTED]"),
+    # AWS keys
+    (r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b", "[REDACTED]"),
+    # Generic sk-* API keys
+    (r"sk-[A-Za-z0-9_-]{5,}", "[REDACTED]"),
+]
+
+
+def redact_secrets(text: str) -> str:
+    """Replace known secret patterns with ``[REDACTED]``."""
+    for pattern, replacement in _SECRET_PATTERNS:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
+

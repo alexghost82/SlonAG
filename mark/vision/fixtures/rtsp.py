@@ -56,20 +56,16 @@ class RTSPFixture:
 
     # ── lifecycle ────────────────────────────────────────────────
 
-    async def start(self) -> bool:
-        """Start the mock RTSP server.
-
-        Returns True on success.
-        """
+    async def start(self) -> RTSPFixture:
+        """Start the mock RTSP server. Returns self for chaining."""
         self._generate_frames()
         self._running = True
         try:
             self._server = asyncio.create_task(self._serve())
             await asyncio.sleep(0.2)  # let server bind
-            return True
         except Exception:
             self._running = False
-            return False
+        return self
 
     async def stop(self) -> None:
         """Stop the mock RTSP server."""

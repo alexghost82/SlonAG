@@ -395,3 +395,19 @@ class _BoundedSafetyPolicy(SafetyPolicy):
 
     def validate_args(self, tool_name: str, args: object) -> dict[str, Any]:
         return self._parent.validate_args(tool_name, args)
+
+
+# ── Simple session dataclass for E2E tests ────────────────────────
+
+@dataclass
+class SubagentSession:
+    """Minimal subagent session for E2E chain testing."""
+    session_id: str = ""
+    goal: str = ""
+    workspace_id: str = ""
+    status: str = "created"
+    created_at: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.created_at == 0.0:
+            self.created_at = time.monotonic()

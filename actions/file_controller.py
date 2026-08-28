@@ -17,7 +17,7 @@ from mark.filesystem.operations import (
     FileSystemResult,
     filesystem_operation,
     create_directory,
-    create_file,
+    create_file as _fs_create_file,
     delete,
     disk_usage,
     list_directory,
@@ -130,8 +130,8 @@ def _run_action(checked: dict[str, object], hooks: _Hooks) -> str:
         case "write":
             append = bool(checked.get("append", False))
             result = write(path_raw, content, append=append, roots=roots)
-        case "create_file":
-            result = create_file(path_raw, content, roots=roots)
+        case "create_file" | "create":
+            result = _fs_create_file(path_raw, content, roots=roots)
         case "create_folder" | "create_directory" | "mkdir":
             result = create_directory(path_raw, roots=roots)
         case "delete":

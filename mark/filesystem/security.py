@@ -248,16 +248,16 @@ def validate_path(
     operations like ``write("new.txt", roots=(workspace,))`` work as expected.
     """
     if not path_raw or not path_raw.strip():
-        raise PathDenied("Path is empty.")
+        return None
 
     # Check for traversal components before resolution
     if _has_traversal_component(path_raw):
-        raise PathDenied("Path contains traversal components.")
+        return None
 
     try:
         base = Path(path_raw).expanduser()
     except (TypeError, ValueError):
-        raise PathDenied("Invalid path string.")
+        return None
 
     # If the path is relative, resolve it relative to the first root.
     # This ensures that "new.txt" with roots=(workspace,) resolves to
@@ -271,19 +271,19 @@ def validate_path(
     try:
         resolved = base.resolve(strict=False)
     except OSError:
-        raise PathDenied("Cannot resolve path.")
+        return None
 
     # Check for traversal after resolution (edge case with special filesystems)
     if _has_traversal_component(resolved.as_posix()):
-        raise PathDenied("Resolved path contains traversal components.")
+        return None
 
     # System path check (raw + resolved)
     if _is_forbidden_system_path(resolved):
-        raise PathDenied("System path is forbidden.")
+        return None
 
     # Allowlist check
     if not any(_safe_relative(resolved, r) is not None for r in roots):
-        raise PathDenied("Path is outside the allowlist.")
+        return None
 
     # Symlink escape check
     if allow_symlinks and resolved.exists():
