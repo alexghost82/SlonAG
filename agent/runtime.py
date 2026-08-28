@@ -354,7 +354,7 @@ class AgentLoop:
                         continue
 
                     trace.mark("tool_execution_end")
-                    obs = Observation.from_tool_result(tool_call, exec_result)
+                    obs = Observation.from_tool_result(tool_call.id, tool_call.name, exec_result)
                     observations.append(obs)
                     tool_result_messages.append(
                         ToolResultMessage(
