@@ -430,14 +430,11 @@ class AgentLoop:
             for obs in observations:
                 append_message(
                     AssistantToolCallMessage(
-                        content=None,
-                        tool_calls=tuple(
-                            ToolCall(
+                        tool_calls=(ToolCall(
                                 id=obs.tool_call_id or "",
                                 name=obs.tool_name or "",
                                 arguments={},
-                            )
-                        ),
+                            ),),
                     )
                 )
 
