@@ -71,6 +71,14 @@ class LatencyTrace:
         return result
 
 
+    def to_dict(self) -> dict:
+        """Return a JSON-serialisable dict of the full trace."""
+        return {
+            "marks": dict(self.marks),
+            "breakdown": self.breakdown(),
+        }
+
+
 class TurnLatencyTracker:
     """Thread-safe holder that creates an independent trace for every Live turn."""
 
