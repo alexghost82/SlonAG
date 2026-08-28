@@ -12,6 +12,7 @@ Full integration test exercising the entire pipeline:
 
 import asyncio
 import time
+from pathlib import Path
 
 import pytest
 

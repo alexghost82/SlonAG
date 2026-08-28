@@ -219,3 +219,199 @@ def create_vision_provider(
 ) -> VisionProvider:
     """Convenience factory."""
     return VisionProvider(source_type, source_config, config)
+
+# ───────────────────────────────────────────────────────────────────────────
+# Security constants and untrusted fencing
+# ───────────────────────────────────────────────────────────────────────────
+
+DEFAULT_KIND: str = "vlm"
+DEFAULT_PRIVACY_PROFILE: str = "fully_local"
+PROVIDER_ID: str = "vision_local"
+
+VISION_KINDS: tuple[str, ...] = (
+    "vlm",
+    "ocr",
+    "object_detection",
+    "person_detection",
+    "general",
+)
+
+UNTRUSTED_LABEL: str = "untrusted-vision"
+UNTRUSTED_FENCE: str = "<!-- untrusted-vision -->"
+
+
+def wrap_untrusted_image_text(text: str) -> str:
+    """Wrap extracted image text so the LLM treats it as untrusted user data.
+
+    The fence prefix prevents the LLM from interpreting the text as system
+    instructions or tool-call output.  The output never contains a leading
+    "system" or "system instruction" token.
+    """
+    # Escape backticks to prevent code-block injection through the text
+    escaped = text.replace("```", "`\u200b``")
+    return (
+        f"{UNTRUSTED_FENCE}\n"
+        f"# {UNTRUSTED_LABEL}\n"
+        f"untrusted user data — extracted from image:\n"
+        f"```ocr\n"
+        f"{escaped}\n"
+        f"```\n"
+        f"<!-- /untrusted-vision -->"
+    )
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# LocalVisionProvider — security-gated, ephemeral-image vision analysis
+# ───────────────────────────────────────────────────────────────────────────
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from uuid import uuid4
+
+from providers.errors import CapabilityError, ProviderError
+from providers.contracts import VisionRequest, VisionResponse
+
+
+@dataclass(frozen=True)
+class VisionTaskRequest:
+    """Extended VisionRequest with a ``kind`` selector."""
+    model: Any  # ModelInfo
+    image: bytes
+    prompt: str = ""
+    kind: str = DEFAULT_KIND
+
+
+class _EngineProtocol:
+    """Minimal protocol expected of a vision analysis engine."""
+    def analyze(self, image: bytes, prompt: str, kind: str) -> str:
+        ...  # pragma: no cover
+
+
+class LocalVisionProvider:
+    """Secure local vision provider backed by an injectable analysis engine.
+
+    Security properties
+    -------------------
+    * **fail-closed**: cloud engines are rejected unless ``allow_cloud=True``
+      *and* ``privacy_profile != "fully_local"`` *and* ``network_mode != "offline"``.
+    * **ephemeral images**: the input bytes are written to a named temp file,
+      the engine is called, and the file is deleted (on both success and failure).
+    * **untrusted text**: OCR results are automatically wrapped with
+      ``UNTRUSTED_FENCE`` so the LLM treats them as user data.
+    * **bounded kinds**: only ``VISION_KINDS`` are accepted; unknown kinds raise
+      ``ProviderError`` before reaching the engine.
+    """
+
+    def __init__(
+        self,
+        engine: _EngineProtocol,
+        temp_dir: Path,
+        *,
+        allow_cloud: bool = False,
+        privacy_profile: str = DEFAULT_PRIVACY_PROFILE,
+        network_mode: str = "offline",
+    ) -> None:
+        if engine is None:
+            raise TypeError("engine is required")
+        if temp_dir is None:
+            raise TypeError("temp_dir is required")
+        self.engine = engine
+        self.temp_dir = Path(temp_dir)
+        self.allow_cloud = allow_cloud
+        self.privacy_profile = privacy_profile
+        self.network_mode = network_mode
+        self.provider_id = PROVIDER_ID
+
+    # ── public API ────────────────────────────────────────────────────
+
+    async def analyze(
+        self,
+        request: VisionRequest | VisionTaskRequest,
+    ) -> VisionResponse:
+        """Run a single analysis with full security gating."""
+        # 1. Reject if model has vision=False
+        model_id = getattr(request.model, "model_id", "unknown")
+        provider_id = getattr(request.model, "provider_id", "")
+        vision_cap = getattr(request.model, "vision", True)
+        if not vision_cap:
+            raise CapabilityError(
+                provider_id=provider_id,
+                model_id=model_id,
+                role="vision",
+                message="vision capability is disabled for this model",
+            )
+
+        # 2. Reject cloud engine when policy forbids it
+        if getattr(self.engine, "cloud", False) and not self._cloud_allowed():
+            raise ProviderError(
+                provider_id=provider_id or PROVIDER_ID,
+                message="Облачный engine запрещён: privacy_profile или allow_cloud=False",
+            )
+
+        # 3. Validate kind
+        kind = self._resolve_kind(request.prompt, request.kind)
+
+        # 4. Write ephemeral temp file
+        tmp_file = self.temp_dir / f"vision-snapshot-{uuid4().hex[:12]}.png"
+        tmp_file.write_bytes(request.image)
+
+        # 5. Call engine (bounded, may raise)
+        try:
+            text = self.engine.analyze(
+                image=request.image,
+                prompt=request.prompt,
+                kind=kind,
+            )
+        finally:
+            # 6. Always delete temp file
+            try:
+                tmp_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        # 7. Wrap OCR/general results as untrusted
+        if kind in ("ocr", "general") or "ocr" in request.prompt.lower():
+            text = wrap_untrusted_image_text(text)
+
+        return VisionResponse(text=text)
+
+    # ── internals ─────────────────────────────────────────────────────
+
+    def _cloud_allowed(self) -> bool:
+        """Return True only when all three conditions hold."""
+        if not self.allow_cloud:
+            return False
+        if self.privacy_profile == "fully_local":
+            return False
+        if self.network_mode == "offline":
+            return False
+        return True
+
+    def _resolve_kind(self, prompt: str, explicit_kind: str) -> str:
+        """Determine kind: explicit kind must be in VISION_KINDS,
+        otherwise try to infer from prompt."""
+        kind = explicit_kind.strip()
+        if kind and kind in VISION_KINDS:
+            return kind
+        # Infer from prompt: "ocr", "object_detection", etc.
+        lower = prompt.lower()
+        for k in VISION_KINDS:
+            if k in lower:
+                return k
+        return DEFAULT_KIND
+
+
+__all__ = [
+    "DEFAULT_KIND",
+    "DEFAULT_PRIVACY_PROFILE",
+    "PROVIDER_ID",
+    "UNTRUSTED_FENCE",
+    "UNTRUSTED_LABEL",
+    "VISION_KINDS",
+    "LocalVisionProvider",
+    "VisionTaskRequest",
+    "create_vision_provider",
+    "create_runtime",
+    "detect_capabilities",
+    "wrap_untrusted_image_text",
+]

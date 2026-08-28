@@ -75,7 +75,19 @@ from mark.vision.types import (
     VisionAnalysis,
     VisionRuntimeStatus,
 )
-from mark.vision.provider import VisionProvider, create_vision_provider
+from mark.vision.provider import (
+    VisionProvider,
+    create_vision_provider,
+    DEFAULT_KIND,
+    DEFAULT_PRIVACY_PROFILE,
+    PROVIDER_ID,
+    UNTRUSTED_FENCE,
+    UNTRUSTED_LABEL,
+    VISION_KINDS,
+    LocalVisionProvider,
+    VisionTaskRequest,
+    wrap_untrusted_image_text,
+)
 
 __all__ = [
     "AcquisitionConfig",
@@ -120,4 +132,13 @@ __all__ = [
     "create_runtime",
     "create_vision_provider",
     "detect_capabilities",
+    "DEFAULT_KIND",
+    "DEFAULT_PRIVACY_PROFILE",
+    "PROVIDER_ID",
+    "UNTRUSTED_FENCE",
+    "UNTRUSTED_LABEL",
+    "VISION_KINDS",
+    "LocalVisionProvider",
+    "VisionTaskRequest",
+    "wrap_untrusted_image_text",
 ]
