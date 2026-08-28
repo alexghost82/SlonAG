@@ -373,8 +373,8 @@ class AgentLoop:
                 # No tool calls — final answer
                 append_message(
                     AssistantMessage(
-                        text=response_text,
-                        tool_calls=None,
+                        content=response_text,
+                        tool_calls=(),
                     )
                 )
                 append_message(
