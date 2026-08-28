@@ -295,7 +295,7 @@ class SelfImprovementPipeline:
             "rolled_back_count": self._state.rolled_back_count,
             "improvement_statuses": statuses,
             "active_candidates": [
-                {"id": c.id, "title": c.title, "category": c.category.value, "risk": c.risk.value}
+                {"id": c.id, "title": c.title, "status": c.status.value}
                 for c in self._state.improvements.values()
                 if c.status == ImprovementStatus.PROPOSED
             ],

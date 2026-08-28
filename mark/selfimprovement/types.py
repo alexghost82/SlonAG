@@ -274,7 +274,7 @@ def apply_bounded_change(
             proposed_change={"path": timeout_path, "value": new_timeout},
             rollback_change=rollback,
         )
-        from mark.selfimprovement import save_state
+        from mark.selfimprovement.storage import save_state
         save_state(state)
 
     elif target == "routing_stats":

@@ -17,6 +17,7 @@ from mark.selfimprovement.rules import _deduplicate
 from mark.selfimprovement.storage import load_state, save_state
 from mark.selfimprovement.types import (
     EvidenceType,
+    ImprovementCandidate,
     ImprovementCategory,
     ImprovementStatus,
     Observation,
