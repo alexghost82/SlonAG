@@ -272,8 +272,8 @@ class AgentLoop:
                 raise
             trace.mark("provider_first_response")
 
-            if not isinstance(response, ChatResponse):
-                raise TypeError("provider.chat() must return ChatResponse")
+            if not (hasattr(response, "text") and hasattr(response, "tool_calls") and hasattr(response, "provider_id") and hasattr(response, "model_id")):
+                raise TypeError("provider.chat() must return an object with text, tool_calls, provider_id, model_id attributes")
             response_text = response.text
             tool_calls = response.tool_calls
             duplicate_ids = _duplicate_tool_call_ids(tool_calls)
@@ -483,8 +483,8 @@ class AgentLoop:
 
         req = ChatRequest(model=self.model, messages=tuple(effective_messages), tools=tools)
         response = await self.provider.chat(req)
-        if not isinstance(response, ChatResponse):
-            raise TypeError("provider.chat() must return ChatResponse")
+        if not (hasattr(response, "text") and hasattr(response, "tool_calls") and hasattr(response, "provider_id") and hasattr(response, "model_id")):
+            raise TypeError("provider.chat() must return an object with text, tool_calls, provider_id, model_id attributes")
         return response
 
     async def _execute_tool(

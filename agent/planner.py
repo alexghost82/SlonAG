@@ -3,6 +3,7 @@ import re
 import sys
 from pathlib import Path
 
+from i18n import t
 from mark.tools.builtin import build_builtin_registry
 from mark.tools.registry import ToolRegistry
 
