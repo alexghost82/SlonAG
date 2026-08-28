@@ -35,6 +35,12 @@ class ConfidenceEngine:
 
         Returns a value in [0.0, 1.0].
         """
+        # No evidence → zero confidence
+        if (len(candidate.steps) == 0 and
+                candidate.repetition_count == 0 and
+                candidate.total_executions == 0):
+            return 0.0
+
         components = [
             self._repetition_score(candidate),
             self._success_rate_score(candidate),
@@ -113,25 +119,23 @@ class ConfidenceEngine:
         if len(candidate.steps) == 0:
             return 0.0
 
-        total_slots = 0
-        variable_slots = 0
-
-        seen_keys: dict[str, set[str]] = {}
+        # Track the number of unique values for each argument key
+        key_values: dict[str, set[str]] = {}
         for step in candidate.steps:
-            for key in step.args:
-                if key not in seen_keys:
-                    seen_keys[key] = set()
-                # We can only assess variability if the candidate has
-                # multiple stored steps with the same tool_name
-                seen_keys[key].add(step.tool_name)
-                total_slots += 1
+            for key, value in step.args.items():
+                str_val = str(value) if value is not None else ""
+                if key not in key_values:
+                    key_values[key] = set()
+                key_values[key].add(str_val)
 
-        unique_args = len(seen_keys)
+        total_slots = sum(len(vals) for vals in key_values.values())
         if total_slots == 0:
             return 1.0
 
-        # Fewer unique args relative to total steps = higher variability
-        determinism = 1.0 - (unique_slots / total_slots) if total_slots > 0 else 1.0
+        # More unique values per key = less deterministic = lower score
+        # Average unique-values ratio across all keys
+        avg_ratio = sum(len(vals) for vals in key_values.values()) / total_slots
+        determinism = 1.0 - avg_ratio if avg_ratio > 0 else 1.0
         return max(0.0, determinism)
 
 
@@ -143,6 +147,10 @@ class ConfidenceTracker:
 
     def add(self, name: str, confidence: float) -> None:
         self._scores[name] = confidence
+
+    def record(self, name: str, confidence: float) -> None:
+        """Alias for add — used by E2E tests."""
+        self.add(name, confidence)
 
     def get(self, name: str) -> float:
         return self._scores.get(name, 0.0)

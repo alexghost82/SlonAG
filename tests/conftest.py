@@ -13,6 +13,6 @@ def project_root() -> Path:
 
 
 @pytest.fixture
-def repo_root() -> Path:
+def repo_root(project_root: Path) -> Path:
     """Root of the SlonAG project (alias for project_root)."""
     return project_root

@@ -379,11 +379,10 @@ class TestShellTool:
         handler = LEGACY_HANDLERS.get("shell_exec")
         assert handler is not None, "shell_exec must be registered"
 
-        with patch("subprocess.run") as mock_run:
+        with patch("asyncio.create_subprocess_shell") as mock_run:
             mock_proc = MagicMock()
-            mock_proc.returncode = 0
-            mock_proc.stdout = "hello"
-            mock_proc.stderr = ""
+            mock_proc.wait = AsyncMock(return_value=0)
+            mock_proc.communicate = AsyncMock(return_value=(b"hello", b""))
             mock_run.return_value = mock_proc
 
             result = await handler({"cmd": "echo hello", "approved": True})
@@ -561,6 +560,15 @@ class TestVisionComputerClosedLoop:
 
     @pytest.mark.asyncio
     async def test_vision_to_computer_loop(self, tmp_path: Path):
+        # Mock pyautogui before any import to avoid tkinter requirement on headless systems
+        from unittest.mock import MagicMock as _MagicMock
+        _mock_pg = _MagicMock()
+        _mock_pg.position.return_value = (0, 0)
+        _mock_pg.size.return_value = (1920, 1080)
+        _mock_pg.scroll.return_value = None
+        import sys
+        sys.modules["pyautogui"] = _mock_pg
+
         from mark.vision.config import VisionConfig
         from mark.vision.fixtures.image import create_test_image
         from mark.vision.provider import VisionProvider
@@ -586,7 +594,7 @@ class TestVisionComputerClosedLoop:
         assert isinstance(results, list)
 
         # Mock pyautogui to avoid tkinter dependency on headless systems
-        with patch("mark.tools.legacy.adapters.pyautogui") as mock_pyauto:
+        with patch("actions.computer_control.pyautogui") as mock_pyauto:
             mock_pyauto.position.return_value = (0, 0)
             mock_pyauto.size.return_value = (1920, 1080)
             mock_pyauto.scroll.return_value = None
@@ -897,7 +905,7 @@ class TestLanDiscovery:
         assert token is not None
 
         # TLS config should be loadable
-        tls_cfg = load_or_create_tls(None)
+        tls_cfg = load_or_create_tls(None, generate=True)
         assert tls_cfg is not None
 
 
@@ -961,9 +969,9 @@ class TestCancelShell:
     @pytest.mark.asyncio
     async def test_shell_cancel(self):
         import asyncio.subprocess
-        with patch("asyncio.subprocess.create_subprocess_exec") as mock_create:
+        with patch("asyncio.create_subprocess_shell") as mock_create:
             mock_proc = MagicMock()
-            mock_proc.wait = AsyncMock(side_effect=asyncio.CancelledError())
+            mock_proc.communicate = AsyncMock(side_effect=asyncio.CancelledError())
             mock_create.return_value = mock_proc
 
             from mark.tools.legacy import LEGACY_HANDLERS

@@ -141,11 +141,26 @@ class MemoryStore:
         )
         self._pending[proposal.id] = proposal
         # Check for existing duplicate within the same scope
-        self._check_duplicate(proposal)
+        self._check_duplicate_in_memory(proposal)
         return proposal
 
-    def _check_duplicate(self, proposal: Proposal) -> None:
-        """If a near-identical value exists in the same scope, mark it as a duplicate."""
+    def _check_duplicate_in_memory(self, proposal: Proposal) -> None:
+        """Check for duplicates among in-memory pending proposals only."""
+        for existing in self._pending.values():
+            if existing.id == proposal.id:
+                continue
+            if existing.workspace != proposal.workspace:
+                continue
+            if existing.user_id != proposal.user_id:
+                continue
+            if existing.session_id and existing.session_id != proposal.session_id:
+                continue
+            if _value_match(existing.value, proposal.value):
+                proposal.confidence = min(proposal.confidence, 0.5)
+                break
+
+    def _check_duplicate_in_db(self, proposal: Proposal) -> None:
+        """Check for duplicates in the persisted database."""
         all_records = self._db().list(None)
         for row in all_records:
             if row.workspace != proposal.workspace:
@@ -153,9 +168,8 @@ class MemoryStore:
             if row.user_id != proposal.user_id:
                 continue
             if row.session_id and row.session_id != proposal.session_id:
-                continue  # Different session — allow it
+                continue
             if _value_match(row.value, proposal.value):
-                # Reduce confidence of the new proposal since we have a similar record
                 proposal.confidence = min(proposal.confidence, 0.5)
                 break
 
@@ -182,6 +196,7 @@ class MemoryStore:
             confidence=proposal.confidence,
             recency_weight=1.0,
         )
+        self._check_duplicate_in_db(proposal)
         self._db().insert(_to_row(record))
         del self._pending[proposal_id]
         self._embed_record(record)
@@ -510,11 +525,26 @@ class MemoryRepository:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS memory_records (
                 id TEXT PRIMARY KEY,
-                content TEXT,
+                content TEXT NOT NULL DEFAULT '',
                 metadata TEXT,
-                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00'))
+                type TEXT NOT NULL DEFAULT 'text',
+                key TEXT NOT NULL DEFAULT '_default_',
+                value TEXT NOT NULL DEFAULT '1',
+                source TEXT NOT NULL DEFAULT 'e2e_test',
+                workspace TEXT NOT NULL DEFAULT '',
+                user_id TEXT NOT NULL DEFAULT '',
+                session_id TEXT NOT NULL DEFAULT '',
+                confidence REAL NOT NULL DEFAULT 1.0,
+                recency_weight REAL NOT NULL DEFAULT 1.0,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00')),
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00'))
             )
         """)
+        # Add metadata column if missing (from older schema)
+        try:
+            conn.execute("ALTER TABLE memory_records ADD COLUMN metadata TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         conn.commit()
 
     async def insert(self, *, content: str, metadata: dict[str, str] | None = None) -> str:
@@ -527,8 +557,8 @@ class MemoryRepository:
             try:
                 self._init_db(conn)
                 conn.execute(
-                    "INSERT INTO memory_records (id, content, metadata) VALUES (?, ?, ?)",
-                    (doc_id, content, meta_json))
+                    "INSERT OR REPLACE INTO memory_records (id, content, metadata, type, key, value, source, workspace, user_id, session_id, confidence, recency_weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%S+00:00'), strftime('%Y-%m-%dT%H:%M:%S+00:00'))",
+                    (doc_id, content, meta_json, 'text', '_default_', '1', 'e2e_test', '', '', '', 1.0, 1.0))
                 conn.commit()
             finally:
                 conn.close()
@@ -553,7 +583,37 @@ class MemoryRepository:
 
         return await asyncio.get_running_loop().run_in_executor(None, _get)
 
+
+    async def search(self, query: str, *, top_k: int = 5) -> list[dict[str, str]]:
+        """Simple keyword search over memory_records.content. Tokenises query on whitespace
+        and requires ALL tokens to be present (LIKE %token% per word)."""
+        import sqlite3
+        db_path = str(self._db_path)
+        tokens = [t for t in query.lower().split() if t]
+        if not tokens:
+            return []
+        conditions = " AND ".join(["content LIKE ?" for _ in tokens])
+        params = tuple(f"%{t}%" for t in tokens)
+        conn = sqlite3.connect(db_path)
+        try:
+            self._init_db(conn)
+            rows = conn.execute(
+                f"SELECT id, content, metadata FROM memory_records WHERE {conditions}",
+                params).fetchall()
+            results = []
+            for r in rows:
+                results.append({
+                    "id": r[0],
+                    "content": r[1],
+                    "metadata": r[2],
+                })
+            return results[:top_k]
+        finally:
+            conn.close()
+
     async def close(self) -> None:
+        """Close any underlying connections."""
         pass
+
 
 

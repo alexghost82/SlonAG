@@ -27,7 +27,7 @@ class TriggerType(StrEnum):
     CRON = "cron"
 
 
-@dataclass(frozen=True)
+@dataclass
 class AutomationRecord:
     """One automation schedule with history and recovery support."""
 
@@ -174,7 +174,7 @@ class AutomationEngine:
     def list_rules(self) -> list[str]:
         """Return list of registered automation rule names."""
         with self._lock:
-            return list(self._records.keys())
+            return [rec.name for rec in self._records.values()]
 
     def create(
         self,
@@ -197,6 +197,7 @@ class AutomationEngine:
             workspace_id=workspace_id,
         )
         self._schedule_trigger(record)
+        self._records[record_id] = record
         self._save()
         return record
 

@@ -102,54 +102,8 @@ class MemoryInjector:
             return []
         self._last_user_input = user_input
 
-        # Try to extract facts using the memory_manager LLM-based extractor
-        stored: list[str] = []
-        try:
-            from memory.memory_manager import should_extract_memory, extract_memory
-
-            should = should_extract_memory(user_input, assistant_output)
-            if isinstance(should, bool) and not should:
-                return []
-
-            data = extract_memory(user_input, assistant_output)
-            if not isinstance(data, dict):
-                return []
-
-            from mark.memory.repository import RecordType
-
-            type_map: dict[str, RecordType] = {
-                "identity": RecordType.CONFIRMED_FACTS,
-                "preferences": RecordType.PREFERENCES,
-                "projects": RecordType.PROJECTS,
-                "relationships": RecordType.CONFIRMED_FACTS,
-                "wishes": RecordType.PREFERENCES,
-                "notes": RecordType.SUMMARIES,
-            }
-
-            for category, entries in data.items():
-                if not isinstance(entries, dict):
-                    continue
-                record_type = type_map.get(category, RecordType.SUMMARIES)
-                for key, entry in entries.items():
-                    value = entry["value"] if isinstance(entry, dict) and "value" in entry else str(entry)
-                    if not key or not value:
-                        continue
-                    try:
-                        proposal = self._store.propose(
-                            type=record_type,
-                            key=key,
-                            value=value,
-                            source="agent_loop_extraction",
-                        )
-                        written = self._store.commit(proposal.id)
-                        if written is not None:
-                            stored.append(f"{category}/{key}")
-                    except Exception:
-                        pass
-        except Exception:
-            pass  # Extraction failures are non-fatal
-
-        return stored
+        # Extraction is handled by the LLM-based extractor in agent_loop.
+        return []
 
     # ── scope management ──────────────────────────────────────────────
 

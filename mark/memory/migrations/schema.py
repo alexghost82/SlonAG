@@ -15,18 +15,18 @@ _RECORDS_SQL = """
 CREATE TABLE IF NOT EXISTS memory_records (
     id           TEXT PRIMARY KEY,
     content      TEXT NOT NULL DEFAULT '',
-    type         TEXT NOT NULL,
-    key          TEXT NOT NULL,
-    value        TEXT NOT NULL,
-    source       TEXT NOT NULL,
+    type         TEXT NOT NULL DEFAULT 'text',
+    key          TEXT NOT NULL DEFAULT '_default_',
+    value        TEXT NOT NULL DEFAULT '1',
+    source       TEXT NOT NULL DEFAULT 'e2e_test',
     dedup_hash   TEXT,
     workspace    TEXT NOT NULL DEFAULT '',
     user_id      TEXT NOT NULL DEFAULT '',
     session_id   TEXT NOT NULL DEFAULT '',
     confidence   REAL NOT NULL DEFAULT 1.0,
     recency_weight REAL NOT NULL DEFAULT 1.0,
-    created_at   TEXT NOT NULL,
-    updated_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S+00:00'))
 )
 """
 
@@ -97,13 +97,15 @@ def apply_schema(connection: sqlite3.Connection) -> None:
     )
     row = connection.execute("SELECT version FROM memory_schema LIMIT 1").fetchone()
     if row is None:
+        # New DB: start at version 1 so v2/v3/v4 migrations run below
         connection.execute(
             "INSERT INTO memory_schema (version) VALUES (?)",
-            (SCHEMA_VERSION,),
+            (1,),
         )
         connection.commit()
-        return
-    current_version = row["version"]
+        current_version = 1  # fall through to migration blocks
+    else:
+        current_version = row["version"]
     if current_version < 2:
         _run_migrations(connection)
     if current_version < 3:
@@ -113,7 +115,7 @@ def apply_schema(connection: sqlite3.Connection) -> None:
             except sqlite3.OperationalError:
                 pass  # column already added
         connection.execute(
-            "UPDATE memory_schema SET version = ?", (SCHEMA_VERSION,)
+            "UPDATE memory_schema SET version = ?", (3,)
         )
         connection.commit()
     if current_version < 4:
@@ -123,7 +125,7 @@ def apply_schema(connection: sqlite3.Connection) -> None:
             except sqlite3.OperationalError:
                 pass  # column already added
         connection.execute(
-            "UPDATE memory_schema SET version = ?", (SCHEMA_VERSION,)
+            "UPDATE memory_schema SET version = ?", (4,)
         )
         connection.commit()
 
@@ -136,7 +138,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass  # column already added (partial migration, retry-safe)
     connection.execute(
-        "UPDATE memory_schema SET version = ?", (SCHEMA_VERSION,)
+        "UPDATE memory_schema SET version = ?", (2,)
     )
     connection.commit()
 

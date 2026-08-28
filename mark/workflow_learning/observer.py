@@ -93,6 +93,7 @@ class ActionObserver:
                      started_at: float | None = None,
                      finished_at: float | None = None) -> None:
         """Add one tool execution to the observation buffer."""
+        should_complete = False
         with self._lock:
             self._buffer.append(_BufferEntry(
                 event=event,
@@ -104,7 +105,10 @@ class ActionObserver:
             ))
             # Auto-complete when buffer is full
             if len(self._buffer) >= self._buffer_size:
-                self.mark_complete()
+                should_complete = True
+        # Analyze outside the lock to avoid deadlock (mark_complete re-acquires _lock)
+        if should_complete:
+            self.mark_complete()
 
     def record_step(
         self,

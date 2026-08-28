@@ -15,7 +15,7 @@ from mark.workflow_learning.types import (
 
 
 def _make_observer(**kwargs):
-    store = MagicMock()
+    store = kwargs.pop("store", MagicMock())
     return ActionObserver(store=store, **kwargs)
 
 

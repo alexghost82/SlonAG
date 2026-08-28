@@ -54,7 +54,7 @@ class MemoryDatabase:
                         (id, content, type, key, value, source, dedup_hash, workspace,
                          user_id, session_id, confidence, recency_weight,
                          created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row.id,
@@ -83,7 +83,7 @@ class MemoryDatabase:
                         (id, content, type, key, value, source, dedup_hash, workspace,
                          user_id, session_id, confidence, recency_weight,
                          created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row.id,
@@ -155,6 +155,7 @@ class MemoryDatabase:
                 WHERE id = ?
                 """,
                 (
+                    row.content,
                     row.type,
                     row.key,
                     row.value,
@@ -229,19 +230,19 @@ class MemoryDatabase:
 def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
     return MemoryRow(
         id=str(row["id"]),
-        content=str(row.get("content", "") or ""),
+        content=str(row["content"] or ""),
         type=str(row["type"]),
         key=str(row["key"]),
         value=str(row["value"]),
         source=str(row["source"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
-        dedup_hash=str(row.get("dedup_hash", "") or ""),
-        workspace=str(row.get("workspace", "") or ""),
-        user_id=str(row.get("user_id", "") or ""),
-        session_id=str(row.get("session_id", "") or ""),
-        confidence=float(row.get("confidence", 1.0) or 1.0),
-        recency_weight=float(row.get("recency_weight", 1.0) or 1.0),
+        dedup_hash=str(row["dedup_hash"] or ""),
+        workspace=str(row["workspace"] or ""),
+        user_id=str(row["user_id"] or ""),
+        session_id=str(row["session_id"] or ""),
+        confidence=float(row["confidence"] or 1.0),
+        recency_weight=float(row["recency_weight"] or 1.0),
     )
 
 

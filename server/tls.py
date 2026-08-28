@@ -197,8 +197,12 @@ __all__ = [
 
 
 # E2E test compatibility: load_or_create_tls wrapper
-def load_or_create_tls(repo_root: str | Path | None = None) -> TlsMaterial:
+def load_or_create_tls(
+    repo_root: str | Path | None = None,
+    *,
+    generate: bool = False,
+) -> TlsMaterial:
     """Create or load TLS material for E2E tests."""
     from pathlib import Path as _Path
     r = _Path(repo_root) if repo_root else None
-    return ensure_tls_material(r)
+    return ensure_tls_material(repo_root=r, generate=generate)
