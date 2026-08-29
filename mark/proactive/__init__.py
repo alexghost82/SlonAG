@@ -1,11 +1,10 @@
 """Mark Proactive Agent — production proactive layer.
 
 Provides the ProactiveAgent orchestrator, persistence, notifications,
-provenance tracking, and event-source registry.
+provenance tracking, cooldown, deduplication, relevance filtering,
+and event-source registry.
 
-Re-exports from the root ``proactive.*`` submodules (types, cooldown,
-dedup, policy, loop detection) so callers can import everything from
-``mark.proactive``.
+All public APIs are re-exported from this package root.
 """
 
 from __future__ import annotations
@@ -23,17 +22,21 @@ from mark.proactive.notifications import (
     NotificationRouter,
 )
 
-# ── Provenance ───────────────────────────────────────────────────────────
+# ── Provenance ────────────────────────────────────────────────────────────
 from mark.proactive.provenance import ProvenanceTracker
 
 # ── Filters ──────────────────────────────────────────────────────────────
 from mark.proactive.filters import RelevanceFilter
 
-# ── Registry ─────────────────────────────────────────────────────────────
+# ── Cooldown & Dedup ─────────────────────────────────────────────────────
+from mark.proactive.cooldown import CooldownManager
+from mark.proactive.dedup import DedupManager, DedupKey
+
+# ── Registry ──────────────────────────────────────────────────────────────
 from mark.proactive.registry import EventSourceRegistry, EventSourceConfig
 
-# ── Root-level types (re-export for convenience) ─────────────────────────
-from proactive.types import (
+# ── Root-level types (re-export for convenience) ──────────────────────────
+from mark.proactive.types import (
     ProactiveAgentConfig,
     ProactiveDecision,
     ProactiveOptInStatus,
@@ -58,6 +61,10 @@ __all__: list[str] = [
     "ProvenanceTracker",
     # Filters
     "RelevanceFilter",
+    # Cooldown & Dedup
+    "CooldownManager",
+    "DedupManager",
+    "DedupKey",
     # Registry
     "EventSourceRegistry",
     "EventSourceConfig",

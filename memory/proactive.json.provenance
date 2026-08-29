@@ -1,0 +1,14 @@
+[
+  {
+    "event_id": "49a8f966a08a",
+    "source": "system",
+    "event_type": "test",
+    "filter_result": "pass",
+    "decision": "ignore",
+    "action_type": null,
+    "result_status": "suppressed",
+    "created_at": 1788008830.0395374,
+    "updated_at": 1788008830.0395947,
+    "metadata": {}
+  }
+]
