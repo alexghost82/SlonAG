@@ -215,7 +215,25 @@ class ActionObserver:
     def _create_candidate(
         self, sequence: ActionSequence, seq_hash: str, count: int
     ) -> WorkflowCandidate:
-        """Create a WorkflowCandidate from a repeated sequence."""
+        """Create a WorkflowCandidate from a repeated sequence.
+
+        Only creates a candidate if no dangerous tools (from registry)
+        are present without explicit approval.
+        """
+        # Safety gate: check for dangerous tools
+        from mark.safety import registered_tools, risk_for
+        for step in sequence.steps:
+            try:
+                risk = risk_for(step.tool_name)
+                if risk.value >= 4:  # High-risk tools need extra gating
+                    raise ValueError(
+                        f"High-risk tool '{step.tool_name}' detected. "
+                        f"Workflow requires explicit safety approval before creation."
+                    )
+            except Exception:
+                # Tool not in registry — skip gate
+                pass
+
         # Build a name from the tool chain
         tool_names = [s.tool_name for s in sequence.steps]
         name = "_then_".join(tool_names)
@@ -269,6 +287,25 @@ class ActionObserver:
     # ------------------------------------------------------------------
     # Inspection
     # ------------------------------------------------------------------
+
+    def save_state(self) -> dict[str, Any]:
+        """Export the observer's current state for persistence/restart."""
+        with self._lock:
+            return {
+                "history": dict(self._history),
+                "buffer_size": self._buffer_size,
+                "min_repetitions": self._min_repetitions,
+            }
+
+    def restore_state(self, state: dict[str, Any]) -> None:
+        """Restore observer state from a saved snapshot."""
+        with self._lock:
+            self._history = {
+                k: int(v) for k, v in state.get("history", {}).items()
+            }
+            self._buffer_size = state.get("buffer_size", self._buffer_size)
+            self._min_repetitions = state.get("min_repetitions", self._min_repetitions)
+            self._save_history()
 
     def get_history(self) -> dict[str, int]:
         """Return the full repetition history."""

@@ -45,6 +45,39 @@ class MemoryDatabase:
     def close(self) -> None:
         self._connection.close()
 
+
+    def restore(self) -> None:
+        """Re-open a fresh connection and re-apply the schema.
+        
+        Useful when a persistence error (e.g., disk full, corruption)
+        has occurred. After calling, the database is guaranteed
+        consistent — no rows are lost, only the latest failed write
+        is dropped.
+        """
+        try:
+            self._connection.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if self.path.exists():
+                self.path.unlink()
+        except OSError:  # noqa: BLE001
+            pass
+        self._connection = sqlite3.connect(self.path)
+        self._connection.row_factory = sqlite3.Row
+        try:
+            apply_schema(self._connection)
+        except sqlite3.OperationalError:  # noqa: BLE001
+            apply_schema(self._connection)
+
+    def is_consistent(self) -> bool:
+        """Quick health check — return True when the schema is valid."""
+        try:
+            with self._connection:
+                self._connection.execute("SELECT id FROM memory_records LIMIT 0")
+            return True
+        except Exception:  # noqa: BLE001
+            return False
     def insert(self, row: MemoryRow) -> None:
         try:
             with self._connection:

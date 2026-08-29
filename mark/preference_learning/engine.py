@@ -6,10 +6,13 @@ Manages the full lifecycle:
   - Contradict: handle when new evidence conflicts
   - Retrieve: find relevant preferences for a given context
   - Influence: surface preferences so AgentLoop can use them
+  - Manage: pause, enable, forget, clear, export, bounded storage
 """
 
 from __future__ import annotations
 
+import json
+import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -19,6 +22,7 @@ from typing import Any
 
 from mark.preference_learning.types import (
     Evidence,
+    ExportSummary,
     LearnedItem,
     LearningSource,
     PreferenceAction,
@@ -27,6 +31,7 @@ from mark.preference_learning.types import (
     PreferenceVersion,
     RetrievalContext,
     ConfidenceDecayPolicy,
+    StorageLimits,
     _now,
 )
 from mark.preference_learning.repository import PreferenceRepository
@@ -57,9 +62,10 @@ class PreferenceEngine:
     DECAY_RATE_LINEAR = 0.05          # 5% per day
     DECAY_FACTOR_EXPONENTIAL = 0.95   # 5% per week
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, limits: StorageLimits | None = None) -> None:
         self.repo = PreferenceRepository(db_path)
         self._decay_cache: dict[str, float] = {}
+        self.limits = limits or StorageLimits()
 
     # ===================================================================
     # Ingest — create, update, correct, delete
@@ -112,6 +118,10 @@ class PreferenceEngine:
                 correction_source=active.correction_source,
                 correction_reason=active.correction_reason,
                 deleted=active.deleted,
+                paused=active.paused,
+                pause_reason=active.pause_reason,
+                pause_source=active.pause_source,
+                paused_at=active.paused_at,
                 tags=active.tags if active.tags else (tags or []),
             )
             item.versions.append(new_version)
@@ -143,6 +153,7 @@ class PreferenceEngine:
             )
 
         self.repo.save(item)
+        self._enforce_storage_limits(item)
         return item
 
     def correct_preference(
@@ -239,6 +250,280 @@ class PreferenceEngine:
         self.repo.save(item)
         return True
 
+    def pause_preference(
+        self,
+        key: str,
+        *,
+        reason: str = "",
+        source: LearningSource = LearningSource.MANUAL_ENTRY,
+    ) -> LearningDecision:
+        """Pause a preference so it won't be used but is not deleted.
+
+        Returns a LearningDecision describing the outcome.
+        """
+        item_id = self._find_existing(key)
+        if item_id is None:
+            return LearningDecision(action="ignored", reason=f"No preference to pause: {key}")
+
+        item = self.repo.load(item_id)
+        if item is None:
+            return LearningDecision(action="ignored", reason="Item vanished")
+
+        active = item.active
+        assert active is not None
+
+        if active.paused:
+            return LearningDecision(
+                action="ignored", item_id=item_id,
+                reason="Preference is already paused",
+                old_confidence=active.confidence,
+                new_confidence=active.confidence,
+            )
+
+        now = _now()
+        new_version = PreferenceVersion(
+            id=item_id,
+            version=active.version + 1,
+            type=active.type,
+            action=active.action,
+            priority=active.priority,
+            category=active.category,
+            key=key,
+            value=active.value,
+            description=active.description,
+            confidence=active.confidence,
+            decay_policy=active.decay_policy,
+            created_at=active.created_at,
+            updated_at=now,
+            last_use_at=active.last_use_at,
+            usage_count=active.usage_count,
+            contradicted=active.contradicted,
+            contradiction_evidence=list(active.contradiction_evidence),
+            corrected=active.corrected,
+            correction_source=active.correction_source,
+            correction_reason=active.correction_reason,
+            deleted=active.deleted,
+            paused=True,
+            pause_reason=reason,
+            pause_source=source,
+            paused_at=now,
+            tags=list(active.tags),
+            reinforcement_count=active.reinforcement_count,
+        )
+        item.versions.append(new_version)
+        self.repo.save(item)
+        return LearningDecision(
+            action="paused", item_id=item_id, reason="Preference paused",
+            old_confidence=active.confidence, new_confidence=active.confidence,
+        )
+
+    def enable_preference(
+        self,
+        key: str,
+        *,
+        source: LearningSource = LearningSource.MANUAL_ENTRY,
+    ) -> LearningDecision:
+        """Re-enable a paused preference so it becomes active again.
+
+        Returns a LearningDecision describing the outcome.
+        """
+        item_id = self._find_existing(key)
+        if item_id is None:
+            return LearningDecision(action="ignored", reason=f"No preference to enable: {key}")
+
+        item = self.repo.load(item_id)
+        if item is None:
+            return LearningDecision(action="ignored", reason="Item vanished")
+
+        active = item.active
+        assert active is not None
+
+        if not active.paused:
+            return LearningDecision(
+                action="ignored", item_id=item_id,
+                reason="Preference is not paused",
+                old_confidence=active.confidence,
+                new_confidence=active.confidence,
+            )
+
+        now = _now()
+        new_version = PreferenceVersion(
+            id=item_id,
+            version=active.version + 1,
+            type=active.type,
+            action=active.action,
+            priority=active.priority,
+            category=active.category,
+            key=key,
+            value=active.value,
+            description=active.description,
+            confidence=active.confidence,
+            decay_policy=active.decay_policy,
+            created_at=active.created_at,
+            updated_at=now,
+            last_use_at=active.last_use_at,
+            usage_count=active.usage_count,
+            contradicted=active.contradicted,
+            contradiction_evidence=list(active.contradiction_evidence),
+            corrected=active.corrected,
+            correction_source=active.correction_source,
+            correction_reason=active.correction_reason,
+            deleted=active.deleted,
+            paused=False,
+            pause_reason="",
+            pause_source=LearningSource.MANUAL_ENTRY,
+            paused_at="",
+            tags=list(active.tags),
+            reinforcement_count=active.reinforcement_count,
+        )
+        item.versions.append(new_version)
+        self.repo.save(item)
+        return LearningDecision(
+            action="enabled", item_id=item_id, reason="Preference re-enabled",
+            old_confidence=active.confidence, new_confidence=active.confidence,
+        )
+
+    # ===================================================================
+    # Clear / Export / Bounded Storage
+    # ===================================================================
+
+    def clear_all(self) -> int:
+        """Remove all preferences. Returns count of items removed."""
+        count = self.repo.clear_all()
+        return count
+
+    def export_preferences(self) -> ExportSummary:
+        """Export all preferences as structured data.
+
+        Returns ExportSummary with stats and filtered data (secrets removed).
+        """
+        all_items = self.repo.list_items(include_deleted=True)
+        total_items = len(all_items)
+        total_versions = 0
+        active_items = 0
+        paused_items = 0
+        deleted_items = 0
+
+        exported: list[dict] = []
+        for item in all_items:
+            total_versions += len(item.versions)
+            for v in item.versions:
+                if v.deleted:
+                    deleted_items += 1
+                    break
+            else:
+                for v in item.versions:
+                    if v.paused:
+                        paused_items += 1
+                        break
+                else:
+                    active_items += 1
+
+            # Export with secrets filtered
+            exported.append(self._filter_secrets_from_version(item.to_dict()))
+
+        summary = ExportSummary(
+            total_items=total_items,
+            total_versions=total_versions,
+            active_items=active_items,
+            paused_items=paused_items,
+            deleted_items=deleted_items,
+            exported_data={"items": exported},
+        )
+        return summary
+
+    def enforce_bounded_storage(self) -> int:
+        """Enforce storage limits by removing lowest-confidence deleted items.
+
+        Returns the number of items removed.
+        """
+        removed = 0
+        # Enforce max_items: remove lowest-confidence deleted items first
+        all_items = self.repo.list_items(include_deleted=True)
+
+        # Score items by importance (active > paused > deleted, higher confidence better)
+        def _importance(item: LearnedItem) -> tuple[int, float]:
+            a = item.active
+            if a is None:
+                return (0, 0.0)
+            if a.deleted:
+                return (0, a.confidence)
+            if a.paused:
+                return (1, a.confidence)
+            return (2, a.confidence)
+
+        sorted_items = sorted(all_items, key=_importance)
+
+        # Remove excess deleted items
+        if len(sorted_items) > self.limits.max_items:
+            excess = len(sorted_items) - self.limits.max_items
+            for item in sorted_items:
+                if item.active and item.active.deleted:
+                    if self.repo.delete(item.id):
+                        removed += 1
+                        if removed >= excess:
+                            break
+
+        # Enforce max version history
+        for item in self.repo.list_items(include_deleted=True):
+            if len(item.versions) > self.limits.max_version_history:
+                # Keep oldest and newest, trim the middle
+                extra = len(item.versions) - self.limits.max_version_history
+                # Keep version 1 and the latest, remove extras from the middle
+                keep_indices = {0}
+                keep_indices.add(len(item.versions) - 1)
+                trimmed_versions = [item.versions[i] for i in sorted(keep_indices)]
+                # Update version numbers
+                for i, v in enumerate(trimmed_versions):
+                    v.version = i + 1
+                item.versions = trimmed_versions
+                self.repo.save(item)
+                removed += extra
+
+        return removed
+
+    # ===================================================================
+    # Secret filtering
+    # ===================================================================
+
+    def filter_secrets(self, data: Any) -> Any:
+        """Recursively filter secret-like values from preference data.
+
+        Handles dicts, lists, and strings. Returns cleaned data.
+        """
+        secret_patterns = [
+            r"(?i)password",
+            r"(?i)secret[_-]?[kK]ey",
+            r"(?i)api[_-]?[kK]ey",
+            r"(?i)token",
+            r"(?i)credential",
+            r"(?i)auth",
+            r"(?i)private[_-]?[kK]ey",
+            r"(?i)san",
+        ]
+        compiled = [re.compile(p) for p in secret_patterns]
+
+        def _match_secret_key(k: str) -> bool:
+            for pat in compiled:
+                if pat.search(k):
+                    return True
+            return False
+
+        if isinstance(data, dict):
+            return {k: ("" if _match_secret_key(k) else self.filter_secrets(v)) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self.filter_secrets(v) for v in data]
+        elif isinstance(data, str):
+            # Check if value itself looks like a secret (e.g., a long alphanumeric token)
+            if len(data) > 20 and re.match(r'^[A-Za-z0-9+/=_-]{20,}$', data):
+                return "***FILTERED***"
+            return data
+        return data
+
+    def _filter_secrets_from_version(self, d: dict) -> dict:
+        """Filter secrets from a single exported preference dict."""
+        return self.filter_secrets(d)
+
     # ===================================================================
     # Reinforcement & decay
     # ===================================================================
@@ -288,6 +573,10 @@ class PreferenceEngine:
             correction_source=active.correction_source,
             correction_reason=active.correction_reason,
             deleted=active.deleted,
+            paused=active.paused,
+            pause_reason=active.pause_reason,
+            pause_source=active.pause_source,
+            paused_at=active.paused_at,
             tags=list(active.tags),
             reinforcement_count=active.reinforcement_count + 1,
         )
@@ -354,6 +643,10 @@ class PreferenceEngine:
                     correction_source=active.correction_source,
                     correction_reason=active.correction_reason,
                     deleted=active.deleted,
+                    paused=active.paused,
+                    pause_reason=active.pause_reason,
+                    pause_source=active.pause_source,
+                    paused_at=active.paused_at,
                     tags=list(active.tags),
                     reinforcement_count=active.reinforcement_count,
                 )
@@ -412,6 +705,10 @@ class PreferenceEngine:
             correction_source=active.correction_source,
             correction_reason=active.correction_reason,
             deleted=active.deleted,
+            paused=active.paused,
+            pause_reason=active.pause_reason,
+            pause_source=active.pause_source,
+            paused_at=active.paused_at,
             tags=list(active.tags),
             reinforcement_count=active.reinforcement_count,
         )
@@ -472,6 +769,10 @@ class PreferenceEngine:
             correction_source=active.correction_source,
             correction_reason=active.correction_reason,
             deleted=active.deleted,
+            paused=active.paused,
+            pause_reason=active.pause_reason,
+            pause_source=active.pause_source,
+            paused_at=active.paused_at,
             tags=tags if tags is not None else list(active.tags),
             reinforcement_count=active.reinforcement_count,
         )
@@ -564,7 +865,7 @@ class PreferenceEngine:
         This is called by AgentLoop when it needs to decide something.
         """
         active = item.active
-        if active is None or active.deleted:
+        if active is None or active.deleted or active.paused:
             return context
 
         if active.action == PreferenceAction.APPLY:
@@ -591,6 +892,18 @@ class PreferenceEngine:
             if item.key == key and not item.active.deleted:
                 return item.id
         return None
+
+    def _enforce_storage_limits(self, item: LearnedItem) -> None:
+        """Trim version history if a single item exceeds limits."""
+        if item.versions and len(item.versions) > self.limits.max_version_history:
+            extra = len(item.versions) - self.limits.max_version_history
+            # Keep first and last, trim the middle
+            keep_first = item.versions[0]
+            keep_last = item.versions[-1]
+            trimmed = [keep_first, keep_last]
+            for i, v in enumerate(trimmed):
+                v.version = i + 1
+            item.versions = trimmed
 
 
 # ---------------------------------------------------------------------------

@@ -48,7 +48,7 @@ class MemoryRecord:
     recency_weight: float = 1.0
 
 
-@dataclass(frozen=True)
+@dataclass
 class Proposal:
     """A validated write that is not yet in SQLite."""
 
@@ -326,6 +326,66 @@ class MemoryStore:
                 deleted += 1
         return deleted
 
+
+    def export(self) -> dict[str, list[dict[str, object]]]:
+        """Export all records grouped by type. Secret values are never included."""
+        result: dict[str, list[dict[str, object]]] = {}
+        for rec_type in RecordType:
+            items = [
+                {
+                    "id": r.id,
+                    "key": r.key,
+                    "type": rec_type.value,
+                    "value": r.value,
+                    "source": r.source,
+                    "workspace": r.workspace,
+                    "user_id": r.user_id,
+                    "session_id": r.session_id,
+                    "confidence": r.confidence,
+                    "created_at": r.created_at,
+                    "updated_at": r.updated_at,
+                }
+                for r in self.list(rec_type)
+            ]
+            if items:
+                result[rec_type.value] = items
+        return result
+
+    def inspect(
+        self,
+        *,
+        workspace: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        record_type: RecordType | str | None = None,
+    ) -> dict[str, int]:
+        """Return counts scoped to filters. Keys: total, by_type, scopes."""
+        if record_type is None and workspace is None and user_id is None and session_id is None:
+            rows = self._db().list(None)
+            counts: dict[str, int] = {"total": len(rows)}
+            for row in rows:
+                counts[row.type] = counts.get(row.type, 0) + 1
+            counts["pending"] = len(self._pending)
+            return counts
+        filtered_type = _coerce_type(record_type) if record_type is not None else None
+        type_name = filtered_type.value if filtered_type is not None else None
+        rows = self._db().list(type_name)
+        ws = workspace if workspace is not None else self.default_workspace
+        uid = user_id if user_id is not None else self.default_user
+        sid = session_id if session_id is not None else self.default_session
+        filtered_rows: list[MemoryRow] = []
+        for row in rows:
+            if row.workspace != ws:
+                continue
+            if row.user_id != uid:
+                continue
+            if sid != "" and row.session_id != sid:
+                continue
+            filtered_rows.append(row)
+        counts: dict[str, int] = {"total": len(filtered_rows)}
+        for row in filtered_rows:
+            counts[row.type] = counts.get(row.type, 0) + 1
+        return counts
     def migrate_json(self, old: Mapping[str, object] | Path) -> MigrationStats:
         from mark.memory.migrations.json import migrate_json as _migrate
 

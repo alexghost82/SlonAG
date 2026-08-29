@@ -9,31 +9,40 @@ from __future__ import annotations
 
 from mark.preference_learning.types import (
     ConfidenceDecayPolicy,
+    ExportSummary,
     LearningSource,
     LearnedItem,
+    PauseStatus,
     PreferenceAction,
     PreferenceType,
     PriorityLevel,
     PreferenceVersion,
     RetrievalContext,
+    StorageLimits,
 )
 from mark.preference_learning.repository import (
     PreferenceRepository,
 )
 from mark.preference_learning.engine import (
     PreferenceEngine,
+    PreferenceMatch,
+    LearningDecision,
 )
 
 __all__ = [
     "ConfidenceDecayPolicy",
+    "ExportSummary",
     "LearningSource",
     "LearnedItem",
+    "PauseStatus",
     "PreferenceAction",
-    "PreferenceType",
     "PreferenceEngine",
+    "PreferenceMatch",
     "PreferenceRepository",
     "PreferenceType",
-    "PriorityLevel",
     "PreferenceVersion",
+    "PriorityLevel",
     "RetrievalContext",
+    "StorageLimits",
+    "LearningDecision",
 ]

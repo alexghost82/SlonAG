@@ -65,13 +65,25 @@ def _substitute_template(
 class WorkflowExecutor:
     """Execute parameterized workflows with re-authorization."""
 
+    # High-risk tools that require explicit approval
+    DANGEROUS_TOOLS: frozenset = frozenset({
+        "shell_exec",
+        "system_command",
+        "file_delete",
+        "remote_exec",
+    })
+
     def __init__(
         self,
         safety_policy: SafetyPolicy | None = None,
+        execution_history_max: int = 500,
     ) -> None:
         self._policy = safety_policy or SafetyPolicy()
         self._handlers: dict[str, Callable[..., Any]] = {}
         self._lock = threading.Lock()
+        self._execution_history_max = execution_history_max
+        self._execution_history: list[ExecutionRecord] = []
+        self._approved_workflows: dict[str, int] = {}  # workflow_id -> version approved at
 
     def register_handler(self, tool_name: str, handler: Callable[..., Any]) -> None:
         """Register a handler for a tool (for direct workflow execution)."""
@@ -83,6 +95,37 @@ class WorkflowExecutor:
         with self._lock:
             self._handlers.pop(tool_name, None)
 
+    def _is_dangerous(self, candidate: WorkflowCandidate) -> bool:
+        """Check if any step uses a high-risk tool."""
+        from mark.safety import risk_for
+        for step in candidate.steps:
+            if step.tool_name in self.DANGEROUS_TOOLS:
+                return True
+            try:
+                risk = risk_for(step.tool_name)
+                if risk.value >= 4:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def requires_approval(self, candidate: WorkflowCandidate) -> bool:
+        """Return True if the candidate's workflow requires explicit user approval before execution.
+
+        Dangerous workflows (those containing high-risk tools like shell_exec)
+        cannot be silently self-activated — they require explicit approval.
+        """
+        return self._is_dangerous(candidate)
+
+    def approve_workflow(self, candidate_id: str) -> None:
+        """Mark a workflow as explicitly approved for execution."""
+        with self._lock:
+            self._approved_workflows[candidate_id] = time.time()
+
+    def has_approval(self, candidate_id: str) -> bool:
+        """Check if a workflow has explicit approval."""
+        return candidate_id in self._approved_workflows
+
     def execute_candidate(
         self,
         candidate: WorkflowCandidate,
@@ -90,12 +133,29 @@ class WorkflowExecutor:
         *,
         source: UntrustedSource = UntrustedSource.USER,
         intent: str = "",
+        require_approval: bool = False,
     ) -> ExecutionResult:
         """Execute a workflow candidate with the given parameters.
 
         Each step is authorized and approved independently.
         SafetyPolicy is re-evaluated for every step.
+
+        If ``require_approval`` is True and the workflow is dangerous,
+        execution is blocked until explicit approval is given.
         """
+        # Safety gate: dangerous workflows require explicit approval
+        if require_approval and self._is_dangerous(candidate):
+            if not self.has_approval(candidate.id):
+                return ExecutionResult(
+                    workflow_id=candidate.id,
+                    template_version=candidate.version,
+                    ok=False,
+                    error=f"Workflow '{candidate.name}' contains dangerous tools and requires explicit approval. Call approve_workflow({candidate.id!r}) first.",
+                    started_at=time.time(),
+                    finished_at=time.time(),
+                    parameters_used=parameters,
+                )
+
         result = ExecutionResult(
             workflow_id=candidate.id,
             template_version=candidate.version,
@@ -232,6 +292,15 @@ class WorkflowExecutor:
         result.ok = True
         result.finished_at = time.time()
         return result
+
+    # ------------------------------------------------------------------
+    # Execution history
+    # ------------------------------------------------------------------
+
+    def get_execution_history(self) -> list[ExecutionRecord]:
+        """Return the bounded in-memory execution history."""
+        with self._lock:
+            return list(self._execution_history)
 
     # ------------------------------------------------------------------
     # Internal execution

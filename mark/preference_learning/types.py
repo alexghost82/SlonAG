@@ -19,7 +19,7 @@ class PreferenceType(str, Enum):
     HABIT = "habit"                # Recurring pattern
     CORRECTION = "correction"      # User said "no, do X instead"
     INTERACTION = "interaction"    # Interaction tendency (e.g. prefers concise)
-    PROJECT_CONTEXT = "project"    # Project-specific preference
+    PROJECT_CONTEXT = "project"  # Project-specific preference
 
 
 class LearningSource(str, Enum):
@@ -54,6 +54,13 @@ class ConfidenceDecayPolicy(str, Enum):
     NONE = "none"                  # No decay (explicit preferences)
     LINEAR = "linear"              # -0.05 per day
     EXPONENTIAL = "exponential"    # *0.95 per week
+
+
+class PauseStatus(str, Enum):
+    """Pause state for a preference."""
+    ACTIVE = "active"
+    PAUSED = "paused"
+    DISABLED = "disabled"
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +115,12 @@ class PreferenceVersion:
     correction_reason: str = ""
     deleted: bool = False
 
+    # Pause / disable state
+    paused: bool = False
+    pause_reason: str = ""
+    pause_source: LearningSource = LearningSource.MANUAL_ENTRY
+    paused_at: str = ""
+
     # Tags for filtering
     tags: list[str] = field(default_factory=list)
 
@@ -136,6 +149,10 @@ class PreferenceVersion:
             "correction_source": self.correction_source.value,
             "correction_reason": self.correction_reason,
             "deleted": self.deleted,
+            "paused": self.paused,
+            "pause_reason": self.pause_reason,
+            "pause_source": self.pause_source.value,
+            "paused_at": self.paused_at,
             "tags": self.tags,
         }
 
@@ -165,6 +182,10 @@ class PreferenceVersion:
             correction_source=LearningSource(d.get("correction_source", "manual_entry")),
             correction_reason=d.get("correction_reason", ""),
             deleted=d.get("deleted", False),
+            paused=d.get("paused", False),
+            pause_reason=d.get("pause_reason", ""),
+            pause_source=LearningSource(d.get("pause_source", "manual_entry")),
+            paused_at=d.get("paused_at", ""),
             tags=d.get("tags", []),
         )
 
@@ -178,8 +199,12 @@ class LearnedItem:
 
     @property
     def active(self) -> PreferenceVersion | None:
-        """Return the latest non-deleted version, or the latest version."""
+        """Return the latest non-deleted and non-paused version, or the latest version."""
         versions = sorted(self.versions, key=lambda v: v.version, reverse=True)
+        for v in versions:
+            if not v.deleted and not v.paused:
+                return v
+        # Fall back to latest non-deleted
         for v in versions:
             if not v.deleted:
                 return v
@@ -224,6 +249,36 @@ class RetrievalContext:
     category_filter: str = ""
     min_confidence: float = 0.3
     max_results: int = 5
+
+
+@dataclass
+class StorageLimits:
+    """Configuration for bounded storage."""
+    max_items: int = 200              # Max preference items
+    max_version_history: int = 50     # Max versions per item
+    max_tags_per_item: int = 20       # Max tags per item
+    max_contradiction_evidence: int = 10  # Max evidence entries
+    max_file_size_bytes: int = 5 * 1024 * 1024  # 5 MB DB file cap
+
+
+@dataclass
+class ExportSummary:
+    """Result of an export operation."""
+    total_items: int = 0
+    total_versions: int = 0
+    active_items: int = 0
+    paused_items: int = 0
+    deleted_items: int = 0
+    exported_data: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "total_items": self.total_items,
+            "total_versions": self.total_versions,
+            "active_items": self.active_items,
+            "paused_items": self.paused_items,
+            "deleted_items": self.deleted_items,
+        }
 
 
 def _now() -> str:

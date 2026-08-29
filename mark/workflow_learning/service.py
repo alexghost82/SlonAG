@@ -312,6 +312,60 @@ class WorkflowService:
         return self.store.get_execution(record_id)
 
     # ------------------------------------------------------------------
+    # Permission and approval gates
+    # ------------------------------------------------------------------
+
+    def requires_approval(self, candidate_id: str) -> bool:
+        """Check if a candidate's workflow requires explicit approval.
+
+        Returns True for dangerous workflows (those with high-risk tools
+        like shell_exec, file_delete, etc.) that cannot be silently executed.
+        """
+        c = self.store.get_candidate(candidate_id)
+        if c is None:
+            return False
+        return self.executor.requires_approval(c)
+
+    def approve(self, candidate_id: str) -> tuple[WorkflowCandidate | None, str]:
+        """Explicitly approve a dangerous workflow for execution.
+
+        Returns (candidate, message).
+        """
+        c = self.store.get_candidate(candidate_id)
+        if c is None:
+            return None, "Candidate not found."
+        self.executor.approve_workflow(candidate_id)
+        c.notes = (c.notes + " | APPROVED for execution").strip()
+        self.store.save_candidate(c)
+        return c, f"Workflow '{c.name}' approved for execution."
+
+    def deactivate(self, candidate_id: str) -> tuple[WorkflowCandidate | None, str]:
+        """Deactivate a workflow (set to DEPRECATED).
+
+        Prevents further execution and removes from active use.
+        Returns (candidate, message).
+        """
+        c = self.store.get_candidate(candidate_id)
+        if c is None:
+            return None, "Candidate not found."
+        if c.is_terminal:
+            return c, f"Workflow '{c.name}' is already in terminal state {c.state.value}."
+        c.transition_to(WorkflowState.DEPRECATED)
+        self.store.save_candidate(c)
+        return c, f"Workflow '{c.name}' deactivated."
+
+    def rollback(self, execution_record_id: str) -> tuple[str, str]:
+        """Roll back a previous execution record.
+
+        Marks the record as rolled back in notes.
+        Returns (record_id, message).
+        """
+        record = self.store.rollback_execution(execution_record_id)
+        if record is None:
+            return execution_record_id, "Execution record not found."
+        return execution_record_id, f"Execution {execution_record_id} marked as rolled back."
+
+    # ------------------------------------------------------------------
     # Inspection
     # ------------------------------------------------------------------
 

@@ -238,6 +238,35 @@ class WorkflowStore:
             }
 
     # ------------------------------------------------------------------
+    # Rollback / deactivate
+    # ------------------------------------------------------------------
+
+    def rollback_execution(self, record_id: str) -> ExecutionRecord | None:
+        """Mark an execution record as rolled back."""
+        with self._lock:
+            raw = self._data["executions"].get(record_id)
+            if raw is None:
+                return None
+            record = self._deserialize_execution(raw)
+            record.notes = (record.notes + " | ROLLED BACK").strip()
+            raw["notes"] = record.notes
+            self._data["metadata"]["updated_at"] = time.time()
+            self._flush()
+            return record
+
+    def deactivate_template(self, template_id: str) -> bool:
+        """Deactivate a template (set to DEPRECATED)."""
+        with self._lock:
+            raw = self._data["templates"].get(template_id)
+            if raw is None:
+                return False
+            from mark.workflow_learning.types import WorkflowState
+            raw["state"] = WorkflowState.DEPRECATED.value
+            self._data["metadata"]["updated_at"] = time.time()
+            self._flush()
+            return True
+
+    # ------------------------------------------------------------------
     # Serialization helpers
     # ------------------------------------------------------------------
 

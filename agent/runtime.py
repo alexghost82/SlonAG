@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 import time
 import threading
@@ -162,17 +163,32 @@ class AgentLoopResult:
 
 
 class MemoryContextCallback(Protocol):
-    """Protocol for memory context injection hooks."""
+    """Protocol for memory context retrieval (read-only).
+
+    Called before each model turn to inject relevant memory context.
+    Must return a bounded string (max ~2000 chars) or empty string.
+    Exceptions are caught and logged — memory retrieval never breaks chat.
+    """
 
     def __call__(self, user_input: str) -> str: ...
+
+
+class MemoryWriteCallback(Protocol):
+    """Protocol for memory write-on-turn-complete (persist).
+
+    Called after a final assistant answer (no more tool calls).
+    Must not raise — exceptions are caught and logged.
+    """
+
+    def __call__(self, user_input: str, assistant_output: str) -> None: ...
 
 
 class AgentLoop:
     """Core multi-turn model -> tool -> observation -> model orchestration engine.
 
-    Supports memory integration via optional callbacks:
-    - memory_context_callback: returns memory context text to prepend to messages
-    - memory_on_turn_complete: called after each turn with (user_input, assistant_output)
+    Supports memory integration via two optional callbacks:
+    - memory_context_callback: called BEFORE each model turn to retrieve context (str -> str)
+    - memory_on_turn_complete_callback: called AFTER a final answer to persist (str, str -> None)
     """
 
     def __init__(
@@ -185,6 +201,7 @@ class AgentLoop:
         loop_detector: LoopDetector | None = None,
         cancel_event: threading.Event | None = None,
         memory_context_callback: MemoryContextCallback | None = None,
+        memory_on_turn_complete_callback: MemoryWriteCallback | None = None,
     ) -> None:
         self.provider = provider
         self.tool_executor = tool_executor
@@ -196,7 +213,8 @@ class AgentLoop:
             loop_detector if loop_detector is not None else LoopDetector()
         )
         self.cancel_event = cancel_event
-        self._memory_callback = memory_context_callback
+        self._memory_context_callback = memory_context_callback
+        self._memory_write_callback = memory_on_turn_complete_callback
 
     async def run(
         self,
@@ -421,11 +439,17 @@ class AgentLoop:
                 )
                 if on_turn_complete is not None:
                     on_turn_complete(user_goal, str(response_text) if response_text else "")
-                if self._memory_callback is not None:
+                if self._memory_write_callback is not None:
                     try:
-                        self._memory_callback(user_goal, str(response_text) if response_text else "")
+                        self._memory_write_callback(
+                            user_goal,
+                            str(response_text) if response_text else "",
+                        )
                     except Exception:
-                        pass  # Memory persistence failures are non-fatal
+                        logging.getLogger(__name__).warning(
+                            "memory_write_callback failed (non-fatal): %%s",
+                            exc_info=True,
+                        )
                 return AgentLoopResult(
                     ok=True,
                     final_answer=str(response_text) if response_text else None,
@@ -478,13 +502,16 @@ class AgentLoop:
         if self.provider is None:
             raise RuntimeError(t("error.no_provider_configured"))
 
-        # ── memory context injection ─────────────────────────────────
+        # ── memory context injection (retrieval) ──────────────────────
         memory_context = ""
-        if self._memory_callback is not None:
+        if self._memory_context_callback is not None:
             try:
-                memory_context = self._memory_callback(user_goal)
+                memory_context = self._memory_context_callback(user_goal)
             except Exception:
-                pass  # Memory retrieval failures are non-fatal
+                logging.getLogger(__name__).warning(
+                    "memory_context_callback failed (non-fatal): %%s",
+                    exc_info=True,
+                )
 
         specs = getattr(
             getattr(self.tool_executor, "registry", None), "list", lambda: ()

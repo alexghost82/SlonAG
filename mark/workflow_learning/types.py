@@ -150,17 +150,26 @@ class WorkflowCandidate:
 
     @property
     def is_terminal(self) -> bool:
-        """Return True if workflow is in a terminal state."""
-        return self.state in (
-            WorkflowState.DEPRECATED,
-            WorkflowState.APPROVED,
-            WorkflowState.PARAMETERIZED,
-        )
+        """Return True if workflow is in a terminal state.
+
+        DEPRECATED is the only truly terminal state — workflows
+        in APPROVED, PARAMETERIZED, or ACTIVE can still transition
+        (e.g. ACTIVE -> DEPRECATED).
+        """
+        return self.state == WorkflowState.DEPRECATED
 
     def transition_to(self, new_state: WorkflowState) -> None:
-        """Move to a new state, enforcing the state machine."""
+        """Move to a new state, enforcing the state machine.
+
+        State flow:
+            DRAFT -> CANDIDATE -> APPROVED -> PARAMETERIZED -> ACTIVE
+            DRAFT -> DEPRECATED          CANDIDATE -> DEPRECATED
+            APPROVED -> DEPRECATED       PARAMETERIZED -> DEPRECATED
+            ACTIVE -> DEPRECATED
+            DEPRECATED -> DRAFT | APPROVED (re-examination only)
+        """
         allowed = {
-            WorkflowState.DRAFT: {WorkflowState.CANDIDATE, WorkflowState.APPROVED, WorkflowState.ACTIVE},
+            WorkflowState.DRAFT: {WorkflowState.CANDIDATE, WorkflowState.APPROVED, WorkflowState.ACTIVE, WorkflowState.DEPRECATED},
             WorkflowState.CANDIDATE: {
                 WorkflowState.APPROVED,
                 WorkflowState.DEPRECATED,
@@ -173,8 +182,13 @@ class WorkflowCandidate:
                 WorkflowState.ACTIVE,
                 WorkflowState.DEPRECATED,
             },
-            WorkflowState.ACTIVE: {WorkflowState.DEPRECATED},
-            WorkflowState.DEPRECATED: {WorkflowState.PARAMETERIZED},
+            WorkflowState.ACTIVE: {
+                WorkflowState.DEPRECATED,
+            },
+            WorkflowState.DEPRECATED: {
+                WorkflowState.DRAFT,
+                WorkflowState.APPROVED,
+            },
         }
         if new_state not in allowed.get(self.state, set()):
             raise ValueError(

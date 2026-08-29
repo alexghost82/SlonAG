@@ -59,6 +59,7 @@ class ObjectTracker:
         """
         now = time.time()
         new_detections: dict[str, DetectionResult] = {}
+        new_track_ids: list[str] = []
         for d in detections:
             if d.track_id is not None and d.track_id in self._state:
                 # Re-assign existing track
@@ -74,6 +75,7 @@ class ObjectTracker:
                     tid = self._allocate_id(d.kind, d.label)
                     d.track_id = tid
                     new_detections[tid] = d
+                    new_track_ids.append(tid)
             else:
                 # Existing track ID not matched — keep it as is
                 new_detections[d.track_id] = d
@@ -108,9 +110,15 @@ class ObjectTracker:
         active = dict(self._state)
 
         # Generate appearance events for new detections
-        for tid, d in new_detections.items():
-            if tid not in self._state:
-                pass  # already handled by the constructor check
+        for tid in new_track_ids:
+            if tid in self._state:
+                ts = self._state[tid]
+                events.append(FrameEvent(
+                    event_type=TrackEvent.APPEARANCE,
+                    track_id=tid,
+                    timestamp=now,
+                    description=f"New {ts.kind.value} '{ts.label}' detected",
+                ))
 
         return active, events
 
@@ -120,6 +128,10 @@ class ObjectTracker:
             if len(self._state) >= self.max_tracks:
                 return  # capacity reached
             result.track_id = self._allocate_id(result.kind, result.label)
+            # Add initial appearance and trajectory point for the new detection
+            ts = self._state[result.track_id]
+            ts.add_appearance(result.frame_index, result.bbox, result.confidence)
+            ts.add_trajectory_point(result.frame_index, result.bbox)
 
     def get_track(self, track_id: str) -> TrackingState | None:
         return self._state.get(track_id)

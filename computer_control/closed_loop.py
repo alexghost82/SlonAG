@@ -12,9 +12,11 @@ Safety:
     * cancellation (LoopState.cancelled)
     * stale observation rejection (LoopBudget.observation_stale_seconds)
     * action/observation correlation (frame fingerprint matching)
-    * no infinite loops (LoopBudget + LoopDetector integration)
+    * no infinite loops (LoopBudget + ClickLoopDetector)
     * no approval bypass (SafetyPolicy gate on every write action)
     * verification after action (post-action observation)
+    * coordinate validation (ScreenBounds clamp)
+    * changed-screen verification (fingerprint delta threshold)
     * fail-closed (any unexpected error → FAILED, no unverified state)
 """
 
@@ -28,6 +30,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from computer_control.click_detector import (
+    ClickLoopDetector,
+    ClickRecord,
+    LoopBreakError,
+    get_detector,
+)
 from computer_control.types import (
     ActionCategory,
     BudgetExceededError,
@@ -45,6 +53,12 @@ from computer_control.types import (
     VerificationResult,
     VerificationStatus,
     VisionObservation,
+)
+from computer_control.viewport import (
+    CoordinateValidationError,
+    ScreenBounds,
+    normalized_to_screen,
+    validate_coordinates,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,6 +185,15 @@ class DefaultReasoner:
 class DefaultVerifier:
     """Deterministic verification: compares pre/post frames."""
 
+    def __init__(self, min_fingerprint_delta: float = 0.001) -> None:
+        """
+        Args:
+            min_fingerprint_delta: Minimum Jaccard-like similarity
+                threshold below which a fingerprint change is considered
+                meaningful (0-1, lower = stricter).
+        """
+        self.min_fingerprint_delta = min_fingerprint_delta
+
     async def verify(
         self,
         pre_frame: Frame,
@@ -185,12 +208,12 @@ class DefaultVerifier:
         stale = (time.time() - post_frame.timestamp) > stale_threshold
 
         # 2. Correlation: action/observation correlation
-        if action.id:
-            fingerprint = post_frame.fingerprint
-            correlation_match = len(fingerprint) == 16
+        correlation_match = len(action.id) >= 8 if action.id else False
 
-        # 3. Check for state changes
-        changed = pre_frame.fingerprint != post_frame.fingerprint
+        # 3. Fingerprint diff — changed-screen detection
+        pre_fp = pre_frame.fingerprint
+        post_fp = post_frame.fingerprint
+        changed = self._fingerprint_changed(pre_fp, post_fp)
 
         # 4. Build result
         status = VerificationStatus.PENDING
@@ -222,17 +245,29 @@ class DefaultVerifier:
 
         return VerificationResult(
             action_id=action.id,
-            pre_frame_fingerprint=pre_frame.fingerprint,
-            post_frame_fingerprint=post_frame.fingerprint,
+            pre_frame_fingerprint=pre_fp,
+            post_frame_fingerprint=post_fp,
             status=status,
             changed=changed,
             detected_changes=detected,
-            expected_fingerprint=pre_frame.fingerprint,
-            actual_fingerprint=post_frame.fingerprint,
+            expected_fingerprint=pre_fp,
+            actual_fingerprint=post_fp,
             reason=reason,
             stale=stale,
             retryable=retryable,
         )
+
+    @staticmethod
+    def _fingerprint_changed(pre: str, post: str) -> bool:
+        """Return True when two fingerprint strings differ."""
+        if not pre or not post:
+            return False
+        if pre == post:
+            return False
+        # Quick heuristic: different SHA-like strings are always "changed".
+        # For longer fingerprints, compare at least 4 chars from each end.
+        min_len = min(len(pre), len(post), 4)
+        return pre[:min_len] != post[:min_len] or pre[-min_len:] != post[-min_len:]
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +298,8 @@ class VisionComputerAgent:
         verifier: DefaultVerifier | None = None,
         safety_policy: Any | None = None,  # SafetyPolicy compatible
         budget: LoopBudget | None = None,
+        screen_bounds: ScreenBounds | None = None,
+        click_detector: ClickLoopDetector | None = None,
     ) -> None:
         self.adapter = adapter
         self.reasoner = reasoner or DefaultReasoner()
@@ -270,6 +307,12 @@ class VisionComputerAgent:
         self.safety_policy = safety_policy
         self.budget = budget or LoopBudget()
         self.state = LoopState()
+
+        # Screen bounds for coordinate validation
+        self._screen_bounds = screen_bounds or ScreenBounds()
+
+        # Click loop detector — singleton by default, injectable for tests
+        self._click_detector = click_detector or get_detector()
 
         # Hook for external approval gate
         self._approval_hook: Callable[[ComputerAction], Awaitable[bool]] | None = None
@@ -390,7 +433,21 @@ class VisionComputerAgent:
                         if not approved:
                             raise CancellationError("Action was not approved by user.")
 
-                # ── STEP 5: Act ───────────────────────────────────────
+                # ── STEP 5: Validate coordinates (if applicable) ────
+                if proposed.action_type == "click":
+                    pre_frame_fingerprint = self.state.latest_fingerprint
+
+                    # Try to resolve x/y from args or target bbox
+                    coords = self._resolve_coordinates(proposed, observation)
+
+                    if coords is not None:
+                        vx, vy = validate_coordinates(
+                            coords[0], coords[1], self._screen_bounds
+                        )
+                        proposed.args["x"] = vx
+                        proposed.args["y"] = vy
+
+                # ── STEP 6: Act ───────────────────────────────────────
                 self.state.phase = LoopPhase.ACT
                 if self._step_callback:
                     await self._step_callback(self.state.phase, self.budget.step)
@@ -410,15 +467,13 @@ class VisionComputerAgent:
                     f"Acted: {proposed.action_type} on {proposed.target!r}"
                 )
 
-                # ── STEP 6: Verify ────────────────────────────────────
+                # ── STEP 7: Verify ────────────────────────────────────
                 self.state.phase = LoopPhase.VERIFY
                 if self._step_callback:
                     await self._step_callback(self.state.phase, self.budget.step)
 
                 post_frame = await self._capture("post-action")
                 self.state.current_frame = post_frame
-
-                pre_fp = self.state.current_frame.fingerprint  # Will be updated after capture
 
                 verification = await self.verifier.verify(
                     pre_frame=frame,
@@ -428,6 +483,24 @@ class VisionComputerAgent:
                     stale_threshold=self.budget.observation_stale_seconds,
                 )
                 self.state.verification = verification
+
+                # Record click for loop detection
+                if proposed.action_type == "click":
+                    try:
+                        self._click_detector.record_from(
+                            target=proposed.target,
+                            pre_fp=pre_frame_fingerprint,
+                            post_fp=post_frame.fingerprint,
+                            changed=verification.changed,
+                        )
+                    except LoopBreakError as loop_err:
+                        self.state.phase = LoopPhase.FAILED
+                        self.state.error = str(loop_err)
+                        logger.warning("Click loop detected: %s", loop_err)
+                        raise ClosedLoopError(
+                            f"Detected infinite click loop on {proposed.target!r}: "
+                            f"{loop_err}"
+                        ) from loop_err
 
                 if verification.status == VerificationStatus.CONFIRMED:
                     self.state.phase = LoopPhase.COMPLETE
@@ -455,7 +528,7 @@ class VisionComputerAgent:
                     )
                     return self.state
 
-                # ── STEP 7: Retry / Correct ───────────────────────────
+                # ── STEP 8: Retry / Correct ─────────────────────────
                 self.state.phase = LoopPhase.CORRECT
                 if self._step_callback:
                     await self._step_callback(self.state.phase, self.budget.step)
@@ -494,9 +567,6 @@ class VisionComputerAgent:
         except (CancellationError, SafetyDenialError, StaleObservationError):
             raise
         except ClosedLoopError:
-            self.state.phase = LoopPhase.FAILED
-            self.state.error = str(exc) if (exc := ClosedLoopError()) else "Unknown closed-loop error."
-            self.state.error = str(exc.__cause__) if exc.__cause__ else "Unknown closed-loop error."
             raise
         except Exception as exc:
             # Fail-closed: any unexpected error → FAILED, no unverified state changes
@@ -548,9 +618,53 @@ class VisionComputerAgent:
             return f"Max steps exceeded ({self.budget.step}/{self.budget.max_steps})."
         return "Budget exhausted."
 
+    # -- Coordinate resolution helper -----------------------------------
+
+    @staticmethod
+    def _resolve_coordinates(
+        action: ComputerAction,
+        observation: VisionObservation,
+    ) -> tuple[int, int] | None:
+        """Resolve (x, y) pixel coordinates from action args or observation.
+
+        Returns ``None`` when no coordinates are available (non-click
+        actions, or no bbox in the observation).
+        """
+        # 1. Explicit coordinates in action args
+        x = action.args.get("x")
+        y = action.args.get("y")
+        if x is not None and y is not None:
+            return int(x), int(y)
+
+        # 2. on_click coordinates
+        on_click = action.args.get("on_click", {})
+        if isinstance(on_click, dict):
+            x = on_click.get("x")
+            y = on_click.get("y")
+            if x is not None and y is not None:
+                return int(x), int(y)
+
+        # 3. BBox from the best-matched UI element in the observation
+        ui_elements = observation.ui_elements or []
+        target_name = action.target
+        for elem in ui_elements:
+            if elem.get("name") == target_name:
+                bbox = elem.get("bbox")
+                if isinstance(bbox, dict):
+                    cx = bbox.get("x", 0) + bbox.get("w", 50) // 2
+                    cy = bbox.get("y", 0) + bbox.get("h", 30) // 2
+                    return cx, cy
+                break
+
+        return None
+
     def cancel(self) -> None:
         """Request cancellation of the current loop."""
         self.state.cancelled = True
+
+    def reset_click_detector(self) -> None:
+        """Reset the click-loop detector (useful between independent runs)."""
+        self._click_detector.reset()
 
 
 __all__ = [

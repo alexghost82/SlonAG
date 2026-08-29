@@ -72,3 +72,47 @@ __all__ = [
     "run_computer_control",
     "validate_action",
 ]
+
+# Closed-loop and viewport utilities
+from computer_control.closed_loop import (
+    ComputerAdapterProtocol,
+    DefaultReasoner,
+    DefaultVerifier,
+    TargetGroundingResult,
+    VisionComputerAgent,
+)
+from computer_control.click_detector import (
+    ClickLoopDetector,
+    ClickRecord,
+    LoopBreakError,
+    get_detector,
+    reset_detector,
+)
+from computer_control.viewport import (
+    CoordinateValidationError,
+    ScreenBounds,
+    normalized_to_screen,
+    screen_to_normalized,
+    validate_coordinates,
+)
+
+__all__.extend([
+    # Closed-loop
+    "ComputerAdapterProtocol",
+    "DefaultReasoner",
+    "DefaultVerifier",
+    "TargetGroundingResult",
+    "VisionComputerAgent",
+    # Click loop detector
+    "ClickLoopDetector",
+    "ClickRecord",
+    "LoopBreakError",
+    "get_detector",
+    "reset_detector",
+    # Viewport
+    "CoordinateValidationError",
+    "ScreenBounds",
+    "screen_to_normalized",
+    "normalized_to_screen",
+    "validate_coordinates",
+])

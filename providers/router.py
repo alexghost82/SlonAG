@@ -27,12 +27,13 @@ from providers.registry import get
 from providers.routing import select_model
 
 CLOUD_PROVIDER_IDS = frozenset({"gemini", "openai", "openrouter"})
-LOCAL_PROVIDER_IDS = frozenset({"local", "ollama", "llama_cpp"})
+LOCAL_PROVIDER_IDS = frozenset({"local", "ollama", "llama_cpp", "openai_compat"})
 
 _ADAPTER_MODULES = {
     "gemini": "providers.gemini",
     "openai": "providers.openai",
     "openrouter": "providers.openrouter",
+    "openai_compat": "providers.local",
     "local": "providers.local",
     "ollama": "providers.local",
     "llama_cpp": "providers.local",

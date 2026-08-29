@@ -26,6 +26,9 @@ class TemporalState:
     history: list[dict[str, Any]] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
     max_events: int = 500
+    # Store per-frame labels and trajectory data for multi-frame analysis
+    _frame_labels: dict[int, set[str]] = field(default_factory=dict)
+    _frame_trajectories: dict[str, list[dict[str, float]]] = field(default_factory=dict)
 
     def add_frame(self, frame_index: int, detections: list[DetectionResult]) -> None:
         self.history.append({
@@ -34,7 +37,21 @@ class TemporalState:
             "detection_count": len(detections),
         })
         if len(self.history) > self.max_history:
-            self.history.pop(0)
+            old = self.history.pop(0)
+            self._frame_labels.pop(old.get("frame_index"), None)
+        # Store labels from this frame
+        self._frame_labels[frame_index] = {d.label for d in detections}
+        # Also store trajectory data from detections
+        for d in detections:
+            if d.track_id:
+                if d.track_id not in self._frame_trajectories:
+                    self._frame_trajectories[d.track_id] = []
+                self._frame_trajectories[d.track_id].append({
+                    "cx": d.bbox.center_x,
+                    "cy": d.bbox.center_y,
+                    "frame_index": frame_index,
+                    "timestamp": time.time(),
+                })
 
     def add_event(self, event: Event) -> None:
         self.events.append(event)
@@ -95,6 +112,9 @@ class TemporalAnalyzer:
                             description=f"Object {d.track_id} moving {direction}",
                             extra={"direction": direction, "delta": dx},
                         ))
+                elif len(prev_points) == 1:
+                    # First tracked point — record initial position
+                    pass
 
         return events
 
@@ -110,19 +130,15 @@ class TemporalAnalyzer:
         return list(self.state.history)
 
     def _get_recent_labels(self, window: int = 10) -> set[str]:
-        """Return labels from recent frames.
-        
-        NOTE: This is a simplified implementation. The full implementation would
-        need per-frame detection data stored in the temporal store. Currently
-        returns an empty set — multi-frame label tracking is a planned feature.
-        """
+        """Return labels from recent frames."""
         recent = self.state.history[-window:]
-        return set()  # TODO: collect labels from detection data in recent frames
+        labels: set[str] = set()
+        for frame_info in recent:
+            fi = frame_info.get("frame_index")
+            if fi is not None:
+                labels.update(self.state._frame_labels.get(fi, set()))
+        return labels
 
     def _get_trajectory(self, track_id: str) -> list[dict[str, float]]:
-        """Return trajectory points for a track ID.
-        
-        NOTE: This is a placeholder — tracking store is not yet implemented.
-        Returns empty list. Multi-object tracking is a planned feature.
-        """
-        return []  # TODO: implement tracking store for trajectory data
+        """Return trajectory points for a track ID from temporal store."""
+        return list(self.state._frame_trajectories.get(track_id, []))

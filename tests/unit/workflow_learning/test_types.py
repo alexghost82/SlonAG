@@ -109,10 +109,12 @@ class TestWorkflowCandidate:
         assert c.state == WorkflowState.DEPRECATED
 
     def test_cannot_skip_stages(self):
-        """Should not be able to skip from DRAFT directly to DEPRECATED."""
+        """Should not be able to skip from DRAFT directly to ACTIVE or PARAMETERIZED."""
         c = WorkflowCandidate(name="test")
         with pytest.raises(ValueError):
-            c.transition_to(WorkflowState.DEPRECATED)
+            c.transition_to(WorkflowState.ACTIVE)
+        with pytest.raises(ValueError):
+            c.transition_to(WorkflowState.PARAMETERIZED)
 
     def test_cannot_reactivate_deprecated(self):
         c = WorkflowCandidate(name="test")
@@ -126,13 +128,13 @@ class TestWorkflowCandidate:
         assert c.is_terminal is False
 
         c.transition_to(WorkflowState.APPROVED)
-        assert c.is_terminal is True
+        assert c.is_terminal is False  # APPROVED is not terminal
 
         c.transition_to(WorkflowState.DEPRECATED)
-        assert c.is_terminal is True
+        assert c.is_terminal is True  # DEPRECATED is terminal
 
-        c.transition_to(WorkflowState.PARAMETERIZED)
-        assert c.is_terminal is True
+        c.transition_to(WorkflowState.APPROVED)
+        assert c.is_terminal is False  # Can exit DEPRECATED
 
     def test_updated_at_changes_on_transition(self):
         c = WorkflowCandidate(name="test")

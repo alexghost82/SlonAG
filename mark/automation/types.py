@@ -15,14 +15,20 @@ from uuid import uuid4
 # ── Trigger types ──────────────────────────────────────────────────────────
 
 class TriggerType(StrEnum):
-    ONE_SHOT = "one_shot"           # fire once, then retire
-    RECURRING = "recurring"         # fire at fixed interval
-    CRON = "cron"                   # cron expression (RFC 561)
+    """Types of automation triggers."""
 
+    ONE_SHOT  = "one_shot"   # fire once, then retire
+    RECURRING = "recurring"  # fire at fixed interval
+    CRON      = "cron"       # cron expression (RFC 5617)
+
+
+# ── Status enums ───────────────────────────────────────────────────────────
 
 class AutomationStatus(StrEnum):
+    """Lifecycle states of an automation record (job)."""
+
     PENDING    = "pending"
-    SCHEDULED  = "scheduled"        # waiting for next_run
+    SCHEDULED  = "scheduled"   # waiting for next_run
     RUNNING    = "running"
     COMPLETED  = "completed"
     FAILED     = "failed"
@@ -30,6 +36,8 @@ class AutomationStatus(StrEnum):
 
 
 class ExecutionStatus(StrEnum):
+    """Lifecycle states of a single execution (run)."""
+
     PENDING   = "pending"
     RUNNING   = "running"
     SUCCESS   = "success"
@@ -38,11 +46,11 @@ class ExecutionStatus(StrEnum):
     TIMED_OUT = "timed_out"
 
 
-# ── Engine configuration ────────────────────────────────────────────────────────
+# ── Engine configuration ──────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    """Max retries and back-off strategy for failed executions."""
+    """Back-off strategy for failed executions."""
 
     max_attempts: int = 3                # total tries (1 original + retries)
     initial_delay_seconds: float = 1.0
@@ -55,13 +63,13 @@ class RetryPolicy:
 
 @dataclass(frozen=True)
 class ConcurrencyPolicy:
-    """Limits on concurrent executions per job or globally."""
+    """Limits on concurrent executions."""
 
     max_concurrent_per_job: int = 1      # one execution at a time per job
-    max_concurrent_global: int = 4               # global cap across all jobs
+    max_concurrent_global: int = 4  # global cap
 
 
-# ── Job (schedule) ─────────────────────────────────────────────────────────
+# ── Job (schedule) ────────────────────────────────────────────────────────
 
 @dataclass
 class AutomationJob:
@@ -70,30 +78,30 @@ class AutomationJob:
     id: str = field(default_factory=lambda: uuid4().hex)
     name: str = ""
     trigger_type: TriggerType = TriggerType.ONE_SHOT
-    # ── trigger parameters ─────────────────────────────────────────────
-    cron_expression: str = ""            # e.g. "0 9 * * 1-5" for cron
+    # trigger parameters
+    cron_expression: str = ""            # e.g. "0 9 * * 1-5"
     interval_seconds: float = 0.0        # positive for recurring
-    # ── execution params ───────────────────────────────────────────────
-    payload: dict[str, Any] = field(default_factory=dict)  # tool args dict
+    # execution params
+    payload: dict[str, Any] = field(default_factory=dict)
     goal: str = ""
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
-    # ── state ────────────────────────────────────────────────────────────
+    # state
     status: AutomationStatus = AutomationStatus.PENDING
     enabled: bool = True
     workspace_id: str = "desktop"
     timezone_str: str = "UTC"
-    # ── scheduling ───────────────────────────────────────────────────────
+    # scheduling
     created_at: float = field(default_factory=lambda: time.time())
     next_run_at: float | None = None
     last_run_at: float | None = None
-    # ── history counters ────────────────────────────────────────────────
+    # history counters
     run_count: int = 0
     failure_count: int = 0
     total_attempts: int = 0
-    # ── safety ───────────────────────────────────────────────────────────
-    side_effect_safe: bool = True        # True = auto-retry; False = pause on failure
+    # safety
+    side_effect_safe: bool = True
     last_error: str | None = None
-    # ── concurrency tracking ─────────────────────────────────────────────
+    # concurrency tracking
     active_executions: int = 0
     last_execution_id: str | None = None
 
@@ -102,10 +110,11 @@ class AutomationJob:
 
 @dataclass
 class AutomationExecution:
-    """One run of an AutomationJob."""
+    """One run of an AutomationJob — idempotent via unique execution_id."""
 
     id: str = field(default_factory=lambda: uuid4().hex)
     job_id: str = ""
+    execution_id: str = field(default_factory=lambda: uuid4().hex)  # idempotency key
     status: ExecutionStatus = ExecutionStatus.PENDING
     started_at: float = 0.0
     finished_at: float = 0.0
@@ -119,7 +128,7 @@ class AutomationExecution:
     cancelled_at: float | None = None
 
 
-# ── History entry ──────────────────────────────────────────────────────────
+# ── History entry ──────────────────────────────────────────────────────────────
 
 @dataclass
 class AutomationHistoryEntry:
@@ -138,11 +147,12 @@ class AutomationHistoryEntry:
     result_summary: str = ""
 
 
-# E2E test compatibility shim: simplified AutomationRule for simple dict-based rules
+# ── E2E compatibility shims ───────────────────────────────────────────────
 
 @dataclass
 class AutomationRule:
-    """Simple automation rule for E2E tests (simpler than AutomationJob)."""
+    """Simple automation rule for E2E tests."""
+
     name: str = ""
     trigger: str | dict[str, Any] = "manual"
     action: str | dict[str, Any] = ""

@@ -26,6 +26,8 @@ def load_state(path: str | None = None) -> SelfImprovementState:
     state.candidates_generated = raw.get("candidates_generated", 0)
     state.approved_count = raw.get("approved_count", 0)
     state.rolled_back_count = raw.get("rolled_back_count", 0)
+    state.current_version = raw.get("current_version", "0.0.0")
+    state.audit_log = list(raw.get("audit_log", []))
     state.improvements = {
         k: SelfImprovementRecord._record_from_dict(v)
         for k, v in raw.get("improvements", {}).items()
@@ -41,6 +43,8 @@ def save_state(state: SelfImprovementState, path: str | None = None) -> None:
         "candidates_generated": state.candidates_generated,
         "approved_count": state.approved_count,
         "rolled_back_count": state.rolled_back_count,
+        "current_version": state.current_version,
+        "audit_log": list(state.audit_log),
         "improvements": {
             k: v._to_dict() for k, v in state.improvements.items()
         },

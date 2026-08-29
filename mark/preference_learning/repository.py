@@ -45,7 +45,7 @@ class PreferenceRepository:
                     action               TEXT NOT NULL DEFAULT 'apply',
                     priority             TEXT NOT NULL DEFAULT 'medium',
                     category             TEXT NOT NULL DEFAULT '',
-                    description          TEXT NOT NULL DEFAULT '',
+                    description          TEXT    NOT NULL DEFAULT '',
                     confidence           REAL    NOT NULL DEFAULT 1.0,
                     decay_policy         TEXT    NOT NULL DEFAULT 'none',
                     max_reinforcements   INTEGER NOT NULL DEFAULT 50,
@@ -60,6 +60,10 @@ class PreferenceRepository:
                     correction_source    TEXT    NOT NULL DEFAULT 'manual_entry',
                     correction_reason    TEXT    NOT NULL DEFAULT '',
                     deleted              INTEGER NOT NULL DEFAULT 0,
+                    paused               INTEGER NOT NULL DEFAULT 0,
+                    pause_reason         TEXT    NOT NULL DEFAULT '',
+                    pause_source         TEXT    NOT NULL DEFAULT 'manual_entry',
+                    paused_at            TEXT    NOT NULL DEFAULT '',
                     tags                 TEXT    NOT NULL DEFAULT '[]'
                 )
             """)
@@ -95,8 +99,9 @@ class PreferenceRepository:
                          max_reinforcements, reinforcement_count,
                          created_at, updated_at, last_use_at, usage_count,
                          contradicted, contradiction_evidence, corrected,
-                         correction_source, correction_reason, deleted, tags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         correction_source, correction_reason, deleted,
+                         paused, pause_reason, pause_source, paused_at, tags)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         key=excluded.key, value=excluded.value,
                         version=excluded.version, type=excluded.type,
@@ -112,10 +117,15 @@ class PreferenceRepository:
                         corrected=excluded.corrected,
                         correction_source=excluded.correction_source,
                         correction_reason=excluded.correction_reason,
-                        deleted=excluded.deleted, tags=excluded.tags
+                        deleted=excluded.deleted,
+                        paused=excluded.paused,
+                        pause_reason=excluded.pause_reason,
+                        pause_source=excluded.pause_source,
+                        paused_at=excluded.paused_at,
+                        tags=excluded.tags
                     """,
                     (
-                        item.id,
+                        active.id,
                         active.key,
                         active.value,
                         active.version,
@@ -138,6 +148,10 @@ class PreferenceRepository:
                         active.correction_source.value,
                         active.correction_reason,
                         1 if active.deleted else 0,
+                        1 if active.paused else 0,
+                        active.pause_reason,
+                        active.pause_source.value,
+                        active.paused_at,
                         tags_json,
                     ),
                 )
@@ -222,6 +236,13 @@ class PreferenceRepository:
             finally:
                 conn.close()
 
+    def list_paused_items(self) -> list[LearnedItem]:
+        """List items that have a paused version."""
+        import sqlite3
+
+        items = self.list_items(include_deleted=True)
+        return [i for i in items if any(v.paused for v in i.versions)]
+
     # ------------------------------------------------------------------
     # Search / Retrieve
     # ------------------------------------------------------------------
@@ -235,7 +256,7 @@ class PreferenceRepository:
 
         for item in items:
             active = item.active
-            if active is None or active.deleted:
+            if active is None or active.deleted or active.paused:
                 continue
             score = self._compute_relevance(item, context, task_lower)
             if score > 0:
@@ -286,12 +307,14 @@ class PreferenceRepository:
             "max_reinforcements", "reinforcement_count", "created_at",
             "updated_at", "last_use_at", "usage_count", "contradicted",
             "contradiction_evidence", "corrected", "correction_source",
-            "correction_reason", "deleted", "tags",
+            "correction_reason", "deleted", "paused", "pause_reason",
+            "pause_source", "paused_at", "tags",
         ]
         d = dict(zip(cols, row))
         d["contradicted"] = bool(d["contradicted"])
         d["corrected"] = bool(d["corrected"])
         d["deleted"] = bool(d["deleted"])
+        d["paused"] = bool(d["paused"])
         try:
             tags = json.loads(d.get("tags", "[]"))
         except (json.JSONDecodeError, TypeError):
@@ -324,6 +347,10 @@ class PreferenceRepository:
             correction_source=LearningSource(d.get("correction_source", "manual_entry")),
             correction_reason=d.get("correction_reason", ""),
             deleted=d["deleted"],
+            paused=d["paused"],
+            pause_reason=d.get("pause_reason", ""),
+            pause_source=LearningSource(d.get("pause_source", "manual_entry")),
+            paused_at=d.get("paused_at", ""),
             tags=tags,
         )
         return LearnedItem(

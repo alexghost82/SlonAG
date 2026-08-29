@@ -22,7 +22,10 @@ from .types import (
     WorkflowState,
     WorkflowStep,
     WorkflowTemplate,
+    WorkflowVersionMode,
 )
+from .observer import ActionObserver, WorkflowObserver
+from .confidence import ConfidenceEngine, ConfidenceTracker
 from .observer import ActionObserver
 from .normalizer import Normalizer
 from .confidence import ConfidenceEngine
@@ -35,6 +38,7 @@ __all__ = [
     "ActionSequence",
     "ActionSequenceEvent",
     "ConfidenceEngine",
+    "ConfidenceTracker",
     "ExecutionRecord",
     "ExecutionResult",
     "Normalizer",
@@ -45,6 +49,8 @@ __all__ = [
     "WorkflowStep",
     "WorkflowStore",
     "WorkflowTemplate",
+    "WorkflowVersionMode",
+    "WorkflowObserver",
     "create_workflow_service",
 ]
 
