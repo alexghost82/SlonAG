@@ -632,5 +632,16 @@
     "local_only": "Local only",
     "capabilities_info": "Tool calling, vision, and reasoning capabilities are shown from real model metadata.",
     "model_not_found": "Model not found in catalog — capabilities unknown"
+  },
+  "proactive": {
+    "ok": "Proactive agent operation succeeded.",
+    "invalid_event": "Invalid proactive event structure.",
+    "spam_detected": "Event rate limit exceeded (anti-spam).",
+    "cooldown_active": "Event type is on cooldown.",
+    "permission_denied": "Action denied by permission boundary.",
+    "relevance_too_low": "Event relevance below threshold.",
+    "action_blocked": "Autonomous action is blocked by policy.",
+    "duplicate_event": "Duplicate event collapsed.",
+    "invalid_action": "Action not supported by safe executor."
   }
 }
