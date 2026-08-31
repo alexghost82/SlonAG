@@ -52,3 +52,29 @@ def test_status_uses_injected_provider() -> None:
     assert response.body["model_id"] == "custom"
     assert response.body["active_tasks"] == 2
     assert response.body["pending_approvals"] == 1
+
+
+def test_health_check_no_auth_required() -> None:
+    from server.routes.status import health_check
+
+    response = health_check(is_listening=True, tls_enabled=False, bind_host="127.0.0.1", bind_port=8765)
+    assert response.status_code == 200
+    assert response.body["status"] == "ok"
+    assert "api_key" not in response.body
+
+
+def test_health_check_reflects_tls_state() -> None:
+    from server.routes.status import health_check
+
+    response_tls = health_check(is_listening=True, tls_enabled=True)
+    assert response_tls.body["tls"] is True
+
+    response_plain = health_check(is_listening=True, tls_enabled=False)
+    assert response_plain.body["tls"] is False
+
+
+def test_health_check_reflects_listening_state() -> None:
+    from server.routes.status import health_check
+
+    response = health_check(is_listening=False)
+    assert response.body["status"] == "starting"

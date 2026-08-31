@@ -460,3 +460,139 @@ def test_runtime_safety_confirmation_roundtrips_through_approval_api() -> None:
     worker.join(timeout=2)
     assert decision.status_code == 200
     assert result == [True]
+
+
+# --- CORS tests on the live listener ----------------------------------------
+
+
+def test_health_endpoint_is_accessible_without_auth() -> None:
+    port = _free_loopback_port()
+    listener = DesktopControlListener(bind_host="127.0.0.1", bind_port=port)
+    listener.start()
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/health", method="GET")
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+            body = json.loads(resp.read().decode("utf-8"))
+            assert body["status"] == "ok"
+            assert body["tls"] is False
+    finally:
+        listener.stop()
+
+
+def test_cors_header_present_when_origin_whitelisted() -> None:
+    port = _free_loopback_port()
+    listener = DesktopControlListener(
+        bind_host="127.0.0.1",
+        bind_port=port,
+        cors_allowed_origins=["https://trusted.local"],
+    )
+    listener.start()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/status",
+            method="GET",
+            headers={"origin": "https://trusted.local"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=2)
+            raise AssertionError("expected 401 without auth")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+            assert exc.headers.get("Access-Control-Allow-Origin") == "https://trusted.local"
+    finally:
+        listener.stop()
+
+
+def test_cors_header_not_present_for_unknown_origin() -> None:
+    port = _free_loopback_port()
+    listener = DesktopControlListener(
+        bind_host="127.0.0.1",
+        bind_port=port,
+        cors_allowed_origins=["https://trusted.local"],
+    )
+    listener.start()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/status",
+            method="GET",
+            headers={"origin": "https://unknown.local"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=2)
+            raise AssertionError("expected 401 without auth")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401
+            assert exc.headers.get("Access-Control-Allow-Origin") is None
+    finally:
+        listener.stop()
+
+
+def test_cors_preflight_returns_204_with_allowed_origin() -> None:
+    port = _free_loopback_port()
+    listener = DesktopControlListener(
+        bind_host="127.0.0.1",
+        bind_port=port,
+        cors_allowed_origins=["https://trusted.local"],
+    )
+    listener.start()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/health",
+            method="OPTIONS",
+            headers={"origin": "https://trusted.local"},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            assert resp.status == 204
+            assert resp.headers.get("Access-Control-Allow-Origin") == "https://trusted.local"
+            assert "GET" in resp.headers.get("Access-Control-Allow-Methods", "")
+            assert "POST" in resp.headers.get("Access-Control-Allow-Methods", "")
+            assert "Content-Type" in resp.headers.get("Access-Control-Allow-Headers", "")
+    finally:
+        listener.stop()
+
+
+def test_cors_preflight_rejected_for_unknown_origin() -> None:
+    port = _free_loopback_port()
+    listener = DesktopControlListener(
+        bind_host="127.0.0.1",
+        bind_port=port,
+        cors_allowed_origins=["https://trusted.local"],
+    )
+    listener.start()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/health",
+            method="OPTIONS",
+            headers={"origin": "https://untrusted.local"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=2)
+            raise AssertionError("expected 403 for untrusted origin")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 403
+    finally:
+        listener.stop()
+
+
+def test_health_on_whitelisted_origin_includes_cors_header() -> None:
+    port = _free_loopback_port()
+    listener = DesktopControlListener(
+        bind_host="127.0.0.1",
+        bind_port=port,
+        cors_allowed_origins=["https://trusted.local"],
+    )
+    listener.start()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/health",
+            method="GET",
+            headers={"origin": "https://trusted.local"},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+            body = json.loads(resp.read().decode("utf-8"))
+            assert body["status"] == "ok"
+            assert resp.headers.get("Access-Control-Allow-Origin") == "https://trusted.local"
+    finally:
+        listener.stop()

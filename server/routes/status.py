@@ -1,7 +1,8 @@
-"""GET /v1/status — desktop health without secrets."""
+"""GET /v1/status and /v1/health — desktop health without secrets."""
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 
 from server.routes._common import (
@@ -39,4 +40,35 @@ def get_status(
     return RouteResponse(status_code=200, body=sanitize_body(status.to_dict()))
 
 
-__all__ = ["get_status"]
+def health_check(
+    *,
+    is_listening: bool,
+    tls_enabled: bool = False,
+    bind_host: str = "127.0.0.1",
+    bind_port: int = 8765,
+    uptime: float = 0.0,
+    provider: Callable[[], dict[str, object]] | None = None,
+) -> RouteResponse:
+    """Return readiness status for a health probe.
+
+    No authentication required — health checks must be callable by
+    load-balancers and monitoring systems without credentials.
+    """
+    if provider is not None:
+        extra: dict[str, object] = dict(provider())
+    else:
+        extra = {}
+
+    body: dict[str, object] = {
+        "status": "ok" if is_listening else "starting",
+        "uptime_seconds": uptime,
+        "tls": tls_enabled,
+        "bind_host": bind_host,
+        "bind_port": bind_port,
+        **extra,
+    }
+
+    return RouteResponse(status_code=200, body=sanitize_body(body))
+
+
+__all__ = ["get_status", "health_check"]
