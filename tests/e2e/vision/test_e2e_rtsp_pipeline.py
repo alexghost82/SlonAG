@@ -50,7 +50,7 @@ class TestE2ERTSPPipeline:
         # Create provider with RTSP source
         provider = VisionProvider(
             source_type="rtsp",
-            source_config={"rtsp_url": rtsp_fixture.url},
+            source_config={"rtsp_url": rtsp_fixture.url, "use_tcp_mock": True},
             config=config,
         )
         ok = await provider.start()
@@ -103,7 +103,7 @@ class TestE2ERTSPPipeline:
 
         provider = VisionProvider(
             source_type="rtsp",
-            source_config={"rtsp_url": rtsp_fixture.url},
+            source_config={"rtsp_url": rtsp_fixture.url, "use_tcp_mock": True},
             config=config,
         )
         await provider.start()
@@ -131,7 +131,7 @@ class TestE2ERTSPPipeline:
 
         provider = VisionProvider(
             source_type="rtsp",
-            source_config={"rtsp_url": rtsp_fixture.url},
+            source_config={"rtsp_url": rtsp_fixture.url, "use_tcp_mock": True},
             config=config,
         )
         await provider.start()
@@ -157,7 +157,7 @@ class TestE2ERTSPPipeline:
 
         provider = VisionProvider(
             source_type="rtsp",
-            source_config={"rtsp_url": rtsp_fixture.url},
+            source_config={"rtsp_url": rtsp_fixture.url, "use_tcp_mock": True},
             config=config,
         )
         await provider.start()
@@ -182,7 +182,7 @@ class TestE2ERTSPPipeline:
 
         provider = VisionProvider(
             source_type="rtsp",
-            source_config={"rtsp_url": rtsp_fixture.url},
+            source_config={"rtsp_url": rtsp_fixture.url, "use_tcp_mock": True},
             config=config,
         )
         await provider.start()
@@ -291,6 +291,7 @@ class TestE2EReconnect:
         )
 
         img_path = tmp_path / "test.png"
+        from mark.vision.fixtures.image import create_test_image
         create_test_image(path=str(img_path))
 
         provider = VisionProvider(

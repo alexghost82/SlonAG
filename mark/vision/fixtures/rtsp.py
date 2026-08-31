@@ -127,23 +127,24 @@ class RTSPFixture:
 
     async def _handle_client(self, reader: asyncio.StreamReader,
                              writer: asyncio.StreamWriter) -> None:
-        """Handle a single client connection."""
-        try:
-            while self._running:
-                data = await asyncio.wait_for(reader.read(4096), timeout=2.0)
-                if not data:
-                    break
+        """Handle a single client connection.
 
-                # Simplified RTSP-like: respond with frames on request
+        Waits for an initial HTTP request then continuously streams frames.
+        """
+        try:
+            # Wait for initial HTTP request from the client
+            data = await asyncio.wait_for(reader.read(4096), timeout=5.0)
+            if not data:
+                return
+
+            # Stream frames continuously without waiting for further requests
+            while self._running:
                 frame = self._get_frame()
                 if frame is not None:
-                    # Send frame size + data
                     size = len(frame).to_bytes(4, "big")
                     writer.write(size + frame)
                     await writer.drain()
-                    await asyncio.sleep(1.0 / self.fps)
-                else:
-                    await asyncio.sleep(1.0 / self.fps)
+                await asyncio.sleep(1.0 / self.fps)
         except (asyncio.TimeoutError, ConnectionResetError):
             pass
         finally:

@@ -255,7 +255,15 @@ class CameraSource(FrameSourceBase):
 class RTSPSource(FrameSourceBase):
     """Acquire frames from an RTSP stream.
 
-    Uses ffmpeg subprocess. Supports automatic reconnect on failure.
+    Uses ffmpeg subprocess (real RTSP) or TCP socket (test fixture).
+    Supports automatic reconnect on failure.
+
+    Parameters
+    ----------
+    config : AcquisitionConfig
+        Must contain ``rtsp_url`` in ``extra`` (default rtsp://localhost:8554/live).
+        Tests can pass ``use_tcp_mock=True`` in ``extra`` to connect to
+        a mock RTSP fixture server instead of spawning ffmpeg.
     """
 
     def __init__(self, config: AcquisitionConfig) -> None:
@@ -263,23 +271,46 @@ class RTSPSource(FrameSourceBase):
         self.stream_url = config.extra.get("rtsp_url", "rtsp://localhost:8554/live")
         self._process = None
         self._frame_index = 0
+        self._use_tcp_mock: bool = config.extra.get("use_tcp_mock", False)
+        self._tcp_reader = None
+        self._tcp_writer = None
+        self._tcp_connected: bool = False
+
+    def _parse_rtsp_port(self) -> int:
+        """Extract the TCP port from an rtsp:// URL."""
+        try:
+            host_part = self.stream_url.split("://")[1].split("/")[0]
+            if ":" in host_part:
+                return int(host_part.split(":")[1])
+            return 554  # default RTSP port
+        except (IndexError, ValueError):
+            return 8554  # default mock port
 
     def _start_impl(self) -> None:
-        import subprocess  # noqa: F401
-        self._process = subprocess.Popen(
-            [
-                "ffmpeg", "-nostdin", "-y",
-                "-fflags", "nobuffer",
-                "-rtsp_transport", "tcp",
-                "-i", self.stream_url,
-                "-f", "image2pipe",
-                "-vcodec", "mjpeg",
-                "-pix_fmt", "yuvj444p",
-                "pipe:1",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        self._tcp_connected = False
+        if self._use_tcp_mock:
+            # Mock mode: connection is established in _tcp_connect (async).
+            # is_connected() will be called synchronously by start(), so we
+            # need to signal that a lazy connect is expected.
+            self._lazy_connect_pending = True
+        else:
+            # Real RTSP: spawn ffmpeg subprocess
+            import subprocess  # noqa: F401
+            self._process = subprocess.Popen(
+                [
+                    "ffmpeg", "-nostdin", "-y",
+                    "-fflags", "nobuffer",
+                    "-rtsp_transport", "tcp",
+                    "-i", self.stream_url,
+                    "-f", "image2pipe",
+                    "-vcodec", "mjpeg",
+                    "-pix_fmt", "yuvj444p",
+                    "pipe:1",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self._buf = b""  # accumulated raw bytes for MJPEG parsing
 
     def _stop_impl(self) -> None:
         if self._use_tcp_mock:
@@ -290,6 +321,7 @@ class RTSPSource(FrameSourceBase):
             except Exception:
                 pass
             self._tcp_reader = None
+            self._tcp_connected = False
         elif self._process is not None:
             try:
                 self._process.terminate()
@@ -298,32 +330,47 @@ class RTSPSource(FrameSourceBase):
                 self._process.kill()
                 self._process.wait()
             self._process = None
+        self._buf = b""
 
     async def acquire_frame(self) -> Frame | None:
         if self._use_tcp_mock:
-            if self._tcp_writer is None or self._tcp_reader is None:
+            return await self._acquire_mock_frame()
+        return await self._acquire_subprocess_frame()
+
+    async def _acquire_mock_frame(self) -> Frame | None:
+        """Read a single frame from the mock RTSP fixture server."""
+        try:
+            if self._tcp_reader is None or self._tcp_writer is None:
                 await self._tcp_connect()
+                # Clear lazy-connect flag on successful connect
+                self._lazy_connect_pending = False
             if self._tcp_reader is None or self._tcp_writer is None:
                 return None
-            try:
-                size_data = await self._tcp_reader.readexactly(4)
-                size = int.from_bytes(size_data, "big")
-                raw = await self._tcp_reader.readexactly(size)
-                self._frame_index += 1
-                return Frame(
-                    index=self._frame_index,
-                    source=FrameSource.RTSP_STREAM,
-                    raw=raw,
-                    stream_url=self.stream_url,
-                )
-            except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
+
+            # Read 4-byte big-endian size prefix
+            size_data = await asyncio.wait_for(
+                self._tcp_reader.readexactly(4), timeout=2.0
+            )
+            if not size_data:
+                # Connection closed
+                self._tcp_connected = False
                 return None
-        if self._process is None or self._process.stdout is None:
-            return None
-        try:
-            raw = self._process.stdout.read(2_000_000)  # ~2MB per frame
+            size = int.from_bytes(size_data, "big")
+
+            # Clamp max frame size to prevent memory issues
+            max_frame = 5_000_000  # 5MB
+            if size > max_frame:
+                # Invalid frame — skip and try next
+                self._tcp_connected = False
+                return None
+
+            raw = await asyncio.wait_for(
+                self._tcp_reader.readexactly(size), timeout=2.0
+            )
             if not raw:
+                self._tcp_connected = False
                 return None
+
             self._frame_index += 1
             return Frame(
                 index=self._frame_index,
@@ -331,16 +378,54 @@ class RTSPSource(FrameSourceBase):
                 raw=raw,
                 stream_url=self.stream_url,
             )
-        except Exception:
+        except (asyncio.IncompleteReadError, ConnectionResetError, OSError, asyncio.TimeoutError):
+            self._tcp_connected = False
+            self._lazy_connect_pending = False
             return None
+
+    async def _acquire_subprocess_frame(self) -> Frame | None:
+        """Read a single JPEG frame from the ffmpeg subprocess."""
+        if self._process is None or self._process.stdout is None:
+            return None
+
+        # Try to find the next complete JPEG frame in the buffer
+        while True:
+            start = self._buf.find(b"\xff\xd8")  # JPEG SOI marker
+            if start == -1:
+                # No SOI found — read more data
+                chunk = await asyncio.to_thread(self._process.stdout.read, 65536)
+                if not chunk:
+                    return None
+                self._buf += chunk
+                continue
+
+            # Search for JPEG EOI marker after SOI
+            end = self._buf.find(b"\xff\xd9", start + 2)
+            if end != -1:
+                # Found a complete JPEG frame
+                jpeg_data = self._buf[: end + 2]
+                self._buf = self._buf[end + 2:]
+                self._frame_index += 1
+                return Frame(
+                    index=self._frame_index,
+                    source=FrameSource.RTSP_STREAM,
+                    raw=jpeg_data,
+                    stream_url=self.stream_url,
+                )
+            else:
+                # Incomplete — read more
+                chunk = await asyncio.to_thread(self._process.stdout.read, 65536)
+                if not chunk:
+                    return None
+                self._buf += chunk
 
     def is_connected(self) -> bool:
         if self._use_tcp_mock:
-            return (
-                self._tcp_writer is not None
-                and self._tcp_reader is not None
-                and not self._tcp_writer.is_closing()
-            )
+            # In mock mode, if connect hasn't happened yet, treat
+            # as potentially connecting (lazy-connect is pending).
+            if getattr(self, "_lazy_connect_pending", False):
+                return True  # will be validated when we try to read
+            return self._tcp_connected
         return (
             self._process is not None
             and self._process.poll() is None
@@ -348,15 +433,24 @@ class RTSPSource(FrameSourceBase):
         )
 
     async def _tcp_connect(self) -> None:
-        """Connect to the mock RTSP server via TCP."""
-        import socket
+        """Connect to the mock RTSP fixture server via TCP.
+
+        Sends a simple HTTP-GET request so the mock fixture server
+        starts streaming frames back.
+        """
         port = self._parse_rtsp_port()
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection("127.0.0.1", port), timeout=3.0
             )
+            # Send a simple request so the fixture server starts sending frames
+            request = b"GET /live HTTP/1.0\r\nHost: localhost\r\n\r\n"
+            writer.write(request)
+            await writer.drain()
             self._tcp_reader = reader
             self._tcp_writer = writer
+            self._tcp_connected = True
         except Exception:
             self._tcp_reader = None
             self._tcp_writer = None
+            self._tcp_connected = False
