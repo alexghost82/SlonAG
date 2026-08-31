@@ -17,9 +17,45 @@ build/
 
 # Secrets and local settings
 .env
+.env.local
+.env.production
+.env.staging
+.env.*.local
 config/api_keys.json
+config/api_keys.json.bak
 config/settings.json
 config/settings.local.json
+config/settings.secret.json
+
+# Credentials and key files
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.secret
+*.credentials
+sk-*
+!sk-placeholder-key
+*.bearer
+*.token
+
+# Cloud / platform provider keys
+AIza*
+AKIA*
+ASIA*
+ghs_*
+ghp_*
+gho_*
+ghu_*
+ghr_*
+ghs_*
+xox[bpsa]-*
+sk-ant-*
+
+# Private keys
+-----BEGIN.*PRIVATE KEY-----
 
 # User memory and local data
 memory/*.json
