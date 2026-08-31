@@ -254,16 +254,16 @@ def validate_path(
         roots = (roots,)
 
     if not path_raw or not path_raw.strip():
-        return None
+        raise PathDenied("Empty path.")
 
     # Check for traversal components before resolution
     if _has_traversal_component(path_raw):
-        return None
+        raise TraversalDetected("Path contains traversal components.")
 
     try:
         base = Path(path_raw).expanduser()
     except (TypeError, ValueError):
-        return None
+        raise PathDenied("Invalid path format.")
 
     # If the path is relative, resolve it relative to the first root.
     # This ensures that "new.txt" with roots=(workspace,) resolves to
@@ -277,19 +277,19 @@ def validate_path(
     try:
         resolved = base.resolve(strict=False)
     except OSError:
-        return None
+        raise PathDenied("Path validation failed.")
 
     # Check for traversal after resolution (edge case with special filesystems)
     if _has_traversal_component(resolved.as_posix()):
-        return None
+        raise TraversalDetected("Resolved path contains traversal.")
 
     # System path check (raw + resolved)
     if _is_forbidden_system_path(resolved):
-        return None
+        raise PathDenied(f"System path denied: {resolved}")
 
     # Allowlist check
     if not any(_safe_relative(resolved, r) is not None for r in roots):
-        return None
+        raise PathDenied(f"Path outside allowlist: {resolved}")
 
     # Symlink escape check — must check the ORIGINAL path before resolution,
     # because resolve() already follows symlinks and the resolved path no longer
@@ -302,7 +302,13 @@ def validate_path(
             for part in parts[1:]:
                 current = current / part
                 if current.exists() and current.is_symlink():
-                    return None  # Block all symlinks when not allowed
+                    real = current.resolve()
+                    if not any(
+                        _safe_relative(real, r) is not None for r in roots
+                    ):
+                        raise SymlinkEscape(
+                            f"Symlink at {current} points outside allowlist ({real})."
+                        )
         except OSError:
             pass
     else:
@@ -469,3 +475,39 @@ __all__ = [
     "validate_path",
     "validate_write_size",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Public API: sanitize_path
+# ---------------------------------------------------------------------------
+
+
+def sanitize_path(
+    path_raw: str, allowlist_roots: tuple[str, ...] | None = None
+) -> str:
+    """Resolve and normalise *path_raw* to a safe absolute path.
+
+    Raises ``PathDenied`` on traversal escape.
+    """
+    if not path_raw or not isinstance(path_raw, str):
+        raise PathDenied("Empty or non-string path.")
+
+    cleaned = path_raw.replace("\\", "/")
+    parts = cleaned.split("/")
+    if ".." in parts:
+        raise PathDenied("Path contains '..' traversal.")
+
+    try:
+        resolved = Path(path_raw).expanduser().resolve()
+    except (TypeError, ValueError, OSError) as exc:
+        raise PathDenied(f"Invalid path: {exc}") from exc
+
+    if ".." in resolved.as_posix().split("/"):
+        raise PathDenied("Resolved path still contains traversal.")
+
+    if allowlist_roots is not None and len(allowlist_roots) > 0:
+        roots = [Path(r) for r in allowlist_roots]
+        if not any(_safe_relative(resolved, r) is not None for r in roots):
+            raise PathDenied("Path is outside the allowlist roots.")
+
+    return str(resolved)

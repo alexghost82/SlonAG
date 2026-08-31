@@ -89,9 +89,9 @@ class TestPathTraversal(TestCase):
         self.addCleanup(_cleanup, self.ws)
 
     def test_dotdot_in_path(self):
-        self.assertRaises(PathDenied, validate_path, "../etc", self.roots)
-        self.assertRaises(PathDenied, validate_path, "foo/../../etc", self.roots)
-        self.assertRaises(PathDenied, validate_path, "./../etc", self.roots)
+        self.assertRaises((PathDenied, TraversalDetected), validate_path, "../etc", self.roots)
+        self.assertRaises((PathDenied, TraversalDetected), validate_path, "foo/../../etc", self.roots)
+        self.assertRaises((PathDenied, TraversalDetected), validate_path, "./../etc", self.roots)
 
     def test_symlink_traversal(self):
         # Create a symlink that points outside the workspace
