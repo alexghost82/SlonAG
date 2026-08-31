@@ -75,3 +75,13 @@ def require_provider_match(model: ModelInfo, provider_id: str) -> None:
             provider_id=provider_id,
             model_id=model.model_id,
         )
+
+__all__ = [
+    "KNOWN_ROLES",
+    "ROLE_CAPABILITY_FLAGS",
+    "require_capability",
+    "require_capabilities",
+    "require_provider_match",
+    "supports",
+]
+
