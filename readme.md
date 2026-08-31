@@ -1,137 +1,136 @@
 # Slon — AI Assistant Runtime Engine
 
-**Slon** — кроссплатформенный AI-ассистент с голосовым интерфейсом, компьютерным контролем и набором инструментов для автоматизации. Агрегирует LLM-провайдеров (Google Gemini, OpenAI, локальные модели), управляет задачами через планировщик и предоставляет UI на PyQt6.
+**Slon** is a cross-platform AI assistant runtime engine with voice interface, desktop control, and a toolbox of automation actions. It aggregates LLM providers (Google Gemini, OpenAI, OpenRouter, local models via Ollama / LlamaCPP), manages tasks through a planner, and provides both a PyQt6 desktop GUI and a headless server API.
 
-## Возможности
+## Features
 
-- **Многопровайдерность** — Gemini, OpenAI, Ollama, LlamaCPP через единый интерфейс `providers/`
-- **Голосовой ввод/вывод** — STT (Whisper) и TTS (Piper) для hands-free взаимодействия
-- **Компьютерный контроль** — управление окнами, скриншоты, клавиатура, мышь, буфер обмена (pyautogui, mss, cv2)
-- **Инструменты (actions/)** — веб-поиск, погода, браузер, YouTube, файловый менеджер, напоминания, отправка сообщений, разработка ПО
-- **Планировщик задач** — `agent/planner.py` + `task_queue` для приоритизации и async-выполнения
-- **Память** — долговременное хранилище через `memory/memory_manager.py`
-- **Сессии** — менеджер сессий с транскриптами и миграциями (`sessions/`)
-- **Gateway** — шлюз авторизации, approval-проверок, веб-сокетов и аутентификации
-- **Live Video** — стриминг камеры через сервер (`server/live_video.py`)
-- **Политики** — управление стоимостью, fallback-стратегии (`policies/`)
-- **i18n** — локализация (ru/en) через `localization/`
-- **Server** — REST + WebSocket API, TLS, QR-спаривание, Bonjour-обнаружение
+- **Multi-provider** — Gemini, OpenAI, OpenRouter, Ollama, and LlamaCPP through a unified `providers/` interface
+- **Voice I/O** — STT (Whisper) and TTS (Piper) for hands-free interaction
+- **Desktop control** — window management, screenshots, keyboard/mouse simulation, clipboard (pyautogui, mss, cv2)
+- **Actions (actions/)** — web search, weather, browser automation, YouTube, file management, reminders, messaging, code assistance, shell execution
+- **Task planner** — `agent/planner.py` + `task_queue` for prioritized async execution
+- **Memory** — long-term storage via `memory/memory_manager.py`
+- **Sessions** — session manager with transcripts and migrations (`sessions/`)
+- **Gateway** — authenticated authorization, approval gates, websockets, and device pairing
+- **Live Video** — camera streaming via the server (`server/live_video.py`)
+- **Policies** — cost management and fallback strategies (`policies/`)
+- **i18n** — Russian/English localization (`i18n/`, `localization/`)
+- **Server** — REST + WebSocket API with TLS, QR pairing, and Bonjour discovery
 
-## Архитектура
+## Architecture
 
 ```
-main.py                  ← Точка входа, инициализация UI и агента
-ui.py                    ← PyQt6 GUI (чат, лог, ввод, настройки)
-├── actions/             ← Инструменты (web_search, weather, browser, ... )
-├── agent/               ← Планировщик, executor, error_handler, steering
-├── config/              ← Схема настроек, секреты, schema
-├── gateway/             ← Шлюз: auth, bootstrap, router, websocket, approvals
-├── i18n/                ← JSON-словари локализации (ru, en)
-├── localization/        ← Python i18n translator, scan, locale catalogs
-├── mark/                ← Runtime bridge, desktop control plane
-├── memory/              ← Долговременная память, config manager
-├── orchestration/       ← Оркестрация подзадач
-├── policies/            ← Cost control, fallback
-├── providers/           ← Абстракция провайдеров (OpenAI compatible, router, capabilities)
-├── runtime/             ← Audio pipeline, lifecycle events, benchmark
-├── server/              ← HTTP/WS API, TLS, QR, bonjour, live_video, pairing
-├── sessions/            ← Сессии, транскрипты, store, migrations
-├── speech/              ← STT (Whisper), TTS (Piper), playback
-├── tests/               ← Pytest-тесты
-└── core/prompt.txt      ← Системный промпт ассистента
+main.py                  ← Entry point: initializes UI, agent runtime, and lifecycle
+ui/                      ← PyQt6 GUI (SlonUI / JarvisUI)
+├── actions/             ← Tool actions (web_search, weather, browser, shell_exec, ...)
+├── agent/               ← Planner, executor, error handler, steering, latency
+├── config/              ← Settings schema, secrets loader, onboarding
+├── computer_control/    ← Platform-specific desktop control (_macos, _linux, _windows)
+├── core/prompt.txt      ← System prompt for the assistant
+├── gateway/             ← Authenticated gateway: auth, bootstrap, router, websocket, approvals
+├── i18n/                ← i18n JSON dictionaries (ru, en)
+├── localization/        ← Python i18n translator and locale scanner
+├── mark/                ← Runtime bridge, desktop control plane, safety, MCP tools
+├── memory/              ← Long-term memory and config manager
+├── orchestration/       ← Sub-task orchestration and dependency tracking
+├── policies/            ← Cost control, fallback strategies
+├── proactive/           ← Proactive scheduling, cooldown, loop detection
+├── providers/           ← Provider abstraction (OpenAI-compatible, router, capabilities)
+│   ├── gemini/          ← Google Gemini adapter
+│   ├── openai/          ← OpenAI adapter
+│   ├── openrouter/      ← OpenRouter adapter
+│   └── local/           ← Ollama and LlamaCPP adapters
+├── runtime/             ← Audio pipeline, lifecycle, benchmark, tool bridge
+├── server/              ← HTTP/WS server: TLS, QR, Bonjour, live video, pairing
+├── sessions/            ← Session store, transcripts, migrations
+├── speech/              ← STT (Whisper) and TTS (Piper) engines
+├── tests/               ← Pytest test suite (unit, integration, security, offline)
+└── workflow_learning/   ← Confidence tracking and observation store
 ```
 
-## Установка
+## Supported Platforms
 
-### Системные требования
+| Platform | Minimum version | Notes |
+|----------|----------------|-------|
+| macOS    | 12 (Monterey)  | Full feature set; desktop control via macOS Accessibility API |
+| Linux    | Ubuntu 20.04+  | X11/Wayland; requires `libx11-dev`, `libxrandr-dev`, `libgtk-3-dev` |
+| Windows  | 10             | Full feature set; COM-based window management |
 
-- **Python 3.11** или 3.12
-- **macOS** 12+, **Ubuntu** 20.04+, или **Windows** 10+
-- Оперативная память: ≥ 4 ГБ (рекомендуется 8 ГБ)
-- Для локальных моделей (Ollama/LlamaCPP): GPU с VRAM ≥ 4 ГБ
+**Python:** 3.11 – 3.12 (exclusive of 3.13)
+**RAM:** ≥ 4 GB (8 GB recommended); more required for local models
+
+## Installation
+
+### Prerequisites
+
+- **Python 3.11** or **3.12**
+- **git**
 
 ### macOS
 
 ```bash
-# 1. Установите Python 3.11+ (если нет)
+# 1. Install Python 3.12 (if not present)
 brew install python@3.12
 
-# 2. Клонируйте репозиторий
+# 2. Clone the repository
 git clone https://github.com/alexghost82/SlonAG.git
-cd SlonAG
+cd SlonAG/SlonAG-fix-worktrees/25  # adjust path as needed
 
-# 3. Создайте виртуальное окружение
+# 3. Create a virtual environment
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# 4. Установите зависимости
+# 4. Install dependencies
 python setup.py
-# или вручную:
-# pip install -r requirements-macos.txt
-# python -m playwright install
 
-# 5. Настройте API-ключ (или через GUI → Settings)
-# См. ниже «Настройка»
+# 5. (Optional) Verify with tests
+python -m pytest tests/unit -q
 ```
 
 ### Ubuntu (Linux)
 
 ```bash
-# 1. Установите Python 3.11+ и зависимости системы
+# 1. Install system dependencies
 sudo apt update
 sudo apt install -y python3.11 python3.11-venv python3-pip \
     build-essential alsa-utils libasound2-dev \
     portaudio19-dev libx11-dev libxrandr-dev \
     libgtk-3-dev
 
-# 2. Клонируйте репозиторий
+# 2. Clone the repository
 git clone https://github.com/alexghost82/SlonAG.git
 cd SlonAG
 
-# 3. Создайте виртуальное окружение
+# 3. Create a virtual environment
 python3.11 -m venv .venv
 source .venv/bin/activate
 
-# 4. Установите зависимости
+# 4. Install dependencies
 python setup.py
-# или вручную:
-# pip install -r requirements-linux.txt
-# python -m playwright install
-
-# 5. Настройте API-ключ (или через GUI → Settings)
 ```
 
 ### Windows
 
 ```powershell
-# 1. Установите Python 3.11+ с сайта python.org (галочка «Add to PATH»)
+# 1. Install Python 3.11+ from python.org (check "Add to PATH")
 
-# 2. Клонируйте репозиторий
+# 2. Clone the repository
 git clone https://github.com/alexghost82/SlonAG.git
 cd SlonAG
 
-# 3. Создайте виртуальное окрушение
+# 3. Create a virtual environment
 python -m venv .venv
 .venv\Scripts\activate
 
-# 4. Установите зависимости
+# 4. Install dependencies
 python setup.py
-# или вручную:
-# pip install -r requirements-windows.txt
-# python -m playwright install
-
-# 5. Настройте API-ключ (или через GUI → Settings)
 ```
 
-## Настройка
+## Configuration
 
-### API-ключи
+### API Keys
 
-1. **Google Gemini:** получите ключ на [ai.google.dev](https://ai.google.dev) → вставьте в GUI Settings → `gemini_api_key`.
-2. **OpenAI:** получите ключ на [platform.openai.com](https://platform.openai.com) → вставьте в GUI Settings → `openai_api_key`.
-3. **Другие провайдеры:** ключи через Settings (например, `ollama_api_key` для локальных моделей).
-
-Также можно создать файл `config/api_keys.json` вручную:
+Obtain API keys and add them via the GUI **Settings** panel, or create `config/api_keys.json`:
 
 ```json
 {
@@ -141,61 +140,80 @@ python setup.py
 }
 ```
 
-### Выбор провайдера и модели
+Secrets files (`config/api_keys.json`, `config/settings.json`, `config/settings.local.json`) are git-ignored.
 
-В GUI откройте **Settings** → выберите провайдер (Gemini, OpenAI, Ollama, LlamaCPP) и модель. Для локальных моделей через Ollama убедитесь, что `ollama serve` запущен.
+### Selecting a Provider
 
-### Локальные модели
+In the GUI, open **Settings** and choose a provider — Gemini, OpenAI, OpenRouter, Ollama, or LlamaCPP — along with the specific model. For local models, ensure the corresponding backend is running (e.g., `ollama serve` for Ollama).
 
-- **Ollama:** `ollama pull <model_name>` (например, `ollama pull llama3.2`), затем выберите провайдер Ollama в настройках.
-- **LlamaCPP:** требует скомпилированной библиотеки llama-cpp-python.
+### Local Models
 
-## Запуск
+- **Ollama:** `ollama pull <model_name>` (e.g., `ollama pull llama3.2`), then select Ollama in settings.
+- **LlamaCPP:** requires `llama-cpp-python` compiled for your platform.
 
-### Через GUI (рекомендуется)
+## Running
+
+### Desktop GUI (recommended)
 
 ```bash
 python main.py
 ```
 
-Запускает PyQt6-приложение с чат-интерфейсом, логами, настройками и голосовым управлением.
+Launches the PyQt6 application with a chat interface, logs, settings, and voice controls.
 
-### Через сервер (API)
+### Server (headless / API mode)
 
 ```bash
 python -m server
 ```
 
-Запускает HTTP + WebSocket сервер на локальном порту. Поддерживает TLS и QR-спаривание.
+Starts the HTTP + WebSocket server on the loopback address by default. Supports TLS, QR device pairing, and Bonjour LAN discovery. Desktop control binds are restricted to loopback unless explicitly allowed.
 
-### Тесты
+### iOS Remote Client
 
-```bash
-pytest tests/
-```
+The `ios/` directory contains a Swift package (`MarkRemote`) and an Xcode project for an iOS remote that communicates with the desktop server via the Desktop Control API.
 
-### Линтинг и проверки
+## Testing
 
 ```bash
-# Ruff (тесты)
-ruff check tests/
+# Install dev dependencies
+pip install -r requirements-dev.txt
 
-# Mypy (типизация)
-mypy .
+# Run the unit test suite
+python -m pytest tests/unit -q
+
+# Run full suite (integration + security + offline)
+python -m pytest tests/ -q
+
+# Lint with Ruff (scoped to tests/)
+ruff check .
+
+# Type-check (scoped in pyproject.toml)
+mypy
 ```
 
-## Конфигурация
+Tests are isolated — they do not require `config/api_keys.json` or network access to run.
 
-Настройки хранятся в `config/settings.py` и загружаются через `load_settings()`. Основные параметры:
+## Privacy & Security
 
-| Параметр         | Описание                          | По умолчанию        |
-|------------------|-----------------------------------|---------------------|
-| `provider_id`    | ID провайдера (gemini/openai/...) | `gemini`            |
-| `model_id`       | Имя модели                        | Gemini 2.5 Flash    |
-| `language`       | Язык ответа (ru/en)               | `ru`                |
-| `tts_enabled`    | Включить синтез речи              | `true`              |
-| `stt_enabled`    | Включить распознавание речи       | `true`              |
+- **Local-first:** Desktop control and most processing run on the local machine.
+- **API keys are local:** Credentials are stored in `config/api_keys.json` and never leave the machine.
+- **Server binds to loopback by default:** LAN access requires explicit opt-in via `allow_non_loopback=True`; public/internet binds are denied.
+- **Filesystem security gates:** The `tests/test_filesystem_security.py` suite verifies write/copy/delete operations are scoped to allowed roots.
+- **Gateway auth:** All API requests pass through the gateway's authorization context with device-level tokens.
+- **TLS enforced** for non-lab deployments.
+- **No telemetry:** The runtime does not send usage data externally.
 
-## Лицензия
+## Troubleshooting
 
-CC BY-NC 4.0 — некоммерческое использование с указанием авторства. См. `THIRD_PARTY_LICENSES.md` для зависимостей.
+| Problem | Likely cause | Fix |
+|---------|-------------|-----|
+| `gemini_api_key` missing error | No key in settings or `api_keys.json` | Add key via GUI Settings or `config/api_keys.json` |
+| Import error for `playwright` | Browser binaries not installed | Run `python -m playwright install` |
+| Audio not working | Missing PortAudio / PyAudio build deps | Install `portaudio19-dev` (Linux) or reinstall `pyaudio` |
+| Desktop control fails on Linux | Missing X11/display libraries | Install `libx11-dev`, `libxrandr-dev`, `libgtk-3-dev` |
+| Server won't bind | Port already in use | Change the bind port in server settings |
+
+## License
+
+CC BY-NC 4.0 — non-commercial use with attribution. Third-party dependencies are listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
