@@ -836,7 +836,7 @@ class _DropCanvas(QWidget):
         p.setFont(QFont("Courier New", 8))
         p.setPen(QPen(qcol(C.PRI_DIM if not hover else C.TEXT), 1))
         p.drawText(QRectF(0, cy + 8, W, 16), Qt.AlignmentFlag.AlignCenter,
-                   "Перетащите файл сюда  или  Нажмите для выбора")
+                   t("filedrop.drop_select"))
         p.setFont(QFont("Courier New", 7))
         p.setPen(QPen(qcol("#1a4a5a"), 1))
         p.drawText(QRectF(0, cy + 24, W, 14), Qt.AlignmentFlag.AlignCenter,
@@ -849,7 +849,7 @@ class _DropCanvas(QWidget):
         p.drawText(QRectF(0, cy - 24, W, 32), Qt.AlignmentFlag.AlignCenter, "⬇")
         p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         p.setPen(QPen(qcol(C.PRI), 1))
-        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "Отпустите для загрузки")
+        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, t("filedrop.release_to_upload"))
 
     def _paint_file(self, p, W, H):
         path = Path(self._z._current_file)
@@ -1297,7 +1297,7 @@ class MainWindow(QMainWindow):
 
         # ── API Key input ──
         self._api_key_input = QLineEdit()
-        self._api_key_input.setPlaceholderText("API Key (сохраняется в secrets)...")
+        self._api_key_input.setPlaceholderText(t("setup.api_key_in_secrets"))
         self._api_key_input.setFont(QFont("Courier New", 8))
         self._api_key_input.setFixedHeight(26)
         self._api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -1570,7 +1570,7 @@ class MainWindow(QMainWindow):
         self._drop_zone.file_selected.connect(self._on_file_selected)
         lay.addWidget(self._drop_zone)
 
-        self._file_hint = QLabel("Файл не загружен — перетащите или нажмите выше для загрузки")
+        self._file_hint = QLabel(t("file.file_not_loaded"))
         self._file_hint.setFont(QFont("Courier New", 7))
         self._file_hint.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
         self._file_hint.setWordWrap(True)
@@ -1686,7 +1686,7 @@ class MainWindow(QMainWindow):
         if try_build_local_tts is None:
             self._local_tts_ready = False
             self._local_tts_provider = None
-            self._local_tts_message = "Модуль локального TTS недоступен"
+            self._local_tts_message = t("speech.tts_unavailable")
             return
         result = try_build_local_tts(repo_root=BASE_DIR)
         self._local_tts_provider = result.provider
@@ -1707,7 +1707,7 @@ class MainWindow(QMainWindow):
             self._local_stt_ready = False
             self._local_stt_provider = None
             self._local_stt_mic = None
-            self._local_stt_message = "Модуль локального STT недоступен"
+            self._local_stt_message = t("speech.stt_unavailable")
             self._style_stt_btn()
             return
 
@@ -2120,7 +2120,7 @@ class MainWindow(QMainWindow):
         txt = self._input.text().strip()
         if not txt: return
         self._input.clear()
-        self._log_sig.emit(f"Вы: {txt}")
+        self._log_sig.emit(t("chat.user", text=txt))
         if self.on_text_command:
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
 
