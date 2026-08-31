@@ -60,12 +60,14 @@ class PreferenceRepository:
                     correction_source    TEXT    NOT NULL DEFAULT 'manual_entry',
                     correction_reason    TEXT    NOT NULL DEFAULT '',
                     deleted              INTEGER NOT NULL DEFAULT 0,
-                    tags                 TEXT    NOT NULL DEFAULT '[]'
+                    tags                 TEXT    NOT NULL DEFAULT '[]',
+                    versions_history     TEXT    NOT NULL DEFAULT '[]'
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pref_key ON preferences(key)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pref_category ON preferences(category)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pref_type ON preferences(type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_pref_tags ON preferences(tags)")
             conn.commit()
             conn.close()
 
@@ -84,6 +86,8 @@ class PreferenceRepository:
         tags_json = json.dumps(active.tags, ensure_ascii=False)
         contradiction_json = json.dumps(active.contradiction_evidence, ensure_ascii=False)
 
+        versions_json = json.dumps([v.to_dict() for v in item.versions], ensure_ascii=False)
+
         with self._lock:
             conn = sqlite3.connect(str(self.db_path))
             try:
@@ -95,8 +99,9 @@ class PreferenceRepository:
                          max_reinforcements, reinforcement_count,
                          created_at, updated_at, last_use_at, usage_count,
                          contradicted, contradiction_evidence, corrected,
-                         correction_source, correction_reason, deleted, tags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         correction_source, correction_reason, deleted, tags,
+                         versions_history)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         key=excluded.key, value=excluded.value,
                         version=excluded.version, type=excluded.type,
@@ -112,7 +117,8 @@ class PreferenceRepository:
                         corrected=excluded.corrected,
                         correction_source=excluded.correction_source,
                         correction_reason=excluded.correction_reason,
-                        deleted=excluded.deleted, tags=excluded.tags
+                        deleted=excluded.deleted, tags=excluded.tags,
+                        versions_history=excluded.versions_history
                     """,
                     (
                         item.id,
@@ -139,6 +145,7 @@ class PreferenceRepository:
                         active.correction_reason,
                         1 if active.deleted else 0,
                         tags_json,
+                        versions_json,
                     ),
                 )
                 conn.commit()
@@ -286,7 +293,7 @@ class PreferenceRepository:
             "max_reinforcements", "reinforcement_count", "created_at",
             "updated_at", "last_use_at", "usage_count", "contradicted",
             "contradiction_evidence", "corrected", "correction_source",
-            "correction_reason", "deleted", "tags",
+            "correction_reason", "deleted", "tags", "versions_history",
         ]
         d = dict(zip(cols, row))
         d["contradicted"] = bool(d["contradicted"])
@@ -300,34 +307,35 @@ class PreferenceRepository:
             contradiction_evidence = json.loads(d.get("contradiction_evidence", "[]"))
         except (json.JSONDecodeError, TypeError):
             contradiction_evidence = []
+        
+        # Load full version history from DB
+        try:
+            versions_list = json.loads(d.get("versions_history", "[]"))
+            versions = [PreferenceVersion.from_dict(v) for v in versions_list]
+        except (json.JSONDecodeError, TypeError):
+            # Fallback: single active version
+            versions = [PreferenceVersion(
+                id=d["id"], version=d["version"],
+                type=PreferenceType(d["type"]),
+                action=PreferenceAction(d["action"]),
+                priority=PriorityLevel(d["priority"]),
+                category=d["category"], key=d["key"], value=d["value"],
+                description=d["description"], confidence=d["confidence"],
+                decay_policy=ConfidenceDecayPolicy(d["decay_policy"]),
+                max_reinforcements=d["max_reinforcements"],
+                reinforcement_count=d["reinforcement_count"],
+                created_at=d["created_at"], updated_at=d["updated_at"],
+                last_use_at=d.get("last_use_at", ""),
+                usage_count=d["usage_count"],
+                contradicted=d["contradicted"],
+                contradiction_evidence=contradiction_evidence,
+                correction_source=LearningSource(d.get("correction_source", "manual_entry")),
+                correction_reason=d.get("correction_reason", ""),
+                deleted=d["deleted"], tags=tags,
+            )]
 
-        active = PreferenceVersion(
-            id=d["id"],
-            version=d["version"],
-            type=PreferenceType(d["type"]),
-            action=PreferenceAction(d["action"]),
-            priority=PriorityLevel(d["priority"]),
-            category=d["category"],
-            key=d["key"],
-            value=d["value"],
-            description=d["description"],
-            confidence=d["confidence"],
-            decay_policy=ConfidenceDecayPolicy(d["decay_policy"]),
-            max_reinforcements=d["max_reinforcements"],
-            reinforcement_count=d["reinforcement_count"],
-            created_at=d["created_at"],
-            updated_at=d["updated_at"],
-            last_use_at=d.get("last_use_at", ""),
-            usage_count=d["usage_count"],
-            contradicted=d["contradicted"],
-            contradiction_evidence=contradiction_evidence,
-            correction_source=LearningSource(d.get("correction_source", "manual_entry")),
-            correction_reason=d.get("correction_reason", ""),
-            deleted=d["deleted"],
-            tags=tags,
-        )
         return LearnedItem(
             id=d["id"],
-            versions=[active],
+            versions=versions,
             created_at=d["created_at"],
         )

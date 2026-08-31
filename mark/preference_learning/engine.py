@@ -11,6 +11,7 @@ Manages the full lifecycle:
 from __future__ import annotations
 
 import time
+import uuid as _uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
@@ -57,9 +58,10 @@ class PreferenceEngine:
     DECAY_RATE_LINEAR = 0.05          # 5% per day
     DECAY_FACTOR_EXPONENTIAL = 0.95   # 5% per week
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, *, max_items: int = 1000) -> None:
         self.repo = PreferenceRepository(db_path)
         self._decay_cache: dict[str, float] = {}
+        self.max_items = max_items
 
     # ===================================================================
     # Ingest — create, update, correct, delete
@@ -71,14 +73,21 @@ class PreferenceEngine:
         key: str,
         value: str,
         description: str = "",
-        pref_type: PreferenceType = PreferenceType.EXPLICIT,
-        action: PreferenceAction = PreferenceAction.APPLY,
-        priority: PriorityLevel = PriorityLevel.MEDIUM,
+        pref_type: PreferenceType | str = PreferenceType.EXPLICIT,
+        action: PreferenceAction | str = PreferenceAction.APPLY,
+        priority: PriorityLevel | str = PriorityLevel.MEDIUM,
         source: LearningSource = LearningSource.USER_STATED,
         evidence: Evidence | None = None,
         category: str = "",
         tags: list[str] | None = None,
     ) -> LearnedItem:
+        # Accept str and convert to enum
+        if isinstance(pref_type, str):
+            pref_type = PreferenceType(pref_type)
+        if isinstance(action, str):
+            action = PreferenceAction(action)
+        if isinstance(priority, str):
+            priority = PriorityLevel(priority)
         """Save a new or updated preference. Returns the item."""
         item_id = self._find_existing(key)
         now = _now()
@@ -102,6 +111,8 @@ class PreferenceEngine:
                 description=description or active.description,
                 confidence=active.confidence,  # Keep existing
                 decay_policy=active.decay_policy,
+                max_reinforcements=active.max_reinforcements,
+                reinforcement_count=active.reinforcement_count,
                 created_at=active.created_at,
                 updated_at=now,
                 last_use_at=active.last_use_at,
@@ -143,6 +154,7 @@ class PreferenceEngine:
             )
 
         self.repo.save(item)
+        self._enforce_bounds()
         return item
 
     def correct_preference(
@@ -165,6 +177,8 @@ class PreferenceEngine:
         assert active is not None
 
         now = _now()
+        # Mark old version as deleted (the new version is the active correction)
+        active.deleted = True
         new_version = PreferenceVersion(
             id=item_id,
             version=active.version + 1,
@@ -177,6 +191,8 @@ class PreferenceEngine:
             description=f"Corrected: {active.description}",
             confidence=1.0,  # Corrections are always high confidence
             decay_policy=ConfidenceDecayPolicy.NONE,
+            max_reinforcements=active.max_reinforcements,
+            reinforcement_count=active.reinforcement_count,
             created_at=active.created_at,
             updated_at=now,
             last_use_at="",
@@ -186,7 +202,7 @@ class PreferenceEngine:
             corrected=True,
             correction_source=source,
             correction_reason=reason,
-            deleted=True,  # Mark old version as deleted
+            deleted=False,
             tags=list(active.tags),
         )
         item.versions.append(new_version)
@@ -211,6 +227,10 @@ class PreferenceEngine:
         active = item.active
         assert active is not None
         now = _now()
+        # Mark ALL versions as deleted (item is "forgotten" — gone from lists)
+        # but kept in the DB for audit trail (visible via inspect).
+        for v in item.versions:
+            v.deleted = True
         new_version = PreferenceVersion(
             id=item_id,
             version=active.version + 1,
@@ -223,6 +243,8 @@ class PreferenceEngine:
             description=active.description,
             confidence=0.0,
             decay_policy=ConfidenceDecayPolicy.NONE,
+            max_reinforcements=active.max_reinforcements,
+            reinforcement_count=0,
             created_at=active.created_at,
             updated_at=now,
             last_use_at="",
@@ -290,6 +312,7 @@ class PreferenceEngine:
             deleted=active.deleted,
             tags=list(active.tags),
             reinforcement_count=active.reinforcement_count + 1,
+            max_reinforcements=active.max_reinforcements,
         )
         item.versions.append(new_version)
         self.repo.save(item)
@@ -344,6 +367,8 @@ class PreferenceEngine:
                     description=active.description,
                     confidence=new_conf,
                     decay_policy=active.decay_policy,
+                    max_reinforcements=active.max_reinforcements,
+                    reinforcement_count=active.reinforcement_count,
                     created_at=active.created_at,
                     updated_at=now_ts,
                     last_use_at=active.last_use_at,
@@ -355,7 +380,6 @@ class PreferenceEngine:
                     correction_reason=active.correction_reason,
                     deleted=active.deleted,
                     tags=list(active.tags),
-                    reinforcement_count=active.reinforcement_count,
                 )
                 item.versions.append(new_version)
                 self.repo.save(item)
@@ -402,6 +426,8 @@ class PreferenceEngine:
             description=active.description,
             confidence=new_conf,
             decay_policy=active.decay_policy,
+            max_reinforcements=active.max_reinforcements,
+            reinforcement_count=active.reinforcement_count,
             created_at=active.created_at,
             updated_at=now,
             last_use_at=active.last_use_at,
@@ -413,7 +439,6 @@ class PreferenceEngine:
             correction_reason=active.correction_reason,
             deleted=active.deleted,
             tags=list(active.tags),
-            reinforcement_count=active.reinforcement_count,
         )
         item.versions.append(new_version)
         self.repo.save(item)
@@ -462,6 +487,8 @@ class PreferenceEngine:
             description=description if description is not None else active.description,
             confidence=active.confidence,
             decay_policy=active.decay_policy,
+            max_reinforcements=active.max_reinforcements,
+            reinforcement_count=active.reinforcement_count,
             created_at=active.created_at,
             updated_at=now,
             last_use_at=active.last_use_at,
@@ -473,7 +500,6 @@ class PreferenceEngine:
             correction_reason=active.correction_reason,
             deleted=active.deleted,
             tags=tags if tags is not None else list(active.tags),
-            reinforcement_count=active.reinforcement_count,
         )
         item.versions.append(new_version)
         self.repo.save(item)
@@ -489,16 +515,17 @@ class PreferenceEngine:
         if item is None:
             return {"error": "not_found", "key": key}
 
+        masked_versions = [self._mask_sensitive_version(v.to_dict()) for v in item.versions]
         return {
             "key": key,
             "id": item.id,
             "active_version": item.versions[-1].version if item.versions else 0,
             "total_versions": len(item.versions),
-            "versions": [v.to_dict() for v in item.versions],
+            "versions": masked_versions,
         }
 
     def list_all_preferences(self) -> list[dict]:
-        """List all preferences with active details."""
+        """List all preferences with active details. Sensitive values are masked."""
         results = []
         for item in self.repo.list_items(include_deleted=False):
             active = item.active
@@ -508,7 +535,7 @@ class PreferenceEngine:
             d["id"] = item.id
             d["versions_count"] = len(item.versions)
             d["history_available"] = len(item.versions) > 1
-            results.append(d)
+            results.append(self._mask_sensitive(d))
         return results
 
     def search_preferences(
@@ -529,7 +556,7 @@ class PreferenceEngine:
             if score > 0:
                 scored.append((pref, score))
         scored.sort(key=lambda x: x[1], reverse=True)
-        return [p for p, _ in scored[:top_k]]
+        return [self._mask_sensitive(p) for p, _ in scored[:top_k]]
 
     # ===================================================================
     # Retrieval for AgentLoop
@@ -580,15 +607,71 @@ class PreferenceEngine:
 
         return context
 
+
+    # ===================================================================
+    # Secret filtering & bounded storage
+    # ===================================================================
+
+    def _enforce_bounds(self) -> int:
+        """Prune lowest-confidence non-explicit preferences if over limit.
+        
+        Returns the number of items pruned.
+        """
+        items = self.repo.list_items(include_deleted=True)
+        active = [i for i in items if i.active and not i.active.deleted]
+        if len(active) <= self.max_items:
+            return 0
+
+        # Sort by confidence ascending, prefer keeping explicit preferences
+        active.sort(key=lambda i: (
+            i.active.confidence,
+            0 if i.active.type == PreferenceType.EXPLICIT else 1,
+        ))
+        
+        prune_count = len(active) - self.max_items
+        pruned = []
+        for i in range(prune_count):
+            item = active[i]
+            self.repo.delete(item.id)
+            pruned.append(item.key)
+        return len(pruned)
+
+    def _mask_sensitive(self, pref: dict) -> dict:
+        """Mask value if the key looks like a secret."""
+        from mark.preference_learning.types import _is_sensitive_key, mask_value
+        if _is_sensitive_key(pref.get("key", "")):
+            val = pref.get("value", "")
+            if val:
+                pref["value"] = mask_value(val)
+                pref["value_masked"] = True
+        return pref
+
+    def _mask_sensitive_version(self, v: dict) -> dict:
+        from mark.preference_learning.types import _is_sensitive_key, mask_value
+        if _is_sensitive_key(v.get("key", "")):
+            val = v.get("value", "")
+            if val:
+                v["value"] = mask_value(val)
+                v["value_masked"] = True
+        return v
+
     # ===================================================================
     # Helpers
     # ===================================================================
 
     def _find_existing(self, key: str) -> str | None:
-        """Find an existing item by key, or None."""
-        items = self.repo.list_items()
+        """Find an existing item by key, or None.
+        
+        Searches ALL items (including fully forgotten ones) so that
+        operations like inspect_preference and edit can still find them.
+        """
+        items = self.repo.list_items(include_deleted=True)
         for item in items:
             if item.key == key and not item.active.deleted:
+                return item.id
+        # Also find forgotten/fully-deleted items by key alone
+        for item in items:
+            if item.key == key:
                 return item.id
         return None
 
@@ -596,8 +679,6 @@ class PreferenceEngine:
 # ---------------------------------------------------------------------------
 # UUID helper (avoids circular imports)
 # ---------------------------------------------------------------------------
-import uuid as _uuid
-
 
 def uuid4_hex() -> str:
     return _uuid.uuid4().hex

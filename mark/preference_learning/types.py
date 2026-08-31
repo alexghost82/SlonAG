@@ -228,3 +228,35 @@ class RetrievalContext:
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Secret filtering patterns
+# ---------------------------------------------------------------------------
+
+# Keys that should never be exported in plain text
+SENSITIVE_KEY_PATTERNS = (
+    "password", "passwd", "pwd",
+    "token", "api_key", "apikey", "api-key", "api_secret", "apisecret",
+    "secret", "credential", "auth", "private_key", "privatekey",
+    "access_key", "accesskey", "bearer", "cookie", "session",
+    "ssh_key", "sshkey", "gpg_key", "pgp",
+    "connection_string", "dsn", "database_url",
+    "stripe", "aws_access", "gcp_service", "azure",
+    "master_key", "root_key", "encryption_key",
+)
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """Return True if the key looks like it stores a secret."""
+    lower = key.lower()
+    return any(pattern in lower for pattern in SENSITIVE_KEY_PATTERNS)
+
+
+def mask_value(value: str) -> str:
+    """Return a masked version of a sensitive value."""
+    if not value:
+        return ""
+    if len(value) <= 4:
+        return "****"
+    return value[:2] + "****" + value[-2:]
