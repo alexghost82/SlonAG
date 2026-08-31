@@ -15,7 +15,7 @@ from PyQt6.QtGui import QFont, QKeyEvent
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QRadioButton, QScrollArea, QSpacerItem, QCheckBox,
-    QSpinBox, QComboBox, QGroupBox, QVBoxLayout, QWidget, QStackedWidget,
+    QSpinBox, QComboBox, QGroupBox, QVBoxLayout, QWidget, QStackedWidget, QSizePolicy,
     QProgressBar,
 )
 
@@ -24,13 +24,32 @@ from config.onboard import (
     OnboardState, OnboardResult,
     ALL_STEPS, STEP_LANGUAGE, STEP_PROVIDER, STEP_MODEL, STEP_CREDENTIALS,
     STEP_ENDPOINTS, STEP_PRIVACY, STEP_VOICE, STEP_VISION,
-    STEP_MEMORY, STEP_AUTOMATION, STEP_LAN,
+    STEP_MEMORY, STEP_AUTOMATION, STEP_LAN, STEP_COMPLETE,
     validate_step, run_connection_tests, ConnectionTestResult,
     CLOUD_PROVIDER_IDS, LOCAL_PROVIDER_IDS,
     PROVIDER_IDS,
     CLOUD_MODELS, LOCAL_MODELS,
     STT_ENGINES, TTS_ENGINES,
 )
+
+
+# ─── Provider display labels ──────────────────────────────────────────
+
+class _ProvInfo:
+    __slots__ = ("label", "kind")
+    def __init__(self, label: str, kind: str = "cloud"):
+        self.label = label
+        self.kind = kind
+
+ALL_PROVIDERS: dict[str, _ProvInfo] = {
+    "gemini":      _ProvInfo("Google Gemini"),
+    "openai":      _ProvInfo("OpenAI"),
+    "openrouter":  _ProvInfo("OpenRouter"),
+    "local":       _ProvInfo("Local (direct API)"),
+    "ollama":      _ProvInfo("Ollama"),
+    "llama_cpp":   _ProvInfo("llama.cpp"),
+    "openai_compat": _ProvInfo("OpenAI-compatible"),
+}
 
 # ─── Color constants (same palette as main UI) ───────────────────────────
 
@@ -428,10 +447,10 @@ class PrivacyStep(_StepWidget):
         self._priv_local_tools = QRadioButton(t("onboard.privacy_local_tools"))
         self._priv_hybrid = QRadioButton(t("onboard.privacy_hybrid"))
         self._priv_cloud = QRadioButton(t("onboard.privacy_cloud"))
-        self._priv_fully_local.setData("fully_local")
-        self._priv_local_tools.setData("local_with_tools")
-        self._priv_hybrid.setData("hybrid")
-        self._priv_cloud.setData("cloud")
+        self._priv_fully_local._btn_value = "fully_local"
+        self._priv_local_tools._btn_value = "local_with_tools"
+        self._priv_hybrid._btn_value = "hybrid"
+        self._priv_cloud._btn_value = "cloud"
         for r in (self._priv_fully_local, self._priv_local_tools, self._priv_hybrid, self._priv_cloud):
             r.setFont(QFont("Courier New", 10))
             r.setStyleSheet(f"color: {_TEXT}; background: transparent;")
@@ -448,9 +467,9 @@ class PrivacyStep(_StepWidget):
         self._net_offline = QRadioButton(t("onboard.net_offline"))
         self._net_tools = QRadioButton(t("onboard.net_tools"))
         self._net_hybrid = QRadioButton(t("onboard.net_hybrid"))
-        self._net_offline.setData("offline")
-        self._net_tools.setData("tools_only")
-        self._net_hybrid.setData("hybrid")
+        self._net_offline._btn_value = "offline"
+        self._net_tools._btn_value = "tools_only"
+        self._net_hybrid._btn_value = "hybrid"
         for r in (self._net_offline, self._net_tools, self._net_hybrid):
             r.setFont(QFont("Courier New", 10))
             r.setStyleSheet(f"color: {_TEXT}; background: transparent;")
@@ -468,10 +487,10 @@ class PrivacyStep(_StepWidget):
         self._route_local_first = QRadioButton(t("onboard.route_local_first"))
         self._route_local_only = QRadioButton(t("onboard.route_local_only"))
         self._route_cloud_first = QRadioButton(t("onboard.route_cloud_first"))
-        self._route_manual.setData("manual")
-        self._route_local_first.setData("local_first")
-        self._route_local_only.setData("local_only")
-        self._route_cloud_first.setData("cloud_first")
+        self._route_manual._btn_value = "manual"
+        self._route_local_first._btn_value = "local_first"
+        self._route_local_only._btn_value = "local_only"
+        self._route_cloud_first._btn_value = "cloud_first"
         for r in (self._route_manual, self._route_local_first, self._route_local_only, self._route_cloud_first):
             r.setFont(QFont("Courier New", 10))
             r.setStyleSheet(f"color: {_TEXT}; background: transparent;")
@@ -495,19 +514,19 @@ class PrivacyStep(_StepWidget):
     def _selected_privacy(self) -> str:
         for r in (self._priv_fully_local, self._priv_local_tools, self._priv_hybrid, self._priv_cloud):
             if r.isChecked():
-                return r.data() or "hybrid"
+                return getattr(r, "_btn_value", "") or "hybrid"
         return "hybrid"
 
     def _selected_net(self) -> str:
         for r in (self._net_offline, self._net_tools, self._net_hybrid):
             if r.isChecked():
-                return r.data() or "hybrid"
+                return getattr(r, "_btn_value", "") or "hybrid"
         return "hybrid"
 
     def _selected_route(self) -> str:
         for r in (self._route_manual, self._route_local_first, self._route_local_only, self._route_cloud_first):
             if r.isChecked():
-                return r.data() or "manual"
+                return getattr(r, "_btn_value", "") or "manual"
         return "manual"
 
 
@@ -875,6 +894,7 @@ class OnboardingWizard(QWidget):
 
         # Populate stack with step widgets wrapped in scroll areas
         for step_id in ALL_STEPS:
+            if step_id == STEP_COMPLETE: continue
             sw = self._steps[step_id]
             if isinstance(sw, CompleteStep):
                 continue
