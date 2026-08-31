@@ -171,45 +171,48 @@ class ChatHandlerWithRuntime:
 
     @staticmethod
     def _run_agent_loop(agent_loop, request: ChatRequest) -> RouteResponse:
-        """Run one turn of the AgentLoop in a thread.
+        """Run the AgentLoop in an isolated event loop.
 
-        The agent loop may make multiple provider calls (tool calls loop).
-        We use asyncio.new_event_loop to keep the HTTP handler non-blocking.
+        Delegates to ``agent_loop.run(user_goal, history=messages)`` so the
+        full multi-turn orchestration (model → tool → observation → model)
+        is executed before returning the response.
         """
-        messages = [UserMessage(content=request.message)]
+        from agent.observation import ObservationKind
+        from agent.runtime import AgentLoopResult
 
         async def _run() -> dict:
-            from agent.observation import ObservationKind
-            from mark.tools.contracts import ToolResult as TR
+            # Run the full agent loop for the user's goal.
+            result: AgentLoopResult = await agent_loop.run(
+                user_goal=request.message,
+                history=(),
+            )
 
-            # Run the agent loop one turn (tool calls included)
-            result = await agent_loop.run_once(messages)
-            return {
-                "ok": result.ok,
-                "answer": result.final_answer,
-                "steps": [
-                    {
-                        "turn": s.turn_index,
-                        "observation": (
-                            {
-                                "ok": s.observation.ok,
-                                "kind": s.observation.kind,
-                                "content": (
-                                    s.observation.content
-                                    if s.observation.kind == ObservationKind.TEXT
-                                    else None
-                                ),
-                                "error": s.observation.error,
-                            }
-                            if s.observation is not None
+            steps: list[dict] = []
+            for step in result.steps:
+                step_dict: dict = {"turn": step.turn_index}
+                if step.tool_name is not None:
+                    step_dict["tool_name"] = step.tool_name
+                if step.observation is not None:
+                    obs = step.observation
+                    step_dict["observation"] = {
+                        "ok": obs.ok,
+                        "kind": obs.kind.value,
+                        "content": (
+                            obs.content
+                            if obs.kind == ObservationKind.SUCCESS
                             else None
                         ),
-                        "assistant_text": (
-                            s.assistant_text if s.assistant_text else None
-                        ),
+                        "error": obs.error,
                     }
-                    for s in result.steps
-                ],
+                if step.steering is not None:
+                    step_dict["steering"] = step.steering.kind.value
+                steps.append(step_dict)
+
+            return {
+                "ok": result.ok,
+                "answer": result.final_answer or "",
+                "steps": steps,
+                "reason": result.reason,
             }
 
         loop = asyncio.new_event_loop()
@@ -222,10 +225,10 @@ class ChatHandlerWithRuntime:
         steps = run_result.get("steps") or []
 
         # Build observation summary
-        observations = []
+        observations: list[str] = []
         for s in steps:
-            if s.get("observation"):
-                obs = s["observation"]
+            obs = s.get("observation")
+            if obs is not None:
                 if obs.get("content"):
                     observations.append(obs["content"])
                 elif obs.get("error"):
@@ -238,10 +241,7 @@ class ChatHandlerWithRuntime:
                 "conversation_id": request.conversation_id or "conv_0",
                 "answer": answer,
                 "tool_calls": [
-                    {
-                        "tool_name": s.get("tool_name"),
-                        "ok": s.get("tool_ok"),
-                    }
+                    {"tool_name": s["tool_name"]}
                     for s in steps
                     if s.get("tool_name")
                 ],
