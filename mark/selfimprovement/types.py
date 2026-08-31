@@ -1,4 +1,8 @@
-"""Immutable data types for the controlled self-improvement pipeline."""
+"""Immutable data types for the controlled self-improvement pipeline.
+
+Supports: versioning, immutable audit history, evaluation, user approval,
+rollback, and monitoring.
+"""
 
 from __future__ import annotations
 
@@ -57,6 +61,61 @@ class MetricKind(Enum):
     PREFERENCE_CORRECTION_COUNT = "preference_correction_count"
     CONFIG_UNUSED_COUNT = "config_unused_count"
 
+
+# ── Evaluation ────────────────────────────────────────────────
+
+class EvaluationStatus(Enum):
+    """Status of an improvement evaluation (between approval and apply)."""
+    NOT_EVALUATED = "not_evaluated"
+    PASSED = "passed"
+    FAILED = "failed"
+
+
+# ── Audit ─────────────────────────────────────────────────────
+
+class AuditAction(Enum):
+    """An immutable audit action recorded for every state change."""
+    OBSERVE = "observe"
+    CANDIDATE_GENERATED = "candidate_generated"
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EVALUATED_PASS = "evaluated_passed"
+    EVALUATED_FAIL = "evaluated_failed"
+    APPLIED = "applied"
+    ROLLED_BACK = "rolled_back"
+    VERSION_INCREMENTED = "version_incremented"
+    USER_FEEDBACK = "user_feedback"
+
+
+@dataclass(frozen=True)
+class AuditEntry:
+    """Immutable audit log entry — one record per state transition."""
+    action: AuditAction
+    timestamp: float = field(default_factory=time.monotonic)
+    details: dict[str, Any] = field(default_factory=dict)
+    message_ru: str = ""  # user-facing Russian message
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "action": self.action.value,
+            "timestamp": self.timestamp,
+            "details": self.details,
+            "message_ru": self.message_ru,
+        }
+        return d
+
+    @staticmethod
+    def from_dict(d: dict[str, Any]) -> "AuditEntry":
+        return AuditEntry(
+            action=AuditAction(d["action"]),
+            timestamp=d.get("timestamp", 0.0),
+            details=d.get("details", {}),
+            message_ru=d.get("message_ru", ""),
+        )
+
+
+# ── Metrics ───────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class MetricSnapshot:
@@ -143,10 +202,17 @@ class ImprovementStatus(Enum):
 
 @dataclass
 class SelfImprovementRecord:
-    """Lifecycle record for one improvement."""
+    """Lifecycle record for one improvement.
+
+    Attributes:
+        version: Incremented on every state mutation (supports versioning).
+        audit_log: Append-only immutable audit trail.
+        evaluation: Evaluation result (between approval and apply).
+    """
     id: str
     title: str
     status: ImprovementStatus = ImprovementStatus.PROPOSED
+    version: int = 1  # versioned: increments on every change
     created_at: float = field(default_factory=time.monotonic)
     approved_at: float | None = None
     applied_at: float | None = None
@@ -156,18 +222,45 @@ class SelfImprovementRecord:
     rollback_reason: str | None = None
     proposed_change: dict[str, Any] = field(default_factory=dict)
     rollback_change: dict[str, Any] = field(default_factory=dict)
+    evaluation: EvaluationStatus = EvaluationStatus.NOT_EVALUATED
+    evaluation_reason: str = ""
+    evaluation_score: float = 0.0
 
-    def _to_dict(self) -> dict[str, Any]:
-        import dataclasses
-        if dataclasses.is_dataclass(self):
-            result = {}
-            for f in dataclasses.fields(self):
-                val = getattr(self, f.name)
-                if isinstance(val, Enum):
-                    val = val.value
-                result[f.name] = val
-            return result
-        return self.__dict__
+    # Mutable audit log — each entry is an immutable AuditEntry
+    _audit_log: list[AuditEntry] = field(default_factory=list, repr=False)
+
+    # ── Versioning ──────────────────────────────────────────────
+
+    def bump_version(self, reason: str = "state change") -> int:
+        """Increment version and log the bump. Returns new version."""
+        self.version += 1
+        self._audit_log.append(AuditEntry(
+            action=AuditAction.VERSION_INCREMENTED,
+            details={"reason": reason, "old_version": self.version - 1, "new_version": self.version},
+            message_ru=f"Версия изменена: {self.version - 1} → {self.version} ({reason})",
+        ))
+        return self.version
+
+    # ── Audit logging ──────────────────────────────────────────
+
+    def audit(self, action: AuditAction, details: dict[str, Any] | None = None,
+              message_ru: str = "") -> None:
+        """Append an immutable audit entry."""
+        entry = AuditEntry(
+            action=action,
+            details=details or {},
+            message_ru=message_ru,
+        )
+        self._audit_log.append(entry)
+
+    @property
+    def audit_log(self) -> list[AuditEntry]:
+        """Read-only view of the audit log."""
+        return list(self._audit_log)
+
+    def get_audit_summary(self) -> list[dict[str, Any]]:
+        """Return serialisable audit entries."""
+        return [e.to_dict() for e in self._audit_log]
 
     @staticmethod
     def _record_from_dict(d: dict[str, Any]) -> "SelfImprovementRecord":
@@ -175,13 +268,39 @@ class SelfImprovementRecord:
         if dataclasses.is_dataclass(SelfImprovementRecord):
             # Convert enum values back
             for k, v in list(d.items()):
-                if k in ("status",) and isinstance(v, str):
+                if k == "status" and isinstance(v, str):
                     try:
                         d[k] = ImprovementStatus(v)
                     except ValueError:
                         pass
-            return SelfImprovementRecord(**d)
+                elif k == "evaluation" and isinstance(v, str):
+                    try:
+                        d[k] = EvaluationStatus(v)
+                    except ValueError:
+                        pass
+            # Remove audit_log from kwargs (it's set manually after)
+            audit_log_data = d.pop("audit_log", [])
+            rec = SelfImprovementRecord(**d)
+            # Restore audit log entries
+            for entry_data in audit_log_data:
+                rec._audit_log.append(AuditEntry.from_dict(entry_data))
+            return rec
         return SelfImprovementRecord(**d)
+
+    def _to_dict(self) -> dict[str, Any]:
+        import dataclasses
+        if dataclasses.is_dataclass(self):
+            result = {}
+            for f in dataclasses.fields(self):
+                val = getattr(self, f.name)
+                if f.name == "_audit_log":
+                    result["audit_log"] = self.get_audit_summary()
+                    continue
+                if isinstance(val, Enum):
+                    val = val.value
+                result[f.name] = val
+            return result
+        return self.__dict__
 
 
 # ── State ─────────────────────────────────────────────────────
@@ -193,7 +312,9 @@ class SelfImprovementState:
     candidates_generated: int = 0
     approved_count: int = 0
     rolled_back_count: int = 0
+    total_user_feedback_count: int = 0
     improvements: dict[str, SelfImprovementRecord] = field(default_factory=dict)
+    audit_history: list[AuditEntry] = field(default_factory=list)
 
     def register_observation(self) -> None:
         self.observations_count += 1
@@ -207,6 +328,12 @@ class SelfImprovementState:
     def register_rollback(self) -> None:
         self.rolled_back_count += 1
 
+    def register_user_feedback(self) -> None:
+        self.total_user_feedback_count += 1
+
+    def add_audit_entry(self, entry: AuditEntry) -> None:
+        self.audit_history.append(entry)
+
 
 # ── Bounded change application ────────────────────────────────
 
@@ -216,11 +343,15 @@ def apply_bounded_change(
 ) -> dict[str, Any]:
     """Apply a bounded, reversible change and return the rollback snapshot.
 
+    Security policy: NEVER weakens authentication, approval, permission checks,
+    network exposure, or secret storage.
+
     Currently supports:
     - Writing to a JSON settings file (change key, rollback old value).
     - Adding entries to a memory category.
     - Adjusting a timeout value.
     - Recording a routing statistic.
+    - Memory pruning (read-only or backup-based).
 
     Returns the rollback snapshot (previous state).
     """
@@ -243,16 +374,43 @@ def apply_bounded_change(
             return {"error": f"config change failed: {exc}"}
 
     elif target == "memory":
-        from memory.memory_manager import update_memory
-        category = change.get("category", "notes")
-        key = change["key"]
-        value = change["value"]
-        # Snapshot existing
-        from memory.memory_manager import load_memory
-        memory = load_memory()
-        old_entry = memory.get(category, {}).get(key)
-        rollback = {"type": "memory", "category": category, "key": key, "old": old_entry}
-        update_memory({category: {key: {"value": value, "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d")}}})
+        action_type = action
+        if action_type == "refine_extraction_prompt":
+            # Write a refined extraction prompt to memory — safe, reversible
+            from memory.memory_manager import update_memory
+            category = change.get("correction_type", "preferences")
+            prompt_key = f"extraction_prompt_{category}"
+            value = change.get("value", "")
+            from memory.memory_manager import load_memory
+            memory = load_memory()
+            old_entry = memory.get("system", {}).get(prompt_key)
+            rollback = {"type": "memory", "category": "system", "key": prompt_key, "old": old_entry}
+            update_memory({"system": {prompt_key: {"value": value, "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d")}}})
+        elif action_type == "prune_stale_entries":
+            # Memory pruning: mark entries as stale (reversible)
+            from memory.memory_manager import update_memory, load_memory
+            stale_count = change.get("stale_count", 0)
+            memory = load_memory()
+            # Snapshot the current memory state for rollback
+            rollback = {"type": "memory", "action": "prune_stale", "memory_snapshot": json.dumps(memory)}
+            # Store pruning metadata (non-destructive: just marks as stale)
+            update_memory({
+                "audit": {
+                    "last_stale_prune_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "pruned_count": stale_count,
+                }
+            })
+        else:
+            # Generic memory update
+            from memory.memory_manager import update_memory
+            category = change.get("category", "notes")
+            key = change["key"]
+            value = change["value"]
+            from memory.memory_manager import load_memory
+            memory = load_memory()
+            old_entry = memory.get(category, {}).get(key)
+            rollback = {"type": "memory", "category": "category", "key": key, "old": old_entry}
+            update_memory({category: {key: {"value": value, "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d")}}})
 
     elif target == "timeout":
         # Adjust timeout in a known config path

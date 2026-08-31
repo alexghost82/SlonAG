@@ -1,21 +1,27 @@
 """Controlled Self-Improvement — SlonAG.
 
-Observation → improvement candidate → evidence → expected benefit → risk →
-approval → apply bounded change → monitor → rollback.
+Observation → improvement candidate → evidence → evaluation → approval →
+apply bounded change → monitor → rollback.
 
-All changes are observable, reversible, and logged.
+All changes are observable, readable, and logged.
 """
 
 from __future__ import annotations
 
 from mark.selfimprovement.types import (
+    AuditAction,
+    AuditEntry,
+    EvidenceType,
+    EvaluationStatus,
     ImprovementCandidate,
+    ImprovementCategory,
     ImprovementStatus,
     MetricBucket,
     MetricKind,
     MetricSnapshot,
     Observation,
     ObservationKind,
+    RiskLevel,
     SelfImprovementRecord,
     SelfImprovementState,
     apply_bounded_change,
@@ -23,23 +29,38 @@ from mark.selfimprovement.types import (
 from mark.selfimprovement.collector import MetricsCollector
 from mark.selfimprovement.rules import generate_candidates
 from mark.selfimprovement.pipeline import SelfImprovementPipeline
+from mark.selfimprovement.storage import _load_state, _save_state
+from mark.selfimprovement import localized_strings
 
 __all__ = [
+    # Types
     "ImprovementCandidate",
+    "ImprovementCategory",
     "ImprovementStatus",
-    "MetricBucket",
-    "MetricKind",
-    "MetricSnapshot",
     "Observation",
     "ObservationKind",
-    "SelfImprovementRecord",
+    "MetricKind",
+    "MetricSnapshot",
+    "MetricBucket",
     "SelfImprovementState",
-    "SelfImprovementPipeline",
+    "SelfImprovementRecord",
+    "RiskLevel",
+    "EvidenceType",
     "apply_bounded_change",
+    # Pipeline
+    "SelfImprovementPipeline",
     "generate_candidates",
+    # Collector
+    "MetricsCollector",
     "get_collector",
     "load_state",
     "save_state",
+    # Audit
+    "AuditAction",
+    "AuditEntry",
+    "EvaluationStatus",
+    # Localization
+    "localized_strings",
 ]
 
 
@@ -60,9 +81,7 @@ def load_state(path: str | None = None) -> SelfImprovementState:
     global _state
     if _state is not None:
         return _state
-    from mark.selfimprovement.storage import load_state as _load
-
-    _state = _load(path)
+    _state = _load_state(path)
     return _state
 
 
@@ -70,6 +89,4 @@ def save_state(path: str | None = None) -> None:
     global _state
     if _state is None:
         return
-    from mark.selfimprovement.storage import save_state as _save
-
-    _save(_state, path)
+    _save_state(_state, path)
