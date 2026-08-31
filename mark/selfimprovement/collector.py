@@ -8,6 +8,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from .localized_strings import (
+    ru_f,
+    RU_OBSERVATION_TOOL_FAILURE,
+    RU_OBSERVATION_TOOL_TIMEOUT,
+    RU_OBSERVATION_PREFERENCE_CORRECTION,
+)
 from .types import MetricBucket, MetricKind, MetricSnapshot, Observation, ObservationKind
 
 
@@ -47,17 +53,28 @@ class WorkflowMetric:
     redundant_calls: int = 0
 
 
+@dataclass
+class UserFeedback:
+    """A user's explicit feedback on an improvement."""
+    candidate_id: str
+    feedback_type: str  # "approve" | "reject" | "feedback"
+    message_ru: str
+    timestamp: float = field(default_factory=time.monotonic)
+    details: dict[str, Any] = field(default_factory=dict)
+
+
 class MetricsCollector:
     """Thread-safe singleton for collecting self-improvement metrics."""
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._tool_metrics: dict[str, ToolMetric] = {}
         self._provider_metrics: dict[str, ProviderMetric] = {}
         self._workflow_metrics: dict[str, WorkflowMetric] = {}
         self._observations: list[Observation] = []  # ring buffer
         self._max_observations = 500
         self._preference_corrections: list[dict[str, Any]] = []
+        self._user_feedback: list[UserFeedback] = []
 
     @classmethod
     def instance(cls) -> "MetricsCollector":
@@ -242,6 +259,40 @@ class MetricsCollector:
         })
         return obs
 
+    # ── User feedback ─────────────────────────────────────────
+
+    def record_user_feedback(
+        self,
+        candidate_id: str,
+        feedback_type: str,
+        message_ru: str,
+        details: dict[str, Any] | None = None,
+    ) -> UserFeedback:
+        """Record explicit user feedback on an improvement.
+
+        Args:
+            candidate_id: ID of the improvement candidate.
+            feedback_type: "approve", "reject", or "feedback".
+            message_ru: Russian-language user message.
+            details: Optional additional data.
+        """
+        fb = UserFeedback(
+            candidate_id=candidate_id,
+            feedback_type=feedback_type,
+            message_ru=message_ru,
+            details=details or {},
+        )
+        with self._lock:
+            self._user_feedback.append(fb)
+        return fb
+
+    def get_user_feedback(self, candidate_id: str | None = None) -> list[UserFeedback]:
+        """Get user feedback, optionally filtered by candidate."""
+        with self._lock:
+            if candidate_id:
+                return [f for f in self._user_feedback if f.candidate_id == candidate_id]
+            return list(self._user_feedback)
+
     # ── Observations ──────────────────────────────────────────
 
     def record_observation(self, obs: Observation) -> None:
@@ -273,10 +324,16 @@ class MetricsCollector:
 
     def get_snapshot(self) -> dict[str, Any]:
         """Full metrics snapshot for analysis."""
-        return {
-            "tool_stats": self.all_tool_stats(),
-            "provider_stats": self.all_provider_stats(),
-            "observation_summary": self.observation_summary(),
-            "preference_corrections_count": len(self._preference_corrections),
-            "recent_corrections": self._preference_corrections[-20:],
-        }
+        with self._lock:
+            return {
+                "tool_stats": {name: self._get_tool_stats_raw(m) for name, m in self._tool_metrics.items()},
+                "provider_stats": {pid: self._get_provider_stats_raw(m) for pid, m in self._provider_metrics.items()},
+                "observation_summary": self.observation_summary(),
+                "preference_corrections_count": len(self._preference_corrections),
+                "recent_corrections": list(self._preference_corrections[-20:]),
+                "user_feedback_count": len(self._user_feedback),
+                "recent_user_feedback": [
+                    {"candidate_id": f.candidate_id, "type": f.feedback_type, "message": f.message_ru}
+                    for f in self._user_feedback[-20:]
+                ],
+            }
