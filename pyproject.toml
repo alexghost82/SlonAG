@@ -3,33 +3,59 @@ name = "slon"
 version = "0.1.0"
 description = "Test harness and developer tooling for Slon"
 requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "SlonAG Contributors" }]
+keywords = ["ai", "agent", "automation", "testing", "tooling"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 # Runtime dependencies are owned by W01-T02. This file configures tooling only.
+
+[project.scripts]
+slon = "main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.16",
+    "mypy>=1.8",
+    "pre-commit>=3.5",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra"
 
 [tool.ruff]
 target-version = "py311"
-# Scope: tests/ only. Legacy application modules (main.py, ui.py, or_client.py,
-# setup.py, actions/, agent/, memory/, core/, config/) are excluded so Wave 1
-# CI does not require rewriting them.
-include = ["tests/**/*.py"]
+line-length = 120
+include = ["tests/**/*.py", "mark/**/*.py", "providers/**/*.py", "speech/**/*.py",
+           "server/**/*.py", "gateway/**/*.py", "policies/**/*.py",
+           "localization/**/*.py", "config/**/*.py", "sessions/**/*.py"]
+exclude = ["actions/**", "agent/**", "or_client.py", "memory/**"]
 
 [tool.ruff.lint]
-select = ["E", "F"]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["tests", "mark", "providers", "speech", "server", "gateway", "policies", "localization", "config", "sessions"]
+files = ["tests", "mark", "providers", "speech", "server", "gateway",
+         "policies", "localization", "config", "sessions"]
 explicit_package_bases = true
 mypy_path = "."
 pretty = true
 show_error_codes = true
 warn_unused_ignores = true
-# Follow imports for application code used by tests; do not ignore_errors globally.
 
 [[tool.mypy.overrides]]
 module = [
@@ -53,8 +79,21 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Legacy desktop actions/agent trees remain deferred mypy debt (pre-Wave 13).
-# Do not ignore_errors on mark/providers/speech/server/policies/config.
 [[tool.mypy.overrides]]
 module = ["actions.*", "agent.*", "or_client", "memory.*"]
 ignore_errors = true
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "actions/**",
+    "agent/**",
+    "or_client.py",
+    "setup.py",
+    "tests/**",
+    "ui/**",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
