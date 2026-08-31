@@ -32,7 +32,6 @@ __all__ = [
     "PreferenceType",
     "PreferenceEngine",
     "PreferenceRepository",
-    "PreferenceType",
     "PriorityLevel",
     "PreferenceVersion",
     "RetrievalContext",
