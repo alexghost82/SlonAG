@@ -10,7 +10,7 @@ from server.routes.files import FilesHandler
 from server.routes.memory import MemoryHandler, MemoryStore, RuntimeMemoryStore
 from server.routes.models import ModelStore, ModelsHandler
 from server.routes.screen import ScreenHandler
-from server.routes.status import get_status
+from server.routes.status import get_status, health_check
 from server.routes.tasks import TaskStore, TasksHandler
 from server.routes._common import DevicePrincipal, IdempotencyStore, RouteResponse
 
@@ -31,5 +31,6 @@ __all__ = [
     "TaskStore",
     "TasksHandler",
     "get_status",
+    "health_check",
     "post_chat",
 ]

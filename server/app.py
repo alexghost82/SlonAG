@@ -45,6 +45,7 @@ class MockResponse:
 
     status_code: int
     body: dict[str, object]
+    _cors_origin: str | None = None
 
 
 class DesktopControlApp:
@@ -60,6 +61,7 @@ class DesktopControlApp:
         bind_host: str = "127.0.0.1",
         allow_non_loopback: bool = False,
         bind_port: int = 8765,
+        cors_allowed_origins: list[str] = [],
     ) -> None:
         # Policy: loopback default; same-LAN private IP only with explicit
         # allow_non_loopback=True. Wildcards and public binds denied.
@@ -71,6 +73,7 @@ class DesktopControlApp:
         self.bind_host = host
         self.allow_non_loopback = bool(allow_non_loopback)
         self.bind_port = int(bind_port)
+        self._cors_allowed_origins: list[str] = list(cors_allowed_origins)
         self._idempotency: dict[tuple[str, str, str], MockResponse] = {}
         self._side_effect_counts: dict[str, int] = {}
 
@@ -95,9 +98,27 @@ class DesktopControlApp:
         if not route.startswith(API_VERSION_PREFIX):
             return _error(404, CODE_NOT_FOUND, "Unknown API version or path.")
 
+        # CORS origin check — explicit whitelist, default deny.
+        origin = (header_map.get("origin") or "").strip()
+        self._cors_origin: str | None = origin if origin in self._cors_allowed_origins else None
+
+        # Health endpoint — no auth required.
+        if verb == "GET" and route == f"{API_VERSION_PREFIX}/health":
+            return MockResponse(
+                status_code=200,
+                body={
+                    "status": "ok",
+                    "uptime_seconds": 0.0,
+                    "tls": False,
+                    "bind_host": self.bind_host,
+                    "bind_port": self.bind_port,
+                },
+                _cors_origin=self._cors_origin,
+            )
+
         if route in (f"{API_VERSION_PREFIX}/status", f"{API_VERSION_PREFIX}/events"):
             if not _is_authenticated(header_map):
-                return _error(401, CODE_UNAUTHORIZED)
+                return _error(401, CODE_UNAUTHORIZED, _cors_origin=self._cors_origin)
 
         try:
             if verb == "GET" and route == f"{API_VERSION_PREFIX}/status":
@@ -177,7 +198,7 @@ class DesktopControlApp:
         except SchemaValidationError as exc:
             return _error(400, exc.code, str(exc), field=exc.field)
 
-        return _error(404, CODE_NOT_FOUND, "No mock handler for this route.")
+        return _error(404, CODE_NOT_FOUND, "No mock handler for this route.", _cors_origin=self._cors_origin)
 
     def side_effect_count(self, key: str) -> int:
         """Test helper: how many times a mutating side effect ran for ``key``."""
@@ -204,17 +225,23 @@ class DesktopControlApp:
         cache_key = (method, path, key_raw)
         cached = self._idempotency.get(cache_key)
         if cached is not None:
-            return MockResponse(status_code=cached.status_code, body=deepcopy(cached.body))
+            return MockResponse(
+                status_code=cached.status_code,
+                body=deepcopy(cached.body),
+                _cors_origin=cached._cors_origin,
+            )
 
         response = factory(payload)
         sanitized = MockResponse(
             status_code=response.status_code,
             body=_sanitize_response_body(response.body),
+            _cors_origin=response._cors_origin,
         )
         self._idempotency[cache_key] = sanitized
         return MockResponse(
             status_code=sanitized.status_code,
             body=deepcopy(sanitized.body),
+            _cors_origin=sanitized._cors_origin,
         )
 
     def _status(self) -> MockResponse:
@@ -243,12 +270,14 @@ class DesktopControlApp:
                 "pending_approvals": 0,
                 "capabilities_ok": capabilities_ok,
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _events(self) -> MockResponse:
         return MockResponse(
             status_code=200,
             body={"subscribed": True, "events": []},
+            _cors_origin=self._cors_origin,
         )
 
     def _pairing_start(self, payload: dict[str, object]) -> MockResponse:
@@ -261,6 +290,7 @@ class DesktopControlApp:
                 "expires_at": 1_700_000_000.0,
                 "qr_payload": "mark-pair://local/123456",
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _pairing_complete(self, payload: dict[str, object]) -> MockResponse:
@@ -272,6 +302,7 @@ class DesktopControlApp:
                 "device_id": "dev_mock_1",
                 "device_secret": "device-secret-once",
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _chat(self, payload: dict[str, object]) -> MockResponse:
@@ -287,10 +318,11 @@ class DesktopControlApp:
                 "status": CODE_APPROVAL_REQUIRED,
                 "error": ApiError.of(CODE_APPROVAL_REQUIRED).to_dict(),
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _tasks_list(self) -> MockResponse:
-        return MockResponse(status_code=200, body={"tasks": []})
+        return MockResponse(status_code=200, body={"tasks": []}, _cors_origin=self._cors_origin)
 
     def _tasks_create(self, payload: dict[str, object]) -> MockResponse:
         request = TaskCreateRequest.from_dict(payload)
@@ -303,6 +335,7 @@ class DesktopControlApp:
                 "prompt": request.prompt,
                 "approval_required": True,
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _tasks_cancel(self, task_id: str, payload: dict[str, object]) -> MockResponse:
@@ -315,10 +348,11 @@ class DesktopControlApp:
                 "status": CODE_APPROVAL_REQUIRED,
                 "approval_required": True,
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _approvals_list(self) -> MockResponse:
-        return MockResponse(status_code=200, body={"approvals": []})
+        return MockResponse(status_code=200, body={"approvals": []}, _cors_origin=self._cors_origin)
 
     def _approvals_decision(
         self,
@@ -335,6 +369,7 @@ class DesktopControlApp:
                 "status": CODE_APPROVAL_REQUIRED,
                 "approval_required": True,
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _models_list(self) -> MockResponse:
@@ -350,6 +385,7 @@ class DesktopControlApp:
                     }
                 ]
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _models_activate(self, payload: dict[str, object]) -> MockResponse:
@@ -362,7 +398,7 @@ class DesktopControlApp:
         }
         if request.role is not None:
             body["role"] = request.role
-        return MockResponse(status_code=202, body=body)
+        return MockResponse(status_code=202, body=body, _cors_origin=self._cors_origin)
 
     def _screen_capture(self, payload: dict[str, object]) -> MockResponse:
         request = ScreenCaptureRequest.from_dict(payload)
@@ -377,10 +413,11 @@ class DesktopControlApp:
                 "approval_required": True,
                 "status": CODE_APPROVAL_REQUIRED,
             },
+            _cors_origin=self._cors_origin,
         )
 
     def _memory_get(self) -> MockResponse:
-        return MockResponse(status_code=200, body={"entries": []})
+        return MockResponse(status_code=200, body={"entries": []}, _cors_origin=self._cors_origin)
 
     def _memory_delete(self, memory_id: str, payload: dict[str, object]) -> MockResponse:
         request = MemoryDeleteRequest.from_dict(payload)
@@ -393,6 +430,7 @@ class DesktopControlApp:
                 "approval_required": True,
                 "status": CODE_APPROVAL_REQUIRED,
             },
+            _cors_origin=self._cors_origin,
         )
 
 
@@ -431,12 +469,13 @@ def _error(
     message: str | None = None,
     *,
     field: str | None = None,
+    _cors_origin: str | None = None,
 ) -> MockResponse:
     error = ApiError.of(code, message)
     body: dict[str, object] = {"error": error.to_dict()}
     if field is not None:
         body["field"] = field
-    return MockResponse(status_code=status_code, body=body)
+    return MockResponse(status_code=status_code, body=body, _cors_origin=_cors_origin)
 
 
 __all__ = [

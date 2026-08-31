@@ -54,6 +54,7 @@ from server.routes import (
     TaskStore,
     TasksHandler,
     get_status,
+    health_check,
 )
 from server.routes._common import DevicePrincipal as RoutePrincipal
 from server.routes._common import RouteResponse
@@ -130,6 +131,7 @@ class DesktopControlListener:
         files_root: str | Path | None = None,
         gateway: Any | None = None,
         gateway_workspace_id: str = "desktop",
+        cors_allowed_origins: list[str] = [],
     ) -> None:
         host = validate_bind_host(
             bind_host,
@@ -228,6 +230,7 @@ class DesktopControlListener:
             except Exception:
                 self._control_plane = None
         self._bonjour: Any | None = None  # BonjourManager when advertising
+        self._cors_allowed_origins: list[str] = list(cors_allowed_origins)
         self._advertise_bonjour = bool(advertise_bonjour)
 
         self._httpd: ThreadingHTTPServer | None = None
@@ -375,6 +378,15 @@ class DesktopControlListener:
                 return self._pairing_complete(body)
             if verb == "POST" and route == f"{API_VERSION_PREFIX}/auth/token":
                 return self._auth_token(body)
+
+            # Health endpoint — no auth required, must be before protected routes.
+            if verb == "GET" and route == f"{API_VERSION_PREFIX}/health":
+                return health_check(
+                    is_listening=self.listening,
+                    tls_enabled=self.tls_enabled,
+                    bind_host=self.bind_host,
+                    bind_port=self.bind_port,
+                )
 
             # Protected surface — require auth (pairing/token routes above exempt).
             if principal is None:
@@ -1164,6 +1176,10 @@ def _make_handler(
             self.send_response(int(response.status_code))
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
+            # CORS header — explicit whitelist, default deny.
+            origin = self.headers.get("Origin", "")
+            if origin and origin in listener._cors_allowed_origins:
+                self.send_header("Access-Control-Allow-Origin", origin)
             self.end_headers()
             self.wfile.write(payload)
 
@@ -1460,6 +1476,20 @@ def _make_handler(
                 headers=self._headers_map(),
             )
             self._write_response(response)
+
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            """Handle CORS preflight requests."""
+            origin = self.headers.get("Origin", "")
+            if origin and origin in listener._cors_allowed_origins:
+                self.send_response(204)
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                self.send_header("Access-Control-Max-Age", "86400")
+                self.end_headers()
+            else:
+                self.send_response(403)
+                self.end_headers()
 
     return DesktopControlHTTPHandler
 
