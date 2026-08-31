@@ -107,8 +107,8 @@ class DeviceIdentity:
             fingerprint_sha256=fp_hash,
             created_at=time.time(),
             model=kwargs.get("model", ""),
-            os_name=platform.system() or "",
-            os_version=platform.release() or "",
+            os_name=kwargs.get("os_name", platform.system() or ""),
+            os_version=kwargs.get("os_version", platform.release() or ""),
             extra=kwargs.get("extra", {}),
         )
 
@@ -222,6 +222,9 @@ class MigrationEvent:
 
 
 # ---------------------------------------------------------------------------
+# Backward compat alias for ConnectionReason
+ConnectionConnectionReason = ConnectionReason
+
 # Policy
 # ---------------------------------------------------------------------------
 
