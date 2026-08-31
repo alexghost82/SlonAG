@@ -58,7 +58,8 @@ class ObjectTracker:
         (active_tracks, events)
         """
         now = time.time()
-        new_detections: dict[str, DetectionResult] = {}
+        matched_ids: set[str] = set()
+
         for d in detections:
             if d.track_id is not None and d.track_id in self._state:
                 # Re-assign existing track
@@ -67,22 +68,27 @@ class ObjectTracker:
                 ts.is_present = True
                 ts.add_appearance(frame_index, d.bbox, d.confidence)
                 ts.add_trajectory_point(frame_index, d.bbox)
-                new_detections[d.track_id] = d
+                matched_ids.add(d.track_id)
             elif d.track_id is None:
                 # New detection — assign new track if capacity allows
                 if len(self._state) < self.max_tracks:
                     tid = self._allocate_id(d.kind, d.label)
                     d.track_id = tid
-                    new_detections[tid] = d
+                    matched_ids.add(tid)
             else:
-                # Existing track ID not matched — keep it as is
-                new_detections[d.track_id] = d
+                # Existing track ID in state — re-assign it
+                ts = self._state[d.track_id]
+                ts.last_seen = now
+                ts.is_present = True
+                ts.add_appearance(frame_index, d.bbox, d.confidence)
+                ts.add_trajectory_point(frame_index, d.bbox)
+                matched_ids.add(d.track_id)
 
-        # Mark non-matched present tracks as stale
+        # Mark non-matched present tracks as stale / continuity
         events: list[FrameEvent] = []
         stale_ids: list[str] = []
         for tid, ts in self._state.items():
-            if tid not in new_detections:
+            if tid not in matched_ids:
                 ts.is_present = False
                 if ts.ttl_seconds and (now - ts.last_seen) > ts.ttl_seconds:
                     stale_ids.append(tid)
@@ -104,22 +110,33 @@ class ObjectTracker:
         for tid in stale_ids:
             del self._state[tid]
 
-        # Return current active state
-        active = dict(self._state)
-
-        # Generate appearance events for new detections
-        for tid, d in new_detections.items():
-            if tid not in self._state:
-                pass  # already handled by the constructor check
-
-        return active, events
+        return dict(self._state), events
 
     def update_detection(self, result: DetectionResult) -> None:
-        """Update an existing detection with tracking metadata."""
+        """Update an existing detection with tracking metadata.
+
+        If the detection has a pre-set track_id that does not yet exist
+        in the tracker's internal state, the track is allocated first.
+        This mirrors the per-frame allocation done by ``process_frame``.
+        """
         if result.track_id is None:
             if len(self._state) >= self.max_tracks:
                 return  # capacity reached
             result.track_id = self._allocate_id(result.kind, result.label)
+        elif result.track_id not in self._state:
+            # Track ID provided but track not yet allocated — allocate it now
+            if len(self._state) >= self.max_tracks:
+                return  # capacity reached
+            self._allocate_id(result.kind, result.label)
+            self._state[result.track_id].add_appearance(0, result.bbox, result.confidence)
+            self._state[result.track_id].add_trajectory_point(0, result.bbox)
+        else:
+            # Existing track — update timestamps and record data
+            ts = self._state[result.track_id]
+            ts.last_seen = time.time()
+            ts.is_present = True
+            ts.add_appearance(result.frame_index, result.bbox, result.confidence)
+            ts.add_trajectory_point(result.frame_index, result.bbox)
 
     def get_track(self, track_id: str) -> TrackingState | None:
         return self._state.get(track_id)

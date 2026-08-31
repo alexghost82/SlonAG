@@ -26,12 +26,18 @@ class TemporalState:
     history: list[dict[str, Any]] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
     max_events: int = 500
+    # Track history for trajectory queries
+    _trajectory_cache: dict[str, list[dict[str, float]]] = field(default_factory=dict)
+    _max_trajectory_points: int = 200
 
     def add_frame(self, frame_index: int, detections: list[DetectionResult]) -> None:
+        # Extract labels and track_ids from detections
+        labels = [d.label for d in detections]
         self.history.append({
             "frame_index": frame_index,
             "timestamp": time.time(),
             "detection_count": len(detections),
+            "labels": labels,
         })
         if len(self.history) > self.max_history:
             self.history.pop(0)
@@ -40,6 +46,13 @@ class TemporalState:
         self.events.append(event)
         if len(self.events) > self.max_events:
             self.events.pop(0)
+
+    def add_trajectory_point(self, track_id: str, cx: float, cy: float) -> None:
+        if track_id not in self._trajectory_cache:
+            self._trajectory_cache[track_id] = []
+        self._trajectory_cache[track_id].append({"cx": cx, "cy": cy})
+        if len(self._trajectory_cache[track_id]) > self._max_trajectory_points:
+            self._trajectory_cache[track_id].pop(0)
 
     @property
     def frame_count(self) -> int:
@@ -67,7 +80,7 @@ class TemporalAnalyzer:
         self.state.add_frame(frame_index, detections)
         events: list[Event] = []
 
-        # Detect appearance events (new labels not seen before)
+        # Detect appearance events (new labels not seen in recent history)
         seen_labels = self._get_recent_labels()
         new_labels = {d.label for d in detections if d.label not in seen_labels}
         for label in new_labels:
@@ -81,6 +94,12 @@ class TemporalAnalyzer:
         # Detect motion events for tracked detections
         for d in detections:
             if d.track_id:
+                # Record trajectory point from current detection
+                self.state.add_trajectory_point(
+                    d.track_id,
+                    d.bbox.center_x,
+                    d.bbox.center_y,
+                )
                 prev_points = self._get_trajectory(d.track_id)
                 if len(prev_points) >= 2:
                     pt1 = prev_points[-2]
@@ -110,19 +129,14 @@ class TemporalAnalyzer:
         return list(self.state.history)
 
     def _get_recent_labels(self, window: int = 10) -> set[str]:
-        """Return labels from recent frames.
-        
-        NOTE: This is a simplified implementation. The full implementation would
-        need per-frame detection data stored in the temporal store. Currently
-        returns an empty set — multi-frame label tracking is a planned feature.
-        """
+        """Return labels seen in recent frames."""
         recent = self.state.history[-window:]
-        return set()  # TODO: collect labels from detection data in recent frames
+        labels: set[str] = set()
+        for entry in recent:
+            if "labels" in entry:
+                labels.update(entry["labels"])
+        return labels
 
     def _get_trajectory(self, track_id: str) -> list[dict[str, float]]:
-        """Return trajectory points for a track ID.
-        
-        NOTE: This is a placeholder — tracking store is not yet implemented.
-        Returns empty list. Multi-object tracking is a planned feature.
-        """
-        return []  # TODO: implement tracking store for trajectory data
+        """Return trajectory points for a track ID from the cache."""
+        return list(self.state._trajectory_cache.get(track_id, []))
