@@ -9,6 +9,7 @@ Falls back gracefully when GUI libraries are unavailable.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -25,6 +26,51 @@ from computer_control.types import (
     ScreenPosition,
     WindowInfo,
 )
+
+
+# -- Windows command security --
+
+_WINDOWS_INJECTION_RE = re.compile(
+    r'[;|&<>`]'               # shell metacharacters
+    r'|\$\('                 # $(… substitution
+    r'|%[A-Za-z_][A-Za-z0-9_]*%'  # env-var expansion like %COMSPEC%
+)
+
+_WINDOWS_CMD_INVOCATION_RE = re.compile(
+    r'cmd\s*/[cCpP]\s'
+    r'|powershell(?:\.exe)?\s'
+    r'|cmd\.exe\b'
+    r'|pwsh(?:\.exe)?\b',
+    re.IGNORECASE,
+)
+
+_BLOCKED_BASENAMES = frozenset((
+    'cmd', 'cmd.exe', 'powershell', 'powershell.exe',
+    'pwsh', 'pwsh.exe', 'pwsh.dll',
+    'cmdkey', 'cmdkey.exe',
+    'cscript', 'cscript.exe',
+    'wscript', 'wscript.exe',
+    'runas', 'runas.exe',
+    'schtasks', 'schtasks.exe',
+    'reg', 'reg.exe',
+))
+
+
+def _validate_windows_launch_input(value: str) -> str | None:
+    """Validate an app_launch argument.
+
+    Returns *value* if safe, or *None* to reject it.
+    """
+    if not value:
+        return None
+    if _WINDOWS_INJECTION_RE.search(value):
+        return None
+    if _WINDOWS_CMD_INVOCATION_RE.search(value):
+        return None
+    base = Path(value).name.lower()
+    if base in _BLOCKED_BASENAMES:
+        return None
+    return value
 
 
 class WindowsPlatformAdapter(PlatformAdapter):
@@ -466,8 +512,20 @@ class WindowsPlatformAdapter(PlatformAdapter):
         cmd = path or name
         if not cmd:
             return ExecutionResult.error_result("missing_args", "Не указаны путь или имя приложения")
+        # Security: validate input to prevent command injection.
+        validated = _validate_windows_launch_input(cmd)
+        if validated is None:
+            return ExecutionResult.error_result(
+                "app_launch_injection",
+                "Отказано: подозрительный символ в пути или имени",
+            )
         try:
-            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Safe: argv list, no shell=True.
+            proc = subprocess.Popen(
+                [validated],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             return ExecutionResult.ok_result(
                 message=f"Приложение запущено: {cmd}",
                 data={"pid": proc.pid},
