@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mark.memory import MemoryRecord, MemoryStore, RecordType
+from acta.memory import MemoryRecord, MemoryStore, RecordType
 
 from tests.unit.memory.fakes import FakeCloudEmbedder, FakeLocalEmbedder
 

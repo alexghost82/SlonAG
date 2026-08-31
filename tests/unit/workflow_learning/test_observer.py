@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mark.workflow_learning.observer import ActionObserver
-from mark.workflow_learning.types import (
+from acta.workflow_learning.observer import ActionObserver
+from acta.workflow_learning.types import (
     ActionSequence,
     ActionSequenceEvent,
     WorkflowCandidate,

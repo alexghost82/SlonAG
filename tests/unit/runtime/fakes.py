@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from mark.runtime.errors import CODE_NOT_RUNNING, CODE_OK
-from mark.runtime.manager import ProcessState
+from acta.runtime.errors import CODE_NOT_RUNNING, CODE_OK
+from acta.runtime.manager import ProcessState
 
 
 class FakeRunner:

@@ -326,9 +326,9 @@ class VoiceBridge:
     async def _build_agent_loop(self) -> None:
         """Build AgentLoop from the model_info's provider."""
         try:
-            from mark.tools.builtin import build_builtin_registry
-            from mark.tools.executor import ToolExecutor
-            from mark.safety.policy import SafetyPolicy
+            from acta.tools.builtin import build_builtin_registry
+            from acta.tools.executor import ToolExecutor
+            from acta.safety.policy import SafetyPolicy
             from agent.runtime import AgentLoop
 
             registry = build_builtin_registry()

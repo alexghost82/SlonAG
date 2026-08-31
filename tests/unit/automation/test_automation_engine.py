@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from mark.automation.engine import (
+from acta.automation.engine import (
     AutomationEngine,
     CronScheduler,
     CronParser,
@@ -44,7 +44,7 @@ from mark.automation.engine import (
     RecurringTrigger,
     SimpleAutomationEngine,
 )
-from mark.automation.types import (
+from acta.automation.types import (
     AutomationJob,
     AutomationStatus,
     ConcurrencyPolicy,
@@ -686,17 +686,17 @@ class TestE2ECompatibility:
     """Verify imports that existing E2E tests expect."""
 
     def test_engine_import(self) -> None:
-        from mark.automation.engine import AutomationEngine
+        from acta.automation.engine import AutomationEngine
         eng = AutomationEngine()
         assert isinstance(eng, AutomationEngine)
 
     def test_rule_import(self) -> None:
-        from mark.automation.types import AutomationRule
+        from acta.automation.types import AutomationRule
         rule = AutomationRule(name="test", trigger="manual", action="notify")
         assert rule.name == "test"
 
     def test_full_import(self) -> None:
-        from mark.automation import (
+        from acta.automation import (
             AutomationEngine,
             AutomationJob,
             AutomationStatus,

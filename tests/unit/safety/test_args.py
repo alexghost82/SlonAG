@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mark.safety import (
+from acta.safety import (
     CODE_INVALID_ARGS,
     ArgValidationError,
     authorize,

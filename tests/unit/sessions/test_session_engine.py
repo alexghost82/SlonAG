@@ -29,8 +29,8 @@ from sessions.binding import SessionAgentBinding
 from sessions.manager import SessionNotFoundError, SessionStateError
 from sessions.store import SessionInactiveError
 from sessions.transcript import entry_fields, messages_from_entries
-from mark.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
-from mark.tools import ToolExecutor, ToolRegistry, ToolSpec
+from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.tools import ToolExecutor, ToolRegistry, ToolSpec
 
 
 def _manager(tmp_path: Path) -> SessionManager:

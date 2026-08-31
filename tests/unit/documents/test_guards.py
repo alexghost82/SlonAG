@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mark.documents import (
+from acta.documents import (
     CODE_BAD_MIME,
     CODE_PATH_TRAVERSAL,
     CODE_TOO_LARGE,
@@ -17,7 +17,7 @@ from mark.documents import (
     PathTraversalError,
     ZipBombError,
 )
-from mark.documents.guards import assert_not_zip_bomb
+from acta.documents.guards import assert_not_zip_bomb
 
 
 def _write(root: Path, name: str, data: bytes | str) -> Path:

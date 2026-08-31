@@ -1,4 +1,4 @@
-"""Tests for mark/connectivity/session.py — session state machine."""
+"""Tests for acta/connectivity/session.py — session state machine."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mark.connectivity.session import ConnectivitySession, ConnectivitySessionError
-from mark.connectivity.types import (
+from acta.connectivity.session import ConnectivitySession, ConnectivitySessionError
+from acta.connectivity.types import (
     ConnectionConnectionReason,
     ConnectionInfo,
     ConnectionState,

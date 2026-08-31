@@ -35,7 +35,7 @@ def _get_tool_result_class():
     """Lazy import ToolResult to avoid circular imports."""
     global _TOOL_RESULT_CLASS
     if _TOOL_RESULT_CLASS is None:
-        from mark.tools.contracts import ToolResult
+        from acta.tools.contracts import ToolResult
         _TOOL_RESULT_CLASS = ToolResult
     return _TOOL_RESULT_CLASS
 

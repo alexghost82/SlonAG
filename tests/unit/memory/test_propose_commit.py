@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import sqlite3
 
-from mark.memory import (
+from acta.memory import (
     CODE_UNKNOWN_PROPOSAL,
     MemoryRecord,
     MemoryStore,

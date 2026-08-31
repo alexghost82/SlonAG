@@ -9,16 +9,16 @@ from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
 from i18n import t
 
 from agent.steering import SteeringQueue
-from mark.safety import (
+from acta.safety import (
     SafetyDecision,
     SafetyPolicy,
     SafetyPolicyError,
     UnknownToolError,
     UntrustedSource,
 )
-from mark.tools import ToolExecutor, ToolRegistry, ToolResult
-from mark.tools.builtin import build_builtin_registry
-from mark.tools.legacy.adapters import with_legacy_speak
+from acta.tools import ToolExecutor, ToolRegistry, ToolResult
+from acta.tools.builtin import build_builtin_registry
+from acta.tools.legacy.adapters import with_legacy_speak
 from providers.contracts import ModelInfo
 
 

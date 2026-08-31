@@ -19,8 +19,8 @@ from unittest.mock import patch
 
 import pytest
 
-from mark.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
-from mark.tools.contracts import ToolResult
+from acta.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.tools.contracts import ToolResult
 
 shell_exec_mod = None
 ShellExecResult = None
@@ -225,7 +225,7 @@ def test_shell_exec_blocked(cmd: str) -> None:
 
 def test_shell_exec_denied_by_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     """When SafetyPolicy denies, tool returns ok=False, code='denied'."""
-    import mark.safety.policy as pol
+    import acta.safety.policy as pol
 
     fake_decision = SafetyDecision(
         kind=DecisionKind.DENY,
@@ -433,13 +433,13 @@ def test_shell_exec_result_has_all_fields() -> None:
 
 def test_shell_exec_full_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Model tool call → ToolRegistry → SafetyPolicy → ToolExecutor → ToolResult."""
-    from mark.tools.registry import ToolRegistry
-    from mark.tools.executor import ToolExecutor
-    from mark.safety.policy import SafetyPolicy
-    from mark.tools.contracts import ToolSpec
+    from acta.tools.registry import ToolRegistry
+    from acta.tools.executor import ToolExecutor
+    from acta.safety.policy import SafetyPolicy
+    from acta.tools.contracts import ToolSpec
 
     # Ensure shell_exec is in the safety registry
-    from mark.safety.registry import _REGISTRY, ArgSchema, SafetyRule
+    from acta.safety.registry import _REGISTRY, ArgSchema, SafetyRule
     if "shell_exec" not in _REGISTRY:
         _REGISTRY["shell_exec"] = SafetyRule(
             risk=RiskLevel.CONFIRM,
@@ -483,11 +483,11 @@ def test_shell_exec_executor_cancel_during_exec(monkeypatch: pytest.MonkeyPatch)
     cancel_evt = threading.Event()
     cancel_evt.set()  # Pre-cancelled
 
-    from mark.tools.registry import ToolRegistry
-    from mark.safety.policy import SafetyPolicy
-    from mark.tools.contracts import ToolSpec
-    from mark.tools.executor import ToolExecutor
-    from mark.tools.contracts import RiskLevel
+    from acta.tools.registry import ToolRegistry
+    from acta.safety.policy import SafetyPolicy
+    from acta.tools.contracts import ToolSpec
+    from acta.tools.executor import ToolExecutor
+    from acta.tools.contracts import RiskLevel
 
     registry = ToolRegistry()
     spec = ToolSpec(
@@ -522,7 +522,7 @@ def test_shell_exec_executor_cancel_during_exec(monkeypatch: pytest.MonkeyPatch)
 def test_cmd_control_deprecated_shim() -> None:
     """cmd_control delegates to shell_exec."""
     try:
-        from mark.tools.legacy.adapters import _cmd_control_deprecated_handler
+        from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
     except Exception as exc:
         pytest.skip(f"Legacy adapter import broken (pre-existing): {exc}")
     result = _cmd_control_deprecated_handler(
@@ -535,7 +535,7 @@ def test_cmd_control_deprecated_shim() -> None:
 def test_cmd_control_legacy_args() -> None:
     """cmd_control accepts 'cmd' as fallback for 'command'."""
     try:
-        from mark.tools.legacy.adapters import _cmd_control_deprecated_handler
+        from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
     except Exception as exc:
         pytest.skip(f"Legacy adapter import broken (pre-existing): {exc}")
     result = _cmd_control_deprecated_handler(
@@ -632,12 +632,12 @@ def test_shell_exec_timeout_high_clamped() -> None:
 
 def test_shell_exec_executor_integration() -> None:
     """Full integration: ToolExecutor.execute with a real command."""
-    from mark.tools.registry import ToolRegistry
-    from mark.tools.executor import ToolExecutor
-    from mark.safety.policy import SafetyPolicy
-    from mark.tools.contracts import ToolSpec
+    from acta.tools.registry import ToolRegistry
+    from acta.tools.executor import ToolExecutor
+    from acta.safety.policy import SafetyPolicy
+    from acta.tools.contracts import ToolSpec
 
-    from mark.safety.registry import _REGISTRY, ArgSchema, SafetyRule
+    from acta.safety.registry import _REGISTRY, ArgSchema, SafetyRule
     if "shell_exec" not in _REGISTRY:
         _REGISTRY["shell_exec"] = SafetyRule(
             risk=RiskLevel.CONFIRM,

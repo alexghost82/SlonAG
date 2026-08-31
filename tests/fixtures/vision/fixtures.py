@@ -12,17 +12,17 @@ from typing import Any
 
 import pytest
 
-from mark.vision.fixtures.image import (
+from acta.vision.fixtures.image import (
     create_test_image,
     create_moving_object_image,
     create_grid_image,
     create_text_image,
     create_person_roi,
 )
-from mark.vision.fixtures.video import create_test_video
-from mark.vision.fixtures.rtsp import RTSPFixture, create_rtsp_fixture
-from mark.vision.config import VisionConfig
-from mark.vision.runtime import VisionRuntime, create_runtime
+from acta.vision.fixtures.video import create_test_video
+from acta.vision.fixtures.rtsp import RTSPFixture, create_rtsp_fixture
+from acta.vision.config import VisionConfig
+from acta.vision.runtime import VisionRuntime, create_runtime
 
 
 @pytest.fixture

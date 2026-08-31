@@ -1,13 +1,13 @@
-"""Tests for mark/mcp/streamable_http_transport.py."""
+"""Tests for acta/mcp/streamable_http_transport.py."""
 
 from __future__ import annotations
 
 import pytest
 
-from mark.mcp.client import McpClient
-from mark.mcp.streamable_http_transport import McpStreamableHttpTransport
-from mark.mcp.types import McpServerConfig, McpTransportKind
-from mark.mcp.transport import McpStdioTransport
+from acta.mcp.client import McpClient
+from acta.mcp.streamable_http_transport import McpStreamableHttpTransport
+from acta.mcp.types import McpServerConfig, McpTransportKind
+from acta.mcp.transport import McpStdioTransport
 
 
 class TestStreamableHttpImport:
@@ -46,7 +46,7 @@ class TestStreamableHttpClientConfig:
             name="stdio_test",
             transport=McpTransportKind.STDIO,
             command=sys.executable,
-            args=["-m", "mark.mcp.test_server"],
+            args=["-m", "acta.mcp.test_server"],
         )
         client = McpClient(config)
         transport = client._create_transport()

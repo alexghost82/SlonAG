@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from mark.vision.config import VisionConfig
-from mark.vision.fixtures.image import create_test_image, create_moving_object_image
-from mark.vision.runtime import create_runtime
-from mark.vision.types import FrameSource
+from acta.vision.config import VisionConfig
+from acta.vision.fixtures.image import create_test_image, create_moving_object_image
+from acta.vision.runtime import create_runtime
+from acta.vision.types import FrameSource
 
 
 class TestVisionRuntimeImage:

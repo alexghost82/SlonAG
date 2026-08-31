@@ -8,7 +8,7 @@ from collections.abc import Mapping
 
 from i18n import t
 
-from mark.tools.contracts import ToolResult
+from acta.tools.contracts import ToolResult
 from runtime.browser.service import get_browser_service
 
 

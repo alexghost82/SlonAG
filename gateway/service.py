@@ -22,7 +22,7 @@ from gateway.router import (
 )
 from gateway.store import GatewayStore
 from gateway.websocket import GatewayWebSocketRuntime
-from mark.automation.engine import AutomationEngine, AutomationRecord, TriggerType
+from acta.automation.engine import AutomationEngine, AutomationRecord, TriggerType
 
 
 class SlonGateway:
@@ -202,7 +202,7 @@ class SlonGateway:
         self, context: GatewayContext, request: GatewayEnvelope, goal: str,
         model, operation_id: str,
     ) -> None:
-        from mark.tools import ToolExecutor
+        from acta.tools import ToolExecutor
 
         def confirm(decision) -> bool:
             if not decision.tool_call_id:

@@ -34,11 +34,11 @@ from typing import Any
 
 from agent.observation import Observation, ObservationKind
 from agent.runtime import AgentLoop, LoopBudget, LoopDetector
-from mark.tools.contracts import ToolResult
-from mark.tools.executor import ToolExecutor
-from mark.tools.registry import ToolRegistry
-from mark.safety.policy import SafetyPolicy
-from mark.safety.types import DecisionKind, SafetyDecision, UntrustedSource
+from acta.tools.contracts import ToolResult
+from acta.tools.executor import ToolExecutor
+from acta.tools.registry import ToolRegistry
+from acta.safety.policy import SafetyPolicy
+from acta.safety.types import DecisionKind, SafetyDecision, UntrustedSource
 from providers.contracts import (
     ChatProvider,
     ConversationMessage,

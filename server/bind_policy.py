@@ -11,7 +11,7 @@ or APNs product capability.
 
 from __future__ import annotations
 
-from mark.network.hosts import is_loopback_host, is_private_lan_host, parse_ip_literal
+from acta.network.hosts import is_loopback_host, is_private_lan_host, parse_ip_literal
 
 # Unspecified / wildcard binds are always rejected (even with LAN opt-in).
 FORBIDDEN_BIND_HOSTS = frozenset({"0.0.0.0", "::", "[::]"})

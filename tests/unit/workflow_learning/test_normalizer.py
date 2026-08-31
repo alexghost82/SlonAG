@@ -2,8 +2,8 @@
 
 import pytest
 
-from mark.workflow_learning.normalizer import Normalizer, _detect_string_type
-from mark.workflow_learning.types import ParameterSlot, WorkflowCandidate, WorkflowStep
+from acta.workflow_learning.normalizer import Normalizer, _detect_string_type
+from acta.workflow_learning.types import ParameterSlot, WorkflowCandidate, WorkflowStep
 
 
 class TestNormalizer:

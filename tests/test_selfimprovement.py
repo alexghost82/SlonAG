@@ -16,11 +16,11 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mark.selfimprovement.collector import MetricsCollector
-from mark.selfimprovement.pipeline import SelfImprovementPipeline
-from mark.selfimprovement.rules import _deduplicate
-from mark.selfimprovement.storage import load_state, save_state
-from mark.selfimprovement.types import (
+from acta.selfimprovement.collector import MetricsCollector
+from acta.selfimprovement.pipeline import SelfImprovementPipeline
+from acta.selfimprovement.rules import _deduplicate
+from acta.selfimprovement.storage import load_state, save_state
+from acta.selfimprovement.types import (
     AuditAction,
     AuditEntry,
     EvidenceType,
@@ -38,7 +38,7 @@ from mark.selfimprovement.types import (
     MetricSnapshot,
     MetricBucket,
 )
-from mark.selfimprovement import localized_strings
+from acta.selfimprovement import localized_strings
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -319,12 +319,12 @@ class TestImprovementState(TestCase):
 class TestPipelineObservation(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_observations(self):
         p = SelfImprovementPipeline()
         obs = p.observe(Observation(kind=ObservationKind.TOOL_FAILURE, details={"t": "x"}))
@@ -356,12 +356,12 @@ class TestPipelineObservation(TestCase):
 class TestPipelineCandidates(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_candidates(self):
         p = SelfImprovementPipeline()
         for _ in range(15):
@@ -412,12 +412,12 @@ class TestPipelineVersioning(TestCase):
 class TestPipelineApproval(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_approve(self):
         p = SelfImprovementPipeline()
         rec = _make_record("ap1", "Approve test")
@@ -455,12 +455,12 @@ class TestPipelineApproval(TestCase):
 class TestPipelineReject(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_reject(self):
         p = SelfImprovementPipeline()
         rec = _make_record("rm1", "Reject test")
@@ -487,12 +487,12 @@ class TestPipelineReject(TestCase):
 class TestPipelineEvaluation(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_evaluate_pass(self):
         p = SelfImprovementPipeline()
         rec = _make_record("eval1", "Eval test")
@@ -554,12 +554,12 @@ class TestPipelineEvaluation(TestCase):
 class TestPipelineApply(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_apply_routing_stats(self):
         p = SelfImprovementPipeline()
         rec = _make_record("ap5", "Apply test")
@@ -611,12 +611,12 @@ class TestPipelineApply(TestCase):
 class TestPipelineMonitor(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_monitor_stable(self):
         p = SelfImprovementPipeline()
         rec = _make_record("mon1", "Monitor test")
@@ -649,12 +649,12 @@ class TestPipelineMonitor(TestCase):
 class TestPipelineRollback(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_rollback(self):
         p = SelfImprovementPipeline()
         rec = _make_record("rb", "Rollback test")
@@ -764,12 +764,12 @@ class TestBoundedChange(TestCase):
 class TestPipelineDetails(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
     def test_get_candidate_details(self):
         p = SelfImprovementPipeline()
         rec = _make_record("cd1", "Details test")
@@ -793,7 +793,7 @@ class TestPipelineDetails(TestCase):
 
     def test_get_user_feedback_summary(self):
         p = SelfImprovementPipeline()
-        from mark.selfimprovement.collector import MetricsCollector
+        from acta.selfimprovement.collector import MetricsCollector
         fresh_collector = MetricsCollector()
         fresh_collector.record_user_feedback("c1", "approve", "msg1")
         fresh_collector.record_user_feedback("c2", "reject", "msg2")
@@ -822,12 +822,12 @@ class TestPipelineDetails(TestCase):
 class TestIntegration(TestCase):
     def setUp(self):
         # Clear disk state and in-memory cached state
-        import mark.selfimprovement
+        import acta.selfimprovement
         _state_path = Path("/home/slon/Documents/GitHub/SlonAG/SlonAG-fix-worktrees/08/memory/self_improvement.json")
         if _state_path.exists():
             _state_path.unlink()
-        mark.selfimprovement._state = None
-        mark.selfimprovement._collector = None
+        acta.selfimprovement._state = None
+        acta.selfimprovement._collector = None
 
     def test_full_pipeline(self):
         """End-to-end: observation → candidate → approval → evaluation → apply → monitor."""
@@ -837,12 +837,12 @@ class TestIntegration(TestCase):
         # 1. Observe failures
         for _ in range(10):
             p._collector.record_tool_call("slow_web", 8000.0, False, "timeout", timeout=True)
-        from mark.selfimprovement.types import Observation, ObservationKind
+        from acta.selfimprovement.types import Observation, ObservationKind
         p.observe(Observation(kind=ObservationKind.PROVIDER_SLOW, details={"p": "or"}))
         self.assertGreater(p._state.observations_count, 0)
 
         # 2. Create a clean record for evaluation
-        from mark.selfimprovement.types import SelfImprovementRecord, ImprovementStatus, EvaluationStatus
+        from acta.selfimprovement.types import SelfImprovementRecord, ImprovementStatus, EvaluationStatus
         new_rec = SelfImprovementRecord(
             id="fp_" + str(id(p) % 100000),
             title="End-to-end test improvement",

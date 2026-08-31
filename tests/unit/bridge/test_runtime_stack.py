@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from providers.contracts import ModelInfo
-from mark.bridge import authorize_tool, build_runtime_stack
+from acta.bridge import authorize_tool, build_runtime_stack
 
 
 def test_build_stack_degrades_without_keys(tmp_path: Path) -> None:
@@ -42,7 +42,7 @@ def test_authorize_unknown_tool_fails_closed(tmp_path: Path) -> None:
 
 
 def test_authorize_without_safety() -> None:
-    from mark.bridge import RuntimeStack
+    from acta.bridge import RuntimeStack
 
     stack = RuntimeStack(provider_id="gemini", network_mode="hybrid", safety=None)
     allowed, reason = authorize_tool(stack, "anything", {})

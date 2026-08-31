@@ -1,0 +1,145 @@
+"""SSRF-oriented URL checks. Hosts are inspected as written; no DNS or HTTP."""
+
+from __future__ import annotations
+
+import ipaddress
+import re
+from urllib.parse import urlparse
+
+from acta.safety.errors import UnsafeUrlError
+
+_ALLOWED_SCHEMES = frozenset({"http", "https"})
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata",
+        "metadata.google.internal",
+    }
+)
+_BLOCKED_HOST_SUFFIXES = (".metadata.google.internal",)
+_METADATA_IPS = frozenset(
+    {
+        ipaddress.ip_address("169.254.169.254"),
+    }
+)
+_DOTTED_IPV4 = re.compile(r"^(\d+)\.(\d+)\.(\d+)\.(\d+)$")
+_HEX_IPV4 = re.compile(r"^0x[0-9a-f]+$", re.IGNORECASE)
+# Partial IPv4: "N.M" or "N.M.O" — not valid IP literals but browsers
+# may interpret them in unexpected ways.
+_PARTIAL_IPV4 = re.compile(r"^(\d+)(\.(\d+))?(\.(\d+))?$")
+
+
+def check_url(url: str) -> None:
+    """Allow only public http(s) hosts. Raise ``UnsafeUrlError`` otherwise.
+
+    Does not resolve DNS or open sockets. Error text never includes the URL.
+    """
+    if not isinstance(url, str) or not url.strip():
+        raise UnsafeUrlError()
+    parsed = urlparse(url.strip())
+    if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+        raise UnsafeUrlError()
+    try:
+        host = parsed.hostname
+    except ValueError:
+        raise UnsafeUrlError() from None
+    if not host:
+        raise UnsafeUrlError()
+    if _host_blocked(host.rstrip(".").lower()):
+        raise UnsafeUrlError()
+
+
+def _host_blocked(
+    host: str | ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return True when *host* is a forbidden destination."""
+    if isinstance(host, ipaddress.IPv4Address | ipaddress.IPv6Address):
+        address = host  # type: ignore[assignment]
+    else:
+        if host in _BLOCKED_HOSTS:
+            return True
+        if any(host.endswith(suffix) for suffix in _BLOCKED_HOST_SUFFIXES):
+            return True
+        address = _parse_ip(host)
+        if address is None:
+            return False
+    if address in _METADATA_IPS:
+        return True
+    return bool(
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_unspecified
+        or address.is_multicast
+        or address.is_reserved
+    )
+
+
+def _parse_ip(
+    host: str,
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Parse an IP literal from *host*, including ambiguous forms.
+
+    Returns the concrete IPv4/IPv6 address, or None if the host is purely
+    alphabetic / a FQDN.
+    """
+    # --- Octal-style dotted IPv4: 0177.0.0.1 → 127.0.0.1 ---
+    dotted = _DOTTED_IPV4.fullmatch(host)
+    if dotted is not None and any(
+        len(part) > 1 and part.startswith("0") for part in dotted.groups()
+    ):
+        return ipaddress.ip_address("127.0.0.1")
+
+    # --- Pure decimal integer IPv4 (big-endian): 127.0.0.1 → 2130706433 ---
+    if host.isdigit():
+        number = int(host)
+        if 0 <= number < 2**32:
+            return ipaddress.IPv4Address(number)
+        return None
+
+    # --- Hex IPv4: 0x7f000001 → 127.0.0.1 ---
+    if _HEX_IPV4.fullmatch(host):
+        number = int(host, 16)
+        if 0 <= number < 2**32:
+            return ipaddress.IPv4Address(number)
+        return None
+
+    # --- Partial IPv4: "N.M" or "N.M.O" — reject as unambiguous. ---
+    partial = _PARTIAL_IPV4.fullmatch(host)
+    if partial is not None:
+        groups = partial.groups()
+        # If we have a second or third group, this is a partial IPv4 (N.M or N.M.O)
+        # which is not a valid IP literal — reject conservatively.
+        if groups[1] is not None or groups[2] is not None:
+            return ipaddress.ip_address("0.0.0.0")
+        # Single number without dots — already handled above by isdigit()
+
+    # --- Standard IPv4 / IPv6 ---
+    try:
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(host)
+    except ValueError:
+        return None
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address
+
+
+__all__ = ["check_url"]
+
+
+def is_safe_url(url: str) -> bool:
+    """Return True if *url* is a safe public destination.
+
+    This is the bool-returning variant of ``check_url``.
+    """
+    try:
+        check_url(url)
+        return True
+    except UnsafeUrlError:
+        return False
+
+
+
+# Alias for external consumers
+is_url_safe = is_safe_url

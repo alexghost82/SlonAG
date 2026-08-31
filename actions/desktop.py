@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from mark.safety import authorize, check_url, validate_args
-from mark.safety.errors import ArgValidationError
-from mark.safety.types import DecisionKind, SafetyDecision, UntrustedSource
+from acta.safety import authorize, check_url, validate_args
+from acta.safety.errors import ArgValidationError
+from acta.safety.types import DecisionKind, SafetyDecision, UntrustedSource
 
 TOOL_NAME = "desktop_control"
 

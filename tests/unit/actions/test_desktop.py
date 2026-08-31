@@ -13,7 +13,7 @@ from actions.desktop import (
     UnknownDesktopOpError,
     desktop_control,
 )
-from mark.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
+from acta.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
 
 
 class FakeMouse:

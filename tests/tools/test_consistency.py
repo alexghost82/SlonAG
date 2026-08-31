@@ -21,7 +21,7 @@ class TestToolRegistryConsistency:
 
     def test_every_registered_tool_has_callable_handler(self) -> None:
         """Every ToolSpec.name must have a callable handler."""
-        from mark.tools.builtin import build_builtin_registry
+        from acta.tools.builtin import build_builtin_registry
 
         registry = build_builtin_registry()
         for spec in registry.list():
@@ -31,7 +31,7 @@ class TestToolRegistryConsistency:
 
     def test_no_fake_descriptions(self) -> None:
         """No tool description should contain 'fake', 'stub', 'placeholder'."""
-        from mark.tools.builtin import build_builtin_registry, _DESCRIPTIONS
+        from acta.tools.builtin import build_builtin_registry, _DESCRIPTIONS
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -51,8 +51,8 @@ class TestToolRegistryConsistency:
 
     def test_cmd_control_not_advertised(self) -> None:
         """cmd_control must NOT be advertised (deprecated)."""
-        from mark.tools.builtin import build_builtin_registry, _DESCRIPTIONS
-        from mark.tools.legacy import LEGACY_HANDLERS
+        from acta.tools.builtin import build_builtin_registry, _DESCRIPTIONS
+        from acta.tools.legacy import LEGACY_HANDLERS
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -72,8 +72,8 @@ class TestToolRegistryConsistency:
 
     def test_safety_only_tools_not_in_builtin_registry(self) -> None:
         """Tools that exist only in safety policy should NOT be in builtin registry."""
-        from mark.tools.builtin import build_builtin_registry
-        from mark.safety.registry import registered_tools
+        from acta.tools.builtin import build_builtin_registry
+        from acta.safety.registry import registered_tools
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -93,7 +93,7 @@ class TestToolRegistryConsistency:
 
     def test_vision_tool_gated_by_capability(self) -> None:
         """vision_analyze should only register when vision engine is available."""
-        from mark.tools.builtin import build_builtin_registry, _check_vision
+        from acta.tools.builtin import build_builtin_registry, _check_vision
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -108,7 +108,7 @@ class TestToolRegistryConsistency:
 
     def test_stt_tool_gated_by_capability(self) -> None:
         """stt_listen should only register when STT binary is available."""
-        from mark.tools.builtin import build_builtin_registry, _check_stt
+        from acta.tools.builtin import build_builtin_registry, _check_stt
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -123,7 +123,7 @@ class TestToolRegistryConsistency:
 
     def test_tts_tool_gated_by_capability(self) -> None:
         """tts_speak should only register when TTS binary is available."""
-        from mark.tools.builtin import build_builtin_registry, _check_tts
+        from acta.tools.builtin import build_builtin_registry, _check_tts
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -138,8 +138,8 @@ class TestToolRegistryConsistency:
 
     def test_tool_handler_returns_tool_result(self) -> None:
         """All handlers should be callable (even if they return errors)."""
-        from mark.tools.builtin import build_builtin_registry
-        from mark.tools.contracts import ToolResult
+        from acta.tools.builtin import build_builtin_registry
+        from acta.tools.contracts import ToolResult
 
         registry = build_builtin_registry()
 
@@ -205,7 +205,7 @@ class TestVisionTemporalConsistency:
 
     def test_temporal_trajectory_is_empty_placeholder(self) -> None:
         """_get_trajectory should be clearly marked as a placeholder."""
-        from mark.vision.temporal import TemporalAnalyzer
+        from acta.vision.temporal import TemporalAnalyzer
 
         analyzer = TemporalAnalyzer()
         result = analyzer._get_trajectory("dummy_track")
@@ -213,7 +213,7 @@ class TestVisionTemporalConsistency:
 
     def test_temporal_recent_labels_is_empty(self) -> None:
         """_get_recent_labels should be clearly marked as simplified."""
-        from mark.vision.temporal import TemporalAnalyzer
+        from acta.vision.temporal import TemporalAnalyzer
 
         analyzer = TemporalAnalyzer()
         result = analyzer._get_recent_labels()
@@ -225,8 +225,8 @@ class TestMCPIntegrationConsistency:
 
     def test_mcp_tools_property_is_null_safe(self) -> None:
         """available_tools must return {} when client is None."""
-        from mark.mcp.integration import McpIntegration
-        from mark.mcp.types import McpServerConfig
+        from acta.mcp.integration import McpIntegration
+        from acta.mcp.types import McpServerConfig
 
         config = McpServerConfig(
             name="test",
@@ -242,8 +242,8 @@ class TestMCPIntegrationConsistency:
 
     def test_mcp_resources_property_is_null_safe(self) -> None:
         """resources must return [] when client is None."""
-        from mark.mcp.integration import McpIntegration
-        from mark.mcp.types import McpServerConfig
+        from acta.mcp.integration import McpIntegration
+        from acta.mcp.types import McpServerConfig
 
         config = McpServerConfig(
             name="test",
@@ -262,7 +262,7 @@ class TestDeprecatedToolConsistency:
 
     def test_cmd_control_returns_deprecated_error(self) -> None:
         """cmd_control handler must return a clear 'deprecated' error."""
-        from mark.tools.legacy.adapters import _cmd_control_deprecated_handler
+        from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
 
         result = _cmd_control_deprecated_handler({})
         assert result.ok is False, (
@@ -303,7 +303,7 @@ class TestActionHandlerConsistency:
 
     def test_action_handler_handles_import_error(self) -> None:
         """_action_handler must return ok=False when module cannot be imported."""
-        from mark.tools.legacy.adapters import _action_handler
+        from acta.tools.legacy.adapters import _action_handler
 
         handler = _action_handler("actions.nonexistent_module_fake_xyz", "missing_func")
         result = handler({})

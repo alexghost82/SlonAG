@@ -9,10 +9,10 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from mark.safety import (
+from acta.safety import (
     DecisionKind, RiskLevel, SafetyDecision, UntrustedSource,
 )
-from mark.tools import ToolRegistry, ToolSpec
+from acta.tools import ToolRegistry, ToolSpec
 from sessions import ModelPolicy, SessionManager, SessionStore, TranscriptKind
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -40,7 +40,7 @@ def test_build_stack_best_effort(
     mod = _load_main_module()
     monkeypatch.setattr(mod, "BASE_DIR", tmp_path)
     stack = mod._build_stack()
-    # Bridge may be None only if mark.bridge import failed entirely.
+    # Bridge may be None only if acta.bridge import failed entirely.
     if stack is None:
         assert mod.build_runtime_stack is None
     else:

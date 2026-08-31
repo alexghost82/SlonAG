@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from mark.bridge.control_plane import DesktopControlPlane
+from acta.bridge.control_plane import DesktopControlPlane
 from server.bind_policy import BindHostError
 from server.listener import DesktopControlListener
 from server.schemas import CODE_UNAUTHORIZED

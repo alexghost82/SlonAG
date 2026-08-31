@@ -345,26 +345,6 @@
     "pairing_code": "Код сопряжения Slon (только локально): {code}",
     "pairing_rejected_code": "Код сопряжения отклонён"
   },
-  "mark": {
-    "runtime": {
-      "pull_unconfirmed": "Pull не подтверждён."
-    },
-    "safety": {
-      "unsafe_url": "URL содержит unsafe host."
-    },
-    "network": {
-      "cloud_denied": "Облачный запрос отклонён политикой."
-    },
-    "documents": {
-      "missing_hook": "Хук документ-ингеста не найден."
-    },
-    "tools": {
-      "duplicate": "Инструмент уже зарегистрирован."
-    },
-    "memory": {
-      "not_found": "Не найдено."
-    }
-  },
   "shell_exec": {
     "invalid_cwd": "Invalid working directory.",
     "output_truncated": "\n… (output truncated)",
@@ -653,5 +633,25 @@
   "filedrop": {
     "drop_select": "Drop a file here  or  Click to select",
     "release_to_upload": "Release to upload"
+  },
+  "acta": {
+    "runtime": {
+      "pull_unconfirmed": "Pull не подтверждён."
+    },
+    "safety": {
+      "unsafe_url": "URL содержит unsafe host."
+    },
+    "network": {
+      "cloud_denied": "Облачный запрос отклонён политикой."
+    },
+    "documents": {
+      "missing_hook": "Хук документ-ингеста не найден."
+    },
+    "tools": {
+      "duplicate": "Инструмент уже зарегистрирован."
+    },
+    "memory": {
+      "not_found": "Не найдено."
+    }
   }
 }

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from mark.safety.registry import registered_tools, risk_for, tool_spec
-from mark.safety.types import RiskLevel
-from mark.tools.builtin import build_builtin_registry
-from mark.tools.legacy import LEGACY_HANDLERS
+from acta.safety.registry import registered_tools, risk_for, tool_spec
+from acta.safety.types import RiskLevel
+from acta.tools.builtin import build_builtin_registry
+from acta.tools.legacy import LEGACY_HANDLERS
 
 
 EXPECTED_TOOLS = frozenset(

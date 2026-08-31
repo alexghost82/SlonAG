@@ -1,7 +1,7 @@
 # actions/file_controller.py
 # File management — canonical paths, confirmed mutations, trash-only delete.
 # This module provides the legacy action-layer API. All file operations are
-# delegated to mark.filesystem which enforces the canonical security policy.
+# delegated to acta.filesystem which enforces the canonical security policy.
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from mark.filesystem.security import (
+from acta.filesystem.security import (
     default_allowlist_roots,
 )
-from mark.filesystem.operations import (
+from acta.filesystem.operations import (
     FileSystemResult,
     filesystem_operation,
     create_directory,
@@ -29,8 +29,8 @@ from mark.filesystem.operations import (
     trash,
     write,
 )
-from mark.safety import ArgValidationError, DecisionKind, authorize, validate_args
-from mark.safety.types import SafetyDecision
+from acta.safety import ArgValidationError, DecisionKind, authorize, validate_args
+from acta.safety.types import SafetyDecision
 from i18n import _
 
 try:

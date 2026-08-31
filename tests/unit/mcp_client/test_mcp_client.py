@@ -1,4 +1,4 @@
-"""Tests for mark/mcp/client.py."""
+"""Tests for acta/mcp/client.py."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import asyncio
 import sys
 import pytest
 
-from mark.mcp.client import McpClient, McpCallResult
-from mark.mcp.types import McpServerConfig, McpTransportKind
+from acta.mcp.client import McpClient, McpCallResult
+from acta.mcp.types import McpServerConfig, McpTransportKind
 
 
 def _make_config() -> McpServerConfig:
@@ -15,7 +15,7 @@ def _make_config() -> McpServerConfig:
         name="test",
         transport=McpTransportKind.STDIO,
         command=sys.executable,
-        args=["-m", "mark.mcp.test_server"],
+        args=["-m", "acta.mcp.test_server"],
         tool_timeout_seconds=10.0,
         init_timeout_seconds=5.0,
     )
@@ -236,13 +236,13 @@ class TestMcpNamespaceCollision:
             name="Alpha Server",
             transport=McpTransportKind.STDIO,
             command=sys.executable,
-            args=["-m", "mark.mcp.test_server"],
+            args=["-m", "acta.mcp.test_server"],
         )
         config_b = McpServerConfig(
             name="Beta Server",
             transport=McpTransportKind.STDIO,
             command=sys.executable,
-            args=["-m", "mark.mcp.test_server"],
+            args=["-m", "acta.mcp.test_server"],
         )
         client_a = McpClient(config_a)
         client_b = McpClient(config_b)
@@ -280,7 +280,7 @@ class TestMcpToolFiltering:
             name="filtered",
             transport=McpTransportKind.STDIO,
             command=sys.executable,
-            args=["-m", "mark.mcp.test_server"],
+            args=["-m", "acta.mcp.test_server"],
             allowed_tools=frozenset(["echo"]),
         )
         client = McpClient(config)
@@ -298,7 +298,7 @@ class TestMcpToolFiltering:
             name="filtered",
             transport=McpTransportKind.STDIO,
             command=sys.executable,
-            args=["-m", "mark.mcp.test_server"],
+            args=["-m", "acta.mcp.test_server"],
             denied_tools=frozenset(["compute"]),
         )
         client = McpClient(config)

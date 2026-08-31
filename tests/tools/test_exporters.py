@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from mark.safety.types import RiskLevel
-from mark.tools.contracts import ToolSpec
-from mark.tools.exporters import export_gemini_tools, export_openai_tools, export_tools
+from acta.safety.types import RiskLevel
+from acta.tools.contracts import ToolSpec
+from acta.tools.exporters import export_gemini_tools, export_openai_tools, export_tools
 
 
 def _handler(arguments: object) -> object:

@@ -12,8 +12,8 @@ from runtime.live_session import receive_live_session
 from runtime.audio import AudioPipeline, FreshAudioQueue, PLAYBACK_QUEUE_CHUNKS
 from runtime.tool_bridge import LiveToolBridge
 from runtime.lifecycle import run_live_lifecycle
-from mark.safety import RiskLevel
-from mark.tools import ToolRegistry, ToolSpec
+from acta.safety import RiskLevel
+from acta.tools import ToolRegistry, ToolSpec
 from agent.latency import TurnLatencyTracker
 
 

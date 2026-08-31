@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from mark.documents import (
+from acta.documents import (
     CODE_MISSING_HOOK,
     UNTRUSTED_CLOSE,
     UNTRUSTED_OPEN,

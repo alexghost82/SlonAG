@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import mark.safety.urls as urls_mod
+import acta.safety.urls as urls_mod
 import pytest
 
-from mark.safety import CODE_UNSAFE_URL, UnsafeUrlError, check_url
+from acta.safety import CODE_UNSAFE_URL, UnsafeUrlError, check_url
 
 SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345"
 

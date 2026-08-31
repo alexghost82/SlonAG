@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from mark.tools.contracts import ToolResult
+from acta.tools.contracts import ToolResult
 
 
 class ObservationKind(StrEnum):

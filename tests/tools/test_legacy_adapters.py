@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from mark.tools.contracts import ToolResult
-from mark.tools.legacy import adapters
+from acta.tools.contracts import ToolResult
+from acta.tools.legacy import adapters
 
 
 @pytest.mark.parametrize(

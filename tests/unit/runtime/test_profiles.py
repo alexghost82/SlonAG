@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mark.runtime.profiles import (
+from acta.runtime.profiles import (
     BAND_16_32,
     BAND_32_64,
     BAND_64_PLUS,

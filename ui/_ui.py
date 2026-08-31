@@ -66,7 +66,7 @@ try:
 except Exception:  # pragma: no cover
     ensure_tls_material = None  # type: ignore[assignment]
 try:
-    from mark.bridge import DesktopControlPlane, build_runtime_stack
+    from acta.bridge import DesktopControlPlane, build_runtime_stack
 except Exception:  # pragma: no cover
     DesktopControlPlane = None  # type: ignore[assignment,misc]
     build_runtime_stack = None  # type: ignore[assignment]

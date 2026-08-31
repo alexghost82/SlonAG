@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from mark.safety.types import RiskLevel
-from mark.tools import DuplicateToolError, ToolRegistry, ToolSpec, UnknownToolError
+from acta.safety.types import RiskLevel
+from acta.tools import DuplicateToolError, ToolRegistry, ToolSpec, UnknownToolError
 
 
 def _spec(

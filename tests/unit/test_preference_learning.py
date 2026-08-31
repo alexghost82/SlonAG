@@ -29,9 +29,9 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase
 
-from mark.preference_learning.engine import PreferenceEngine
-from mark.preference_learning.repository import PreferenceRepository
-from mark.preference_learning.types import (
+from acta.preference_learning.engine import PreferenceEngine
+from acta.preference_learning.repository import PreferenceRepository
+from acta.preference_learning.types import (
     Evidence,
     LearnedItem,
     LearningSource,
@@ -339,7 +339,7 @@ class TestDecay(TestCase):
         """Linear decay: CHOICE type gets LINEAR decay by default.
         Simulate decay by setting last_use_at to 3 days ago."""
         from datetime import datetime, timezone, timedelta
-        from mark.preference_learning.types import _now
+        from acta.preference_learning.types import _now
         
         self.engine.add_preference(
             key="theme", value="dark",
@@ -390,7 +390,7 @@ class TestDecay(TestCase):
             pref_type=PreferenceType.CHOICE,
         )
         from datetime import datetime, timezone, timedelta
-        from mark.preference_learning.types import _now
+        from acta.preference_learning.types import _now
         
         repo = PreferenceRepository(self.tmp / "preference_learning.db")
         item = repo.list_items()[0]

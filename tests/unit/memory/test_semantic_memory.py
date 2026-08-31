@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
-from mark.memory import (
+from acta.memory import (
     MemoryContextAssembler,
     MemoryPolicy,
     MemoryRecord,
@@ -28,8 +28,8 @@ from mark.memory import (
     RecordType,
     RetrievalResult,
 )
-from mark.memory.database import MemoryDatabase, MemoryRow
-from mark.memory.migrations.schema import SCHEMA_VERSION, apply_schema
+from acta.memory.database import MemoryDatabase, MemoryRow
+from acta.memory.migrations.schema import SCHEMA_VERSION, apply_schema
 
 from tests.unit.memory.fakes import FakeLocalEmbedder
 
@@ -301,7 +301,7 @@ class TestRetrievalBounded:
         assembler = MemoryContextAssembler(max_chunks=100)
         long_chunks = []
         for _ in range(10):
-            from mark.memory.retriever import ContextChunk
+            from acta.memory.retriever import ContextChunk
             long_chunks.append(ContextChunk(
                 source_ref="test:long",
                 text="A" * 2000,

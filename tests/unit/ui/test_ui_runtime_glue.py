@@ -68,7 +68,7 @@ def test_build_runtime_stack_receives_model_id(
     settings_path: Path,
 ) -> None:
     """build_runtime_stack forwards model_id to the Router."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     settings_file = settings_path / "settings.json"
     raw_ps = {"ollama": ProviderBaseURL(base_url="", remote_enabled=False)}
@@ -87,7 +87,7 @@ def test_build_runtime_stack_receives_model_id(
 
 def test_build_runtime_stack_with_provider_settings_dict() -> None:
     """build_runtime_stack accepts provider_settings dict and doesn't crash."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     stack = build_runtime_stack(
         repo_root=str(Path(__file__).resolve().parent.parent.parent.parent),
@@ -156,7 +156,7 @@ def test_model_id_empty_by_default(
 
 def test_build_runtime_stack_receives_provider_settings_base_url() -> None:
     """build_runtime_stack extracts base_url from provider_settings and passes it."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     # This should not raise — base_url extraction happens inside
     stack = build_runtime_stack(
@@ -193,7 +193,7 @@ def test_e2e_provider_model_selection_flows_to_agent_loop(
     settings_path: Path,
 ) -> None:
     """Full E2E: UI selection → persisted Settings → RuntimeStack → Router → AgentLoop params."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     settings_file = settings_path / "settings.json"
 
@@ -240,7 +240,7 @@ def test_e2e_ollama_base_url_configurable_without_python_change(
     settings_path: Path,
 ) -> None:
     """Ollama base_url set from settings — no Python code changes needed."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     settings_file = settings_path / "settings.json"
 
@@ -277,7 +277,7 @@ def test_e2e_openai_compat_custom_endpoint(
     settings_path: Path,
 ) -> None:
     """Generic OpenAI-compatible endpoint configurable via settings."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     settings_file = settings_path / "settings.json"
 
@@ -317,7 +317,7 @@ def test_e2e_llama_cpp_local_base_url(
     settings_path: Path,
 ) -> None:
     """llama.cpp base_url configured without Python changes."""
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 
     settings_file = settings_path / "settings.json"
 

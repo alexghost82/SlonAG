@@ -10,8 +10,8 @@ import time
 
 import pytest
 
-from mark.vision.temporal import TemporalAnalyzer
-from mark.vision.types import Bbox, DetectionResult, DetectionKind
+from acta.vision.temporal import TemporalAnalyzer
+from acta.vision.types import Bbox, DetectionResult, DetectionKind
 
 
 class TestTemporalAnalyzer:

@@ -20,7 +20,7 @@ from i18n import t
 
 # New-stack bridge (Wave 13); optional — never break legacy Gemini Live.
 try:
-    from mark.bridge import build_runtime_stack
+    from acta.bridge import build_runtime_stack
 except Exception:  # pragma: no cover
     build_runtime_stack = None  # type: ignore[assignment]
 
@@ -148,7 +148,7 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
         if "429" not in str(exc):
             logger.warning("[Memory] %s", t("bridge.memory_error", exc=type(exc).__name__))
 
-from mark.tools.exporters.gemini import export_gemini_tools
+from acta.tools.exporters.gemini import export_gemini_tools
 from agent.latency import TurnLatencyTracker
 from runtime.audio import AudioPipeline
 from runtime.lifecycle import run_live_lifecycle
@@ -681,9 +681,9 @@ JarvisLive = SlonLive
 
 def _run_chat_agent(ui, settings, stack=None):
     """Run a provider-agnostic chat loop using AgentLoop + tool registry."""
-    from mark.tools.builtin import build_builtin_registry
-    from mark.tools.executor import ToolExecutor as SyncToolExecutor
-    from mark.safety.policy import SafetyPolicy
+    from acta.tools.builtin import build_builtin_registry
+    from acta.tools.executor import ToolExecutor as SyncToolExecutor
+    from acta.safety.policy import SafetyPolicy
     from agent.runtime import AgentLoop
     from providers.router import Router
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mark.workflow_learning.types import (
+from acta.workflow_learning.types import (
     ActionSequence,
     ActionSequenceEvent,
     ApprovalResult,

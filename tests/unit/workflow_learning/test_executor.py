@@ -15,12 +15,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mark.safety.types import DecisionKind, SafetyDecision, UntrustedSource
-from mark.workflow_learning.executor import (
+from acta.safety.types import DecisionKind, SafetyDecision, UntrustedSource
+from acta.workflow_learning.executor import (
     WorkflowExecutor,
     _substitute_template,
 )
-from mark.workflow_learning.types import (
+from acta.workflow_learning.types import (
     ExecutionResult,
     ExecutionRecord,
     ParameterSlot,
@@ -106,7 +106,7 @@ def _handler_fail(args):
 
 def _make_mock_policy():
     """Create a mock policy that always allows."""
-    from mark.safety.types import RiskLevel
+    from acta.safety.types import RiskLevel
     policy = MagicMock()
     policy.validate_args.return_value = {"command": "echo hello"}
     policy.authorize.return_value = SafetyDecision(
@@ -213,7 +213,7 @@ class TestExecuteCandidate:
 
     def test_safety_policy_denial(self):
         """Safety policy denial stops execution immediately."""
-        from mark.safety.types import RiskLevel
+        from acta.safety.types import RiskLevel
         policy = _make_mock_policy()
         policy.authorize.return_value = SafetyDecision(
             kind=DecisionKind.DENY,
@@ -246,7 +246,7 @@ class TestExecuteCandidate:
 
     def test_safety_validation_error(self):
         """Invalid arguments cause execution to fail."""
-        from mark.safety.types import RiskLevel
+        from acta.safety.types import RiskLevel
         policy = _make_mock_policy()
         policy.validate_args.side_effect = ValueError("Invalid args")
         policy.authorize.return_value = SafetyDecision(
@@ -274,7 +274,7 @@ class TestExecuteCandidate:
 
     def test_approval_results_recorded(self):
         """Every executed step records an approval result."""
-        from mark.safety.types import RiskLevel
+        from acta.safety.types import RiskLevel
         policy = _make_mock_policy()
         policy.authorize.return_value = SafetyDecision(
             kind=DecisionKind.CONFIRM,
@@ -403,7 +403,7 @@ class TestExecuteTemplate:
         assert "missing required parameter" in result.error
 
     def test_template_safety_denial(self):
-        from mark.safety.types import RiskLevel
+        from acta.safety.types import RiskLevel
         policy = _make_mock_policy()
         policy.authorize.return_value = SafetyDecision(
             kind=DecisionKind.DENY,

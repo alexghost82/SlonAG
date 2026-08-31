@@ -6,14 +6,14 @@ from collections.abc import Mapping
 
 import pytest
 
-from mark.safety import (
+from acta.safety import (
     DecisionKind,
     RiskLevel,
     SafetyDecision,
     SafetyPolicy,
     UntrustedSource,
 )
-from mark.tools import SideEffectClass, ToolExecutor, ToolRegistry, ToolResult, ToolSpec
+from acta.tools import SideEffectClass, ToolExecutor, ToolRegistry, ToolResult, ToolSpec
 
 
 class RecordingPolicy:

@@ -15,7 +15,7 @@ import time
 
 import pytest
 
-from mark.proactive import (
+from acta.proactive import (
     CooldownManager,
     EventDedup,
     EventSource,
@@ -28,9 +28,9 @@ from mark.proactive import (
     RiskLevel,
     SAFE_AUTO_ACTIONS,
 )
-from mark.proactive.errors import CODE_OK, proactive_message
-from mark.proactive.errors import SpamDetectedError, InvalidEventError, ProactiveError
-from mark.proactive.types import CooldownEntry, ProactiveDecisionKind
+from acta.proactive.errors import CODE_OK, proactive_message
+from acta.proactive.errors import SpamDetectedError, InvalidEventError, ProactiveError
+from acta.proactive.types import CooldownEntry, ProactiveDecisionKind
 
 
 class TestProactiveDecision:

@@ -1,4 +1,4 @@
-"""Tests for mark/connectivity/monitor.py — connection health monitoring."""
+"""Tests for acta/connectivity/monitor.py — connection health monitoring."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mark.connectivity.monitor import ConnectivityMonitor
-from mark.connectivity.types import ConnectionState, TransportKind
+from acta.connectivity.monitor import ConnectivityMonitor
+from acta.connectivity.types import ConnectionState, TransportKind
 
 
 class TestConnectivityMonitor:

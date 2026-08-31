@@ -9,10 +9,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
-from mark.safety import SafetyDecision, SafetyPolicy, UntrustedSource
-from mark.tools import ToolExecutor, ToolRegistry, ToolResult
-from mark.tools.builtin import build_builtin_registry
-from mark.tools.legacy.adapters import with_legacy_context
+from acta.safety import SafetyDecision, SafetyPolicy, UntrustedSource
+from acta.tools import ToolExecutor, ToolRegistry, ToolResult
+from acta.tools.builtin import build_builtin_registry
+from acta.tools.legacy.adapters import with_legacy_context
 
 
 def build_live_registry(

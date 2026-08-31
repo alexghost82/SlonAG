@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mark.runtime import (
+from acta.runtime import (
     CLOUD_FALLBACK_ENABLED,
     CODE_NOT_RUNNING,
     CODE_OK,

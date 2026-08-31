@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from mark.network import NetworkMode, NetworkPolicy
-from mark.network.journal import journal_has_secret, redact_secrets, safe_domain
+from acta.network import NetworkMode, NetworkPolicy
+from acta.network.journal import journal_has_secret, redact_secrets, safe_domain
 
 SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345"
 TOKEN = "super-secret-token-value"

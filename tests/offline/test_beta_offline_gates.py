@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from mark.network import NetworkMode, NetworkPolicy
-from mark.safety import UnknownToolError, UnsafeUrlError, authorize, check_url
-from mark.safety.types import UntrustedSource
+from acta.network import NetworkMode, NetworkPolicy
+from acta.safety import UnknownToolError, UnsafeUrlError, authorize, check_url
+from acta.safety.types import UntrustedSource
 
 CLOUD_IDS = ("gemini", "openai", "openrouter")
 

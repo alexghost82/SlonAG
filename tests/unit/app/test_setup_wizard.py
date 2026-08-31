@@ -8,7 +8,7 @@ import pytest
 
 from config.schema import DEFAULT_LANGUAGE, MODEL_ROLE_KEYS, Settings
 from localization.translator import load_catalog, set_locale, tr
-from mark.app import STEPS, SetupWizardController, SetupWizardError, SetupWizardState
+from acta.app import STEPS, SetupWizardController, SetupWizardError, SetupWizardState
 from providers.contracts import ModelInfo
 from providers.errors import CapabilityError
 

@@ -14,7 +14,7 @@ Usage::
         build_turn_complete_persist,
         extract_and_save_memory,
     )
-    from mark.memory import MemoryStore
+    from acta.memory import MemoryStore
     from pathlib import Path
 
     store = MemoryStore(Path("memory.db"))
@@ -35,7 +35,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from i18n import t
-from mark.memory import (
+from acta.memory import (
     MemoryContextAssembler,
     MemoryPolicy,
     MemoryRecord,
@@ -44,7 +44,7 @@ from mark.memory import (
     RecordType,
     build_system_prompt_with_memory,
 )
-from mark.memory.errors import MemoryPolicyError, memory_message
+from acta.memory.errors import MemoryPolicyError, memory_message
 
 
 def build_memory_context_callback(

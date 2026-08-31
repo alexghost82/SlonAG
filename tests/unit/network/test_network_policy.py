@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import mark.network.hosts as hosts_mod
+import acta.network.hosts as hosts_mod
 import pytest
 
-from mark.network import (
+from acta.network import (
     CODE_OFFLINE,
     CODE_OK,
     CODE_PROXY_FORCED_EXTERNAL,

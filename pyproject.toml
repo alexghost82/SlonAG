@@ -38,7 +38,7 @@ addopts = "-ra"
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-include = ["tests/**/*.py", "mark/**/*.py", "providers/**/*.py", "speech/**/*.py",
+include = ["tests/**/*.py", "acta/**/*.py", "providers/**/*.py", "speech/**/*.py",
            "server/**/*.py", "gateway/**/*.py", "policies/**/*.py",
            "localization/**/*.py", "config/**/*.py", "sessions/**/*.py"]
 exclude = ["actions/**", "agent/**", "or_client.py", "memory/**"]
@@ -49,7 +49,7 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["tests", "mark", "providers", "speech", "server", "gateway",
+files = ["tests", "acta", "providers", "speech", "server", "gateway",
          "policies", "localization", "config", "sessions"]
 explicit_package_bases = true
 mypy_path = "."

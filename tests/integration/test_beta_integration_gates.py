@@ -8,8 +8,8 @@ from __future__ import annotations
 import json
 import socket
 
-from mark.network import NetworkMode, NetworkPolicy
-from mark.safety import UnsafeUrlError, check_url
+from acta.network import NetworkMode, NetworkPolicy
+from acta.safety import UnsafeUrlError, check_url
 from server import DesktopControlApp
 from server.app import BindHostError
 from server.schemas import CODE_UNAUTHORIZED

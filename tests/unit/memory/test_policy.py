@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mark.memory import (
+from acta.memory import (
     CODE_SECRET_REJECTED,
     MemoryPolicy,
     MemoryPolicyError,

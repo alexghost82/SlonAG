@@ -45,10 +45,10 @@ from typing import Any
 
 from i18n import t as _t
 
-from mark.safety import authorize, validate_args
-from mark.safety.errors import ArgValidationError
-from mark.safety.types import DecisionKind, UntrustedSource
-from mark.tools.contracts import ToolResult
+from acta.safety import authorize, validate_args
+from acta.safety.errors import ArgValidationError
+from acta.safety.types import DecisionKind, UntrustedSource
+from acta.tools.contracts import ToolResult
 
 # ---------------------------------------------------------------------------
 # Constants

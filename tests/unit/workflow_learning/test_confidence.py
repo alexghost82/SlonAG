@@ -2,8 +2,8 @@
 
 import pytest
 
-from mark.workflow_learning.confidence import ConfidenceEngine
-from mark.workflow_learning.types import WorkflowCandidate, WorkflowState, WorkflowStep
+from acta.workflow_learning.confidence import ConfidenceEngine
+from acta.workflow_learning.types import WorkflowCandidate, WorkflowState, WorkflowStep
 
 
 class TestConfidenceEngine:

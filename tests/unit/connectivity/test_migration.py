@@ -1,4 +1,4 @@
-"""Tests for mark/connectivity/migration.py — LAN/remote migration."""
+"""Tests for acta/connectivity/migration.py — LAN/remote migration."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mark.connectivity.migration import LANRemoteMigration
-from mark.connectivity.types import ConnectionState, TransportKind
+from acta.connectivity.migration import LANRemoteMigration
+from acta.connectivity.types import ConnectionState, TransportKind
 
 
 class TestLANRemoteMigration:
@@ -23,7 +23,7 @@ class TestLANRemoteMigration:
 
         mock_scanner = MagicMock()
         mock_scanner.scan_once = MagicMock(return_value=[])
-        with patch("mark.connectivity.discovery.LANDeviceScanner", return_value=mock_scanner):
+        with patch("acta.connectivity.discovery.LANDeviceScanner", return_value=mock_scanner):
             loop = asyncio.new_event_loop()
             try:
                 result = loop.run_until_complete(migration.find_best_lan_device())
@@ -66,7 +66,7 @@ class TestMigrationToRemote:
         mock_adapter = AsyncMock()
         mock_adapter.connect = AsyncMock()
         mock_adapter.disconnect = AsyncMock()
-        with patch("mark.connectivity.remote.RemoteAdapter", return_value=mock_adapter):
+        with patch("acta.connectivity.remote.RemoteAdapter", return_value=mock_adapter):
             loop = asyncio.new_event_loop()
             try:
                 loop.run_until_complete(migration.migrate_to_remote(reason="test"))
@@ -92,7 +92,7 @@ class TestMigrationToLan:
 
         mock_transport = MagicMock()
         mock_transport.connect = AsyncMock()
-        with patch("mark.connectivity.transport.LANTransport", return_value=mock_transport):
+        with patch("acta.connectivity.transport.LANTransport", return_value=mock_transport):
             migration = LANRemoteMigration(session)
             loop = asyncio.new_event_loop()
             try:

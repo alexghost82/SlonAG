@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from agent.executor import AgentExecutor, ToolDeniedError
-from mark.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
-from mark.tools import ToolExecutor, ToolRegistry, ToolResult, ToolSpec
+from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.tools import ToolExecutor, ToolRegistry, ToolResult, ToolSpec
 
 
 class RecordingExecutor:

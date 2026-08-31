@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mark.memory import MemoryStore, RecordType, migrate_json
+from acta.memory import MemoryStore, RecordType, migrate_json
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "legacy_memory.json"
 

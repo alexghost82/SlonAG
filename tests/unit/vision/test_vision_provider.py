@@ -9,7 +9,7 @@ import pytest
 from providers.contracts import ModelInfo, VisionRequest, VisionResponse
 from providers.errors import CapabilityError, ProviderError
 
-from mark.vision.provider import (
+from acta.vision.provider import (
     DEFAULT_KIND,
     DEFAULT_PRIVACY_PROFILE,
     PROVIDER_ID,

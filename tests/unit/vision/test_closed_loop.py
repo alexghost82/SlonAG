@@ -72,12 +72,12 @@ def virtual_screen():
 @pytest.fixture
 def simple_agent(virtual_screen):
     """Agent with default reasoner, verifier, and a permissive safety policy."""
-    from mark.safety.policy import SafetyPolicy
+    from acta.safety.policy import SafetyPolicy
     budget = LoopBudget(max_steps=10, timeout_seconds=30.0, observation_stale_seconds=30.0)
     
     # Create a permissive safety policy mock that allows all computer.* tools
     permissive_policy = MagicMock()
-    from mark.safety.types import SafetyDecision, DecisionKind, RiskLevel, UntrustedSource
+    from acta.safety.types import SafetyDecision, DecisionKind, RiskLevel, UntrustedSource
     permissive_decision = SafetyDecision(
         kind=DecisionKind.ALLOW,
         tool_name="computer.any",
@@ -444,7 +444,7 @@ class TestTargetGrounding:
     @pytest.mark.asyncio
     async def test_grounding_finds_matching_element(self):
         """Reasoner should match intent text to element name/text."""
-        from mark.safety.policy import SafetyPolicy
+        from acta.safety.policy import SafetyPolicy
         reasoner = DefaultReasoner()
         adapter = VirtualScreenAdapter()
         adapter.set_elements(
@@ -690,7 +690,7 @@ class TestIntegrationVirtualToClosedLoop:
             toggle={"x": 0.5, "y": 0.5, "content": "Toggle", "clickable": True},
         )
 
-        from mark.safety.policy import SafetyPolicy
+        from acta.safety.policy import SafetyPolicy
         agent = VisionComputerAgent(
             adapter=adapter,
             safety_policy=SafetyPolicy(),
@@ -754,7 +754,7 @@ class TestIntegrationVirtualToClosedLoop:
             action_btn={"x": 0.5, "y": 0.5, "clickable": True},
         )
 
-        from mark.safety.policy import SafetyPolicy
+        from acta.safety.policy import SafetyPolicy
         agent = VisionComputerAgent(
             adapter=adapter,
             safety_policy=SafetyPolicy(),
@@ -810,7 +810,7 @@ class TestNoApprovalBypass:
             phases_seen.append(phase)
 
         safety_policy = MagicMock()
-        from mark.safety.types import SafetyDecision, DecisionKind, RiskLevel, UntrustedSource
+        from acta.safety.types import SafetyDecision, DecisionKind, RiskLevel, UntrustedSource
         decision = SafetyDecision(
             kind=DecisionKind.ALLOW,
             tool_name="computer.click",

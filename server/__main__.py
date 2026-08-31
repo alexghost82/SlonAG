@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.gateway_lan:
             from config.secrets import get_secret
             from gateway.bootstrap import build_gateway
-            from mark.bridge import build_runtime_stack
+            from acta.bridge import build_runtime_stack
 
             root = (args.repo_root or Path.cwd()).resolve()
             stack = build_runtime_stack(repo_root=root, key_provider=get_secret)

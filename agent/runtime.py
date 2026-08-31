@@ -14,7 +14,7 @@ from agent.observation import Observation, ObservationKind
 from agent.latency import LatencyTrace
 from i18n import t
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
-from mark.tools.contracts import ToolResult
+from acta.tools.contracts import ToolResult
 from providers.contracts import (
     AssistantMessage,
     AssistantToolCallMessage,
@@ -517,16 +517,16 @@ class AgentLoop:
         executor = self.tool_executor
         if executor is None:
             try:
-                from mark.safety import SafetyPolicy
-                from mark.tools import ToolExecutor
-                from mark.tools.builtin import build_builtin_registry
+                from acta.safety import SafetyPolicy
+                from acta.tools import ToolExecutor
+                from acta.tools.builtin import build_builtin_registry
 
                 executor = ToolExecutor(build_builtin_registry(), SafetyPolicy())
             except Exception:
                 raise RuntimeError(t("error.no_tool_executor"))
 
         if hasattr(executor, "execute_async"):
-            from mark.safety import UntrustedSource
+            from acta.safety import UntrustedSource
 
             res = await executor.execute_async(
                 tool_name,
@@ -537,7 +537,7 @@ class AgentLoop:
                 tool_call_id=tool_call_id,
             )
         elif hasattr(executor, "execute"):
-            from mark.safety import UntrustedSource
+            from acta.safety import UntrustedSource
 
             res = await asyncio.to_thread(
                 executor.execute,

@@ -25,14 +25,14 @@ import pytest
 
 # --- Security surfaces ------------------------------------------------
 
-from mark.safety.errors import UnsafeUrlError
-from mark.safety.urls import check_url, _parse_ip
-from mark.network.hosts import parse_ip_literal, parse_request_url, is_loopback_host
-from mark.network.policy import NetworkPolicy, NetworkMode
+from acta.safety.errors import UnsafeUrlError
+from acta.safety.urls import check_url, _parse_ip
+from acta.network.hosts import parse_ip_literal, parse_request_url, is_loopback_host
+from acta.network.policy import NetworkPolicy, NetworkMode
 from actions.shell_exec import _is_blocked, _BLOCKED_PREFIXES
-from mark.memory.context import MemoryContextAssembler, MAX_MEMORY_CHUNKS, _MAX_MEMORY_BYTES
-from mark.memory.policy import MemoryPolicy
-from mark.memory.retriever import RetrievalResult, ContextChunk
+from acta.memory.context import MemoryContextAssembler, MAX_MEMORY_CHUNKS, _MAX_MEMORY_BYTES
+from acta.memory.policy import MemoryPolicy
+from acta.memory.retriever import RetrievalResult, ContextChunk
 from gateway.approvals import DurableApprovalCoordinator, ApprovalRequest
 from gateway.store import GatewayStore
 from agent.subagent import SubagentConfig, SubagentRuntime, SubagentResult
@@ -217,7 +217,7 @@ class TestPathTraversal:
         (outside / "classified.txt").write_text("classified", encoding="utf-8")
         link = allowed / "escape"
         link.symlink_to(outside)
-        import mark.filesystem.operations as fs_mod
+        import acta.filesystem.operations as fs_mod
         result = fs_mod.filesystem_operation(
             "read", path=str(link / "classified.txt"), roots=[str(allowed)]
         )
@@ -229,7 +229,7 @@ class TestPathTraversal:
         (allowed / "good.txt").write_text("good", encoding="utf-8")
         outside = tmp_path / "secret.txt"
         outside.write_text("classified", encoding="utf-8")
-        import mark.filesystem.operations as fs_mod
+        import acta.filesystem.operations as fs_mod
         result = fs_mod.filesystem_operation(
             "read", path=str(Path("../secret.txt")), roots=[str(allowed)]
         )
@@ -244,7 +244,7 @@ class TestSubagentPermissions:
     """Subagents must never inherit more permissions than their parent."""
 
     def test_denied_tools_rejected(self) -> None:
-        from mark.safety.policy import SafetyPolicy
+        from acta.safety.policy import SafetyPolicy
         from agent.subagent import _BoundedSafetyPolicy
 
         parent = SafetyPolicy()
@@ -263,8 +263,8 @@ class TestSubagentPermissions:
 
     def test_runtime_creates_bounded_policy(self) -> None:
         from agent.subagent import _build_subagent_safety
-        from mark.safety.policy import SafetyPolicy
-        from mark.safety.types import DecisionKind
+        from acta.safety.policy import SafetyPolicy
+        from acta.safety.types import DecisionKind
 
         parent_policy = SafetyPolicy()
         config = SubagentConfig(
@@ -405,7 +405,7 @@ class TestBrowserIsolation:
 
 class TestVisionBounded:
     def test_vision_queue_maxlen(self) -> None:
-        from mark.vision.queues import ProcessingQueue
+        from acta.vision.queues import ProcessingQueue
         import inspect
         source = inspect.getsource(ProcessingQueue.__init__)
         assert "maxlen=" in source, "Vision queue must use deque(maxlen=...)"

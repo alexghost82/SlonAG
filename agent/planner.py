@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 
 from i18n import t
-from mark.tools.builtin import build_builtin_registry
-from mark.tools.registry import ToolRegistry
+from acta.tools.builtin import build_builtin_registry
+from acta.tools.registry import ToolRegistry
 
 
 def get_base_dir() -> Path:

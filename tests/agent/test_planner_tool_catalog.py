@@ -4,9 +4,9 @@ import sys
 from types import SimpleNamespace
 
 from agent import planner
-from mark.safety.types import RiskLevel
-from mark.tools.contracts import ToolSpec
-from mark.tools.registry import ToolRegistry
+from acta.safety.types import RiskLevel
+from acta.tools.contracts import ToolSpec
+from acta.tools.registry import ToolRegistry
 
 
 def _handler(**_: object) -> None:

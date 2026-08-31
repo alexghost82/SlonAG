@@ -17,7 +17,7 @@ from typing import Any
 from computer_control.platform import build_platform_adapter
 from i18n import t
 from computer_control.executor import validate_action, run_computer_control
-from mark.tools.contracts import ToolResult
+from acta.tools.contracts import ToolResult
 
 try:
     import pyautogui

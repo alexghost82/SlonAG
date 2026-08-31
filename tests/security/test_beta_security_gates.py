@@ -17,12 +17,12 @@ from actions.desktop import UnknownDesktopOpError, desktop_control
 from actions.file_controller import file_controller
 from actions.reminder import reminder
 from agent.executor import ToolDeniedError, _call_tool
-from mark.safety import (
+from acta.safety import (
     UnknownToolError,
     UnsafeUrlError,
     check_url,
 )
-from mark.vision import UNTRUSTED_FENCE, wrap_untrusted_image_text
+from acta.vision import UNTRUSTED_FENCE, wrap_untrusted_image_text
 from server import DesktopControlApp
 
 SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345"
@@ -253,7 +253,7 @@ def test_shell_injection_redirection():
 
 def test_ssrf_mcp_url_metadata():
     """MCP HTTP transport must reject metadata/loopback URLs."""
-    from mark.safety.urls import is_url_safe
+    from acta.safety.urls import is_url_safe
 
     # Various SSRF attempts for MCP connections
     blocked_urls = [
@@ -274,7 +274,7 @@ def test_ssrf_mcp_url_metadata():
 
 def test_ssrf_mcp_url_hex_encoding():
     """Hex-encoded IP addresses must be blocked."""
-    from mark.safety.urls import is_url_safe
+    from acta.safety.urls import is_url_safe
 
     # Hex IP forms (127.0.0.1, 169.254.169.254)
     hex_urls = [
@@ -301,9 +301,9 @@ def test_shell_injection_from_markdown():
 
 def test_subagent_permission_denial():
     """Subagents must inherit restricted permissions from parent."""
-    from mark.safety import SafetyPolicy
+    from acta.safety import SafetyPolicy
     from agent.subagent import _BoundedSafetyPolicy
-    from mark.safety.types import UntrustedSource
+    from acta.safety.types import UntrustedSource
 
     # Create a policy with specific tools
     parent = SafetyPolicy()
@@ -311,7 +311,7 @@ def test_subagent_permission_denial():
     policy = _BoundedSafetyPolicy(parent, denied_tools)
 
     # Verify subagents cannot use denied tools via authorize
-    from mark.safety.types import DecisionKind
+    from acta.safety.types import DecisionKind
     for tool in denied_tools:
         decision = policy.authorize(tool, {}, source=UntrustedSource.TOOL_RESULT)
         assert decision.kind == DecisionKind.DENY, f"Subagent can access denied tool: {tool}"
@@ -385,7 +385,7 @@ def test_token_replay_prevention():
 
 def test_secret_redaction_memory_policy():
     """Memory policy must block secrets from being stored."""
-    from mark.memory.policy import should_block_memory
+    from acta.memory.policy import should_block_memory
 
     secret_values = [
         "sk-1234567890abcdef",
@@ -401,7 +401,7 @@ def test_secret_redaction_memory_policy():
 
 def test_ssrf_browser_via_playwright():
     """Browser navigation must not reach metadata/private IPs."""
-    from mark.safety.urls import is_url_safe
+    from acta.safety.urls import is_url_safe
 
     # These are the kinds of URLs the browser might navigate to
     browser_blocked = [
@@ -417,7 +417,7 @@ def test_ssrf_browser_via_playwright():
 
 def test_file_traversal_deep():
     """Deep path traversal must be blocked at all depths."""
-    from mark.filesystem.security import sanitize_path, PathDenied
+    from acta.filesystem.security import sanitize_path, PathDenied
 
     traversal_paths = [
         "../../../../etc/shadow",
@@ -440,7 +440,7 @@ def test_file_traversal_deep():
 
 def test_cancellation_propagation():
     """AutomationEngine must stop when stopped."""
-    from mark.automation.engine import AutomationEngine
+    from acta.automation.engine import AutomationEngine
     import threading
     import time
 
@@ -462,8 +462,8 @@ def test_cancellation_propagation():
 
 async def test_bounded_queue_overflow():
     """Vision queues must not grow unbounded."""
-    from mark.vision.queues import BoundedFrameQueue
-    from mark.vision.types import Frame
+    from acta.vision.queues import BoundedFrameQueue
+    from acta.vision.types import Frame
 
     queue = BoundedFrameQueue(maxlen=5)
     for i in range(20):
@@ -541,8 +541,8 @@ def test_automation_process_cleanup():
 
 async def test_vision_queue_age_staleness():
     """BoundedFrameQueue must drop stale frames."""
-    from mark.vision.queues import BoundedFrameQueue
-    from mark.vision.types import Frame
+    from acta.vision.queues import BoundedFrameQueue
+    from acta.vision.types import Frame
     import asyncio
 
     queue = BoundedFrameQueue(maxlen=3, max_age_seconds=0.1)
@@ -557,7 +557,7 @@ async def test_vision_queue_age_staleness():
 async def test_tracking_memory_persists():
     """Memory repository persists and retrieves entries."""
     import tempfile
-    from mark.memory.repository import MemoryRepository
+    from acta.memory.repository import MemoryRepository
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=True) as f:
         repo = MemoryRepository(db_path=f.name)

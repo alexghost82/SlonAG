@@ -57,7 +57,7 @@ def test_shell_injection_redirection():
 
 def test_ssrf_via_check_url():
     """check_url must reject metadata/loopback/private IPs."""
-    from mark.safety import check_url, UnsafeUrlError
+    from acta.safety import check_url, UnsafeUrlError
 
     blocked = [
         "http://169.254.169.254/latest/meta-data/",
@@ -79,7 +79,7 @@ def test_ssrf_via_check_url():
 
 def test_ssrf_url_encoded():
     """URL-encoded IP addresses must be rejected."""
-    from mark.safety import check_url, UnsafeUrlError
+    from acta.safety import check_url, UnsafeUrlError
 
     encoded = [
         "http://127.0.0.1/",       # normal form
@@ -109,7 +109,7 @@ def test_secret_redaction_in_error():
 
 def test_memory_policy_blocks_secrets():
     """MemoryPolicy must block secret-like content."""
-    from mark.memory.policy import MemoryPolicy
+    from acta.memory.policy import MemoryPolicy
 
     policy = MemoryPolicy()
 
@@ -129,7 +129,7 @@ def test_memory_policy_blocks_secrets():
 
 def test_file_traversal_depth():
     """Deep path traversal must not escape the root."""
-    from mark.filesystem.security import sanitize_path, resolve_root
+    from acta.filesystem.security import sanitize_path, resolve_root
 
     try:
         root = resolve_root()
@@ -189,7 +189,7 @@ def test_token_expiry():
 
 def test_bounded_frame_queue():
     """BoundedFrameQueue must not grow beyond maxlen."""
-    from mark.vision.queues import BoundedFrameQueue
+    from acta.vision.queues import BoundedFrameQueue
 
     queue = BoundedFrameQueue(max_len=5)
     for i in range(20):
@@ -199,7 +199,7 @@ def test_bounded_frame_queue():
 
 def test_bounded_detection_queue():
     """BoundedDetectionQueue must not grow beyond maxlen."""
-    from mark.vision.queues import BoundedDetectionQueue
+    from acta.vision.queues import BoundedDetectionQueue
 
     queue = BoundedDetectionQueue(max_len=3)
     for i in range(15):
@@ -209,7 +209,7 @@ def test_bounded_detection_queue():
 
 def test_bounded_event_queue():
     """BoundedEventQueue must not grow beyond maxlen."""
-    from mark.vision.queues import BoundedEventQueue
+    from acta.vision.queues import BoundedEventQueue
 
     queue = BoundedEventQueue(max_len=4)
     for i in range(15):
@@ -271,7 +271,7 @@ def test_process_cleanup():
 
 def test_memory_store_bounded():
     """MemoryStore must not exceed max_entries."""
-    from mark.memory.repository import MemoryStore
+    from acta.memory.repository import MemoryStore
 
     store = MemoryStore(workspace_id="test-ws", max_entries=50)
 
@@ -299,8 +299,8 @@ def test_browser_js_deny_domain_set():
 
 def test_mcp_http_transport_url_validation():
     """MCPStreamableHttpTransport must validate URLs before connecting."""
-    from mark.mcp.streamable_http_transport import McpStreamableHttpTransport
-    from mark.safety import UnsafeUrlError
+    from acta.mcp.streamable_http_transport import McpStreamableHttpTransport
+    from acta.safety import UnsafeUrlError
     import pytest
 
     with pytest.raises(UnsafeUrlError):

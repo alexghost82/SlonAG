@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from mark.bridge.control_plane import ControlPlaneUnavailable
+from acta.bridge.control_plane import ControlPlaneUnavailable
 from server.auth import (
     AuthError,
     DeviceCredential as AuthDeviceCredential,

@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
-from mark.memory import (
+from acta.memory import (
     MemoryStore,
     MemoryRecord,
     RecordType,
@@ -15,7 +15,7 @@ from mark.memory import (
     ContextChunk,
     MemoryPolicy,
 )
-from mark.memory.database import MemoryRow
+from acta.memory.database import MemoryRow
 from agent.memory import (
     build_memory_context_callback,
     build_turn_complete_persist,

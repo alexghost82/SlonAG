@@ -12,13 +12,13 @@ import time
 
 import pytest
 
-from mark.vision.queues import (
+from acta.vision.queues import (
     BoundedDetectionQueue,
     BoundedEventQueue,
     BoundedFrameQueue,
     BoundedTrajectoryStore,
 )
-from mark.vision.types import Frame, DetectionResult, FrameEvent, FrameSource, Bbox
+from acta.vision.types import Frame, DetectionResult, FrameEvent, FrameSource, Bbox
 
 
 @pytest.fixture

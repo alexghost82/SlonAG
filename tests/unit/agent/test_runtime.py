@@ -14,7 +14,7 @@ from agent.runtime import (
     LoopDetector,
 )
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
-from mark.tools.contracts import ToolResult
+from acta.tools.contracts import ToolResult
 from providers.contracts import (
     AssistantToolCallMessage,
     ChatRequest,

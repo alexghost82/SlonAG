@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from mark.workflow_learning.store import WorkflowStore
-from mark.workflow_learning.types import (
+from acta.workflow_learning.store import WorkflowStore
+from acta.workflow_learning.types import (
     ExecutionRecord,
     WorkflowCandidate,
     WorkflowState,

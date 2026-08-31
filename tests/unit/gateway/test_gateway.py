@@ -33,10 +33,10 @@ from gateway.service import SlonGateway
 from gateway.status import read_gateway_status
 from gateway.store import GatewayStore, GatewayStoreError
 from gateway.websocket import GatewayWebSocketRuntime
-from mark.bridge import RuntimeStack
-from mark.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
-from mark.tools import ToolRegistry
-from mark.tools.contracts import ToolSpec
+from acta.bridge import RuntimeStack
+from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.tools import ToolRegistry
+from acta.tools.contracts import ToolSpec
 from providers.contracts import (
     ChatResponse,
     ModelInfo,
@@ -845,7 +845,7 @@ def test_gateway_schema_rejects_future_version(tmp_path: Path) -> None:
 
 def test_internal_layers_do_not_import_gateway() -> None:
     root = Path(__file__).resolve().parents[3]
-    for package in ("sessions", "runtime", "providers", "mark/tools"):
+    for package in ("sessions", "runtime", "providers", "acta/tools"):
         for source in (root / package).rglob("*.py"):
             assert "import gateway" not in source.read_text(encoding="utf-8")
 

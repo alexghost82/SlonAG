@@ -1,3 +1,3 @@
-"""Re-export ConfidenceTracker from mark.workflow_learning."""
-from mark.workflow_learning.confidence import ConfidenceTracker
+"""Re-export ConfidenceTracker from acta.workflow_learning."""
+from acta.workflow_learning.confidence import ConfidenceTracker
 __all__ = ["ConfidenceTracker"]

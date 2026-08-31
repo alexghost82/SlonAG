@@ -8,7 +8,7 @@ from pathlib import Path
 from providers.contracts import VisionProvider
 from providers.registry import get, registered_ids
 
-from mark.vision.provider import LocalVisionProvider
+from acta.vision.provider import LocalVisionProvider
 
 from tests.unit.vision.fakes import FakeEngine
 
@@ -16,7 +16,7 @@ from tests.unit.vision.fakes import FakeEngine
 def test_factory_vision_local_is_registered(
     clean_registry, tmp_path: Path
 ) -> None:
-    import mark.vision as vision_pkg
+    import acta.vision as vision_pkg
 
     importlib.reload(vision_pkg)
     assert vision_pkg.PROVIDER_ID == "vision_local"
@@ -30,7 +30,7 @@ def test_factory_vision_local_is_registered(
 
 
 def test_register_factory_is_idempotent(clean_registry) -> None:
-    import mark.vision as vision_pkg
+    import acta.vision as vision_pkg
 
     importlib.reload(vision_pkg)
     vision_pkg.register_factory()

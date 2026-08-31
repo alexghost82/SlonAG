@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mark.memory import MemoryRecord, MemoryStore, RecordType
+from acta.memory import MemoryRecord, MemoryStore, RecordType
 
 
 def _record(
@@ -19,7 +19,7 @@ def test_list_get_update_delete(store: MemoryStore) -> None:
     first = _commit(store, _record("food", "sourdough"))
     second = _commit(
         store,
-        _record("mark", "desktop client", RecordType.PROJECTS),
+        _record("acta", "desktop client", RecordType.PROJECTS),
     )
     assert first is not None
     assert second is not None

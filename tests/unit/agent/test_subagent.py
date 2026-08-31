@@ -15,10 +15,10 @@ from agent.subagent import (
     SubagentResult,
     SubagentRuntime,
 )
-from mark.safety.policy import SafetyPolicy
-from mark.safety.types import RiskLevel
-from mark.tools.contracts import SideEffectClass, ToolResult, ToolSpec
-from mark.tools.registry import ToolRegistry
+from acta.safety.policy import SafetyPolicy
+from acta.safety.types import RiskLevel
+from acta.tools.contracts import SideEffectClass, ToolResult, ToolSpec
+from acta.tools.registry import ToolRegistry
 from providers.contracts import (
     ChatProvider,
     ChatRequest,

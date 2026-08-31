@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from mark.vision.config import VisionConfig
-from mark.vision.fixtures.rtsp import create_rtsp_fixture
-from mark.vision.provider import VisionProvider
-from mark.vision.types import FrameSource
+from acta.vision.config import VisionConfig
+from acta.vision.fixtures.rtsp import create_rtsp_fixture
+from acta.vision.provider import VisionProvider
+from acta.vision.types import FrameSource
 
 
 @pytest.fixture
@@ -259,7 +259,7 @@ class TestE2EReconnect:
         )
 
         img_path = tmp_path / "test.png"
-        from mark.vision.fixtures.image import create_test_image
+        from acta.vision.fixtures.image import create_test_image
         create_test_image(path=str(img_path))
 
         provider = VisionProvider(
@@ -291,7 +291,7 @@ class TestE2EReconnect:
         )
 
         img_path = tmp_path / "test.png"
-        from mark.vision.fixtures.image import create_test_image
+        from acta.vision.fixtures.image import create_test_image
         create_test_image(path=str(img_path))
 
         provider = VisionProvider(
@@ -313,37 +313,37 @@ class TestE2EFixtures:
     """Tests for deterministic fixtures."""
 
     def test_create_test_image(self, tmp_path: Path):
-        from mark.vision.fixtures.image import create_test_image
+        from acta.vision.fixtures.image import create_test_image
         p = tmp_path / "test.png"
         data = create_test_image(path=str(p))
         assert len(data) > 0
         assert p.exists()
 
     def test_create_moving_images(self, tmp_path: Path):
-        from mark.vision.fixtures.image import create_moving_object_image
+        from acta.vision.fixtures.image import create_moving_object_image
         frames = create_moving_object_image(path=str(tmp_path))
         assert len(frames) > 0
 
     def test_create_grid_image(self, tmp_path: Path):
-        from mark.vision.fixtures.image import create_grid_image
+        from acta.vision.fixtures.image import create_grid_image
         p = tmp_path / "grid.png"
         data = create_grid_image(path=str(p))
         assert len(data) > 0
 
     def test_create_text_image(self, tmp_path: Path):
-        from mark.vision.fixtures.image import create_text_image
+        from acta.vision.fixtures.image import create_text_image
         p = tmp_path / "text.png"
         data = create_text_image(path=str(p))
         assert len(data) > 0
 
     def test_create_person_roi(self, tmp_path: Path):
-        from mark.vision.fixtures.image import create_person_roi
+        from acta.vision.fixtures.image import create_person_roi
         p = tmp_path / "person.png"
         data = create_person_roi(path=str(p))
         assert len(data) > 0
 
     def test_create_test_video(self, tmp_path: Path):
-        from mark.vision.fixtures.video import create_test_video
+        from acta.vision.fixtures.video import create_test_video
         p = tmp_path / "test.mp4"
         path = create_test_video(path=str(p))
         assert path.exists()

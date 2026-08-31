@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mark.memory import MemoryRecord, MemoryStore, RecordType
+from acta.memory import MemoryRecord, MemoryStore, RecordType
 
 from tests.unit.memory.test_migrate import FIXTURE
 

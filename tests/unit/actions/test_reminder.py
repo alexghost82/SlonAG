@@ -12,7 +12,7 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from actions.reminder import reminder
-from mark.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
+from acta.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
 
 INJECTED_MESSAGE = 'hello"; rm -rf / # \'quoted\''
 FUTURE = {"date": "2099-01-01", "time": "10:00", "message": INJECTED_MESSAGE}

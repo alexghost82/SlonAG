@@ -1,4 +1,4 @@
-"""Tests for mark/connectivity/transport.py — TLS/WSS transport layer."""
+"""Tests for acta/connectivity/transport.py — TLS/WSS transport layer."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mark.connectivity.transport import (
+from acta.connectivity.transport import (
     LANTransport,
     LANTransportError,
     MAX_MESSAGE_BYTES,

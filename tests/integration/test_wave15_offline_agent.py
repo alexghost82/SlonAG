@@ -9,10 +9,10 @@ from agent.executor import AgentExecutor, execute_agent_loop, execute_plan
 from agent.observation import Observation, ObservationKind
 from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
-from mark.safety import SafetyPolicy, UntrustedSource
-from mark.tools.builtin import build_builtin_registry
-from mark.tools.contracts import ToolResult
-from mark.tools.executor import ToolExecutor
+from acta.safety import SafetyPolicy, UntrustedSource
+from acta.tools.builtin import build_builtin_registry
+from acta.tools.contracts import ToolResult
+from acta.tools.executor import ToolExecutor
 from providers.contracts import ChatMessage, ChatRequest, ChatResponse, ModelInfo, ToolCall
 
 

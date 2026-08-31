@@ -331,21 +331,12 @@
     "resource_snapshots": "СНАПШОТЫ_РЕСУРСОВ",
     "ok": "Локальный runtime запущен.",
     "oom": "Не хватает памяти для локальной модели.",
-<<<<<<< HEAD
     "not_running": "Локальный runtime не запущен.",
     "start_failed": "Ошибка запуска локального runtime.",
     "stop_failed": "Ошибка остановки локального runtime.",
     "remote_url": "URL удалённого runtime заблокирован. Только локальные адреса.",
     "pull_unconfirmed": "Для скачивания модели требуется подтверждение размера и лицензии.",
     "failed": "Ошибка локального runtime."
-=======
-    "not_running": "Локальный runtime не запущен.",
-    "start_failed": "Ошибка запуска локального runtime.",
-    "stop_failed": "Ошибка остановки локального runtime.",
-    "remote_url": "URL удалённого runtime заблокирован. Только локальные адреса.",
-    "pull_unconfirmed": "Для скачивания модели требуется подтверждение размера и лицензии.",
-    "failed": "Ошибка локального runtime."
->>>>>>> agent/16-first-run-localization
   },
   "server": {
     "pairing_rejected": "Привязка gateway отклонена: требуется --gateway-lan",
@@ -354,7 +345,7 @@
     "pairing_code": "Код сопряжения Slon (только локально): {code}",
     "pairing_rejected_code": "Код сопряжения отклонён"
   },
-  "mark": {
+  "acta": {
     "runtime": {
       "pull_unconfirmed": "Pull не подтверждён."
     },

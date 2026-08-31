@@ -1,4 +1,4 @@
-"""Tests for mark/connectivity/types.py — core type definitions."""
+"""Tests for acta/connectivity/types.py — core type definitions."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from mark.connectivity.types import (
+from acta.connectivity.types import (
     ConnectivityMode,
     ConnectivityPolicy,
     ConnectionConnectionReason,

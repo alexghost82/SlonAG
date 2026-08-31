@@ -4,8 +4,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from mark.safety import RiskLevel
-from mark.tools import ArtifactRef, ToolResult, ToolSpec
+from acta.safety import RiskLevel
+from acta.tools import ArtifactRef, ToolResult, ToolSpec
 
 
 def _handler(**_: object) -> str:

@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from mark.safety import authorize, validate_args
-from mark.safety.errors import ArgValidationError
-from mark.safety.types import DecisionKind
+from acta.safety import authorize, validate_args
+from acta.safety.errors import ArgValidationError
+from acta.safety.types import DecisionKind
 
 _TASK_NS = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 _OPS = frozenset({"create", "list", "update", "cancel"})
@@ -167,7 +167,7 @@ def _default_store_path() -> Path:
     else:
         xdg = os.environ.get("XDG_DATA_HOME")
         base = Path(xdg) if xdg else Path.home() / ".local" / "share"
-    return base / "mark" / "reminders.json"
+    return base / "acta" / "reminders.json"
 
 
 def _authorize_mutation(

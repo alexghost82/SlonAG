@@ -17,9 +17,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mark.safety.types import DecisionKind, SafetyDecision, UntrustedSource
-from mark.workflow_learning.service import WorkflowService
-from mark.workflow_learning.types import (
+from acta.safety.types import DecisionKind, SafetyDecision, UntrustedSource
+from acta.workflow_learning.service import WorkflowService
+from acta.workflow_learning.types import (
     ActionSequence,
     ExecutionRecord,
     ExecutionResult,
@@ -29,7 +29,7 @@ from mark.workflow_learning.types import (
     WorkflowStep,
     WorkflowTemplate,
 )
-from mark.workflow_learning.store import WorkflowStore
+from acta.workflow_learning.store import WorkflowStore
 
 
 # ---------------------------------------------------------------------------
@@ -39,11 +39,11 @@ from mark.workflow_learning.store import WorkflowStore
 
 def _make_service(tmp_path=None, **kwargs):
     """Create a WorkflowService with an in-memory or file-backed store."""
-    from mark.workflow_learning.observer import ActionObserver
-    from mark.workflow_learning.normalizer import Normalizer
-    from mark.workflow_learning.confidence import ConfidenceEngine
-    from mark.workflow_learning.executor import WorkflowExecutor
-    from mark.workflow_learning.store import WorkflowStore
+    from acta.workflow_learning.observer import ActionObserver
+    from acta.workflow_learning.normalizer import Normalizer
+    from acta.workflow_learning.confidence import ConfidenceEngine
+    from acta.workflow_learning.executor import WorkflowExecutor
+    from acta.workflow_learning.store import WorkflowStore
 
     store_path = None
     if tmp_path:
@@ -67,10 +67,10 @@ def _make_service(tmp_path=None, **kwargs):
 
 def _mock_service(tmp_path=None, **observer_kwargs):
     """Create a service with a mocked executor and safety policy."""
-    from mark.workflow_learning.observer import ActionObserver
-    from mark.workflow_learning.normalizer import Normalizer
-    from mark.workflow_learning.confidence import ConfidenceEngine
-    from mark.workflow_learning.store import WorkflowStore
+    from acta.workflow_learning.observer import ActionObserver
+    from acta.workflow_learning.normalizer import Normalizer
+    from acta.workflow_learning.confidence import ConfidenceEngine
+    from acta.workflow_learning.store import WorkflowStore
 
     store_path = None
     if tmp_path:

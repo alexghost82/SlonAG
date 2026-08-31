@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from mark.vision.tracking import ObjectTracker
-from mark.vision.types import Bbox, DetectionResult, DetectionKind, FrameEvent
+from acta.vision.tracking import ObjectTracker
+from acta.vision.types import Bbox, DetectionResult, DetectionKind, FrameEvent
 
 
 class TestObjectTracker:

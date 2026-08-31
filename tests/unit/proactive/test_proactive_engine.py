@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from mark.proactive import (
+from acta.proactive import (
     AntiSpamFilter,
     CooldownManager,
     EventDedup,
@@ -41,7 +41,7 @@ from mark.proactive import (
     EventSource,
     SAFE_AUTO_ACTIONS,
 )
-from mark.proactive.errors import (
+from acta.proactive.errors import (
     CODE_ACTION_BLOCKED,
     CODE_COOLDOWN_ACTIVE,
     CODE_DUPLICATE_EVENT,
@@ -533,7 +533,7 @@ class TestProactivePersistence:
     def test_save_and_load_cooldown(self, tmp_path: Path) -> None:
         store = tmp_path / "proactive.json"
         p = ProactivePersistence(store_path=store)
-        from mark.proactive.types import CooldownEntry
+        from acta.proactive.types import CooldownEntry
         entry = CooldownEntry(
             source_type="test_type",
             cooldown_seconds=30.0,

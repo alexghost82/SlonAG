@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent.executor import AgentExecutor, ToolDeniedError, _call_tool
-from mark.safety import (
+from acta.safety import (
     DecisionKind,
     RiskLevel,
     SafetyDecision,

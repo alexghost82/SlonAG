@@ -2,7 +2,7 @@
 
 import pytest
 from agent.observation import Observation, ObservationKind
-from mark.tools.contracts import ArtifactRef, ToolResult
+from acta.tools.contracts import ArtifactRef, ToolResult
 
 
 def test_observation_kind_enum_members():

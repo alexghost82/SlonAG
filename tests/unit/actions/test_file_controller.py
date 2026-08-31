@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from actions.file_controller import file_controller
-from mark.safety import DecisionKind, RiskLevel, authorize, risk_for
+from acta.safety import DecisionKind, RiskLevel, authorize, risk_for
 
 
 SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345"
@@ -193,7 +193,7 @@ def test_delete_with_confirm_uses_trash_not_permanent(
         raise AssertionError("permanent delete must not run")
 
     monkeypatch.setattr(Path, "unlink", _unlink)
-    monkeypatch.setattr("mark.filesystem.operations.shutil.rmtree", _rmtree)
+    monkeypatch.setattr("acta.filesystem.operations.shutil.rmtree", _rmtree)
 
     def _confirm(decision) -> bool:
         decisions.append(decision)

@@ -1,4 +1,4 @@
-"""Tests for mark/connectivity/remote.py — remote transport adapter."""
+"""Tests for acta/connectivity/remote.py — remote transport adapter."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mark.connectivity.remote import RemoteAdapter, RemoteAdapterError
+from acta.connectivity.remote import RemoteAdapter, RemoteAdapterError
 
 
 class TestRemoteAdapter:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mark.documents import DocumentIngestor
+from acta.documents import DocumentIngestor
 
 
 @pytest.fixture

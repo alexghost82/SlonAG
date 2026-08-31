@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mark.network import NetworkMode, NetworkPolicy
+from acta.network import NetworkMode, NetworkPolicy
 
 CLOUD_IDS = ("gemini", "openai", "openrouter")
 

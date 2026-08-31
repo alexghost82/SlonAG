@@ -1,10 +1,10 @@
-"""Tests for mark/connectivity/discovery.py — mDNS/Bonjour device discovery."""
+"""Tests for acta/connectivity/discovery.py — mDNS/Bonjour device discovery."""
 
 from __future__ import annotations
 
 import pytest
 
-from mark.connectivity.discovery import LANDevice, LANDeviceScanner, SERVICE_TYPE
+from acta.connectivity.discovery import LANDevice, LANDeviceScanner, SERVICE_TYPE
 
 
 class TestLANDevice:

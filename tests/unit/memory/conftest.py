@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from mark.memory import MemoryStore
+from acta.memory import MemoryStore
 
 
 @pytest.fixture
