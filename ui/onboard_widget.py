@@ -30,7 +30,9 @@ from config.onboard import (
     PROVIDER_IDS,
     CLOUD_MODELS, LOCAL_MODELS,
     STT_ENGINES, TTS_ENGINES,
+    validate_model_for_provider, get_model_capabilities_summary,
 )
+from config.catalog import get_model_info, get_static_models, model_capabilities_display
 
 
 # ─── Provider display labels ──────────────────────────────────────────
@@ -222,26 +224,109 @@ class ProviderStep(_StepWidget):
 
 
 class ModelStep(_StepWidget):
+    """Model selection widget backed by the real provider catalog.
+
+    Displays only models that are actually available for the selected
+    provider and shows capability metadata (tool calling, vision, etc.)
+    for each model.
+    """
+
     def __init__(self, provider_id: str = "", parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         self._combo = QComboBox()
         self._combo.setFont(QFont("Courier New", 10))
         self._combo.setStyleSheet(_provider_combo_style())
 
-        models = CLOUD_MODELS.get(provider_id, []) if provider_id in CLOUD_PROVIDER_IDS else LOCAL_MODELS.get(provider_id, [])
-        if not models:
-            models = [("", "Auto (default)")]
-        self._combo.addItem("", "")
-        for mid, label in models:
-            self._combo.addItem(label, mid)
-        self._combo.setCurrentIndex(0)
+        self._cap_label = QLabel("")
+        self._cap_label.setFont(QFont("Courier New", 9))
+        self._cap_label.setStyleSheet(f"color: {_TEXT_DIM}; background: transparent;")
+        self._cap_label.setWordWrap(True)
+
+        self._err_label = QLabel("")
+        self._err_label.setFont(QFont("Courier New", 9))
+        self._err_label.setStyleSheet(f"color: {_RED}; background: transparent;")
+        self._err_label.setVisible(False)
+        self._err_label.setWordWrap(True)
+
+        self._combo.currentIndexChanged.connect(self._on_model_change)
+        self._current_provider_id = provider_id
+
+        # Initial model population
+        self._populate_models(provider_id)
+        self._current_model_id = ""
 
         layout.addWidget(self._combo)
-        spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self._cap_label)
+        layout.addWidget(self._err_label)
+        spacer = QSpacerItem(20, 30, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         layout.addItem(spacer)
+
+    def _populate_models(self, provider_id: str) -> None:
+        """Populate the model combo from the real catalog."""
+        self._current_provider_id = provider_id
+        self._combo.clear()
+
+        # Use catalog query for real model data
+        static_models = get_static_models(provider_id)
+        local_models_list = LOCAL_MODELS.get(provider_id, [])
+        cloud_models_list = CLOUD_MODELS.get(provider_id, [])
+
+        models = static_models or (local_models_list if provider_id in LOCAL_PROVIDER_IDS
+                                    else cloud_models_list if provider_id in CLOUD_PROVIDER_IDS
+                                    else [])
+
+        # Add "Auto (default)" option first
+        self._combo.addItem("", "")
+
+        if static_models:
+            # Static catalog models from providers/gemini/catalog.py etc.
+            for m in static_models:
+                self._combo.addItem(m.display_name or m.model_id, m.model_id)
+        elif isinstance(models, list) and models and not isinstance(models[0], tuple):
+            # Already ModelInfo objects
+            for m in models:
+                self._combo.addItem(m.display_name or m.model_id, m.model_id)
+        else:
+            # Legacy tuple list: [(model_id, label), ...]
+            for mid, label in models:
+                self._combo.addItem(label, mid)
+
+        # Auto (default) option for all providers
+        self._combo.addItem(t("catalog.auto"), "")
+
+        self._combo.setCurrentIndex(0)
+        self._current_model_id = ""
+        self._on_model_change(0)
+
+    def _on_model_change(self, idx: int) -> None:
+        """Update capability label and error when model selection changes."""
+        if idx == 0:
+            self._current_model_id = ""
+            self._cap_label.setText("")
+            self._err_label.setVisible(False)
+            return
+
+        model_id = self._combo.itemData(idx)
+        if not model_id:
+            self._current_model_id = ""
+            self._cap_label.setText("")
+            self._err_label.setVisible(False)
+            return
+
+        self._current_model_id = model_id
+
+        # Show capabilities
+        info = get_model_info(self._current_provider_id, model_id)
+        if info is not None:
+            self._cap_label.setText(t("catalog.model_capabilities") + ": " + model_capabilities_display(info))
+            self._err_label.setVisible(False)
+        else:
+            self._cap_label.setText(t("catalog.model_not_found"))
+            self._err_label.setText(t("catalog.err_provider_model_mismatch"))
+            self._err_label.setVisible(True)
 
     def collect(self) -> dict:
         idx = self._combo.currentIndex()
@@ -251,14 +336,17 @@ class ModelStep(_StepWidget):
 
     def update_models(self, provider_id: str) -> None:
         """Refresh model list when provider changes."""
-        self._combo.clear()
-        models = CLOUD_MODELS.get(provider_id, []) if provider_id in CLOUD_PROVIDER_IDS else LOCAL_MODELS.get(provider_id, [])
-        if not models:
-            models = [("", "Auto (default)")]
-        self._combo.addItem("", "")
-        for mid, label in models:
-            self._combo.addItem(label, mid)
-        self._combo.setCurrentIndex(0)
+        self._populate_models(provider_id)
+
+    def errors(self) -> dict[str, str]:
+        """Validate the selected model for the current provider."""
+        model_id = self._current_model_id
+        if not model_id:
+            return {}  # "Auto" is always valid
+        ok, err = validate_model_for_provider(self._current_provider_id, model_id)
+        if not ok:
+            return {"model": err}
+        return {}
 
 
 class CredentialsStep(_StepWidget):

@@ -609,5 +609,28 @@
   "action": {
     "confirmation_declined": "Confirmation declined.",
     "confirmation_required": "Confirmation is required."
+  },
+  "catalog": {
+    "title": "Provider & Model Settings",
+    "provider_label": "Provider",
+    "model_label": "Model",
+    "model_capabilities": "Capabilities",
+    "cap_text": "Text",
+    "cap_tools": "Tools",
+    "cap_vision": "Vision",
+    "cap_audio_in": "Audio In",
+    "cap_audio_out": "Audio Out",
+    "cap_embeddings": "Embeddings",
+    "cap_structured": "Structured",
+    "cap_streaming": "Streaming",
+    "cap_unknown": "Unknown",
+    "err_unknown_provider": "Unknown provider: {provider}",
+    "err_provider_model_mismatch": "Model not available with this provider",
+    "err_no_models": "No models available for this provider",
+    "err_validation": "Provider validation error",
+    "auto": "Auto (default)",
+    "local_only": "Local only",
+    "capabilities_info": "Tool calling, vision, and reasoning capabilities are shown from real model metadata.",
+    "model_not_found": "Model not found in catalog — capabilities unknown"
   }
 }

@@ -327,7 +327,6 @@
     "resource_snapshots": "RESOURCE_SNAPSHOTS",
     "ok": "Локальный runtime запущен.",
     "oom": "Не хватает памяти для локальной модели.",
-
     "not_running": "Local runtime not running.",
     "start_failed": "Local runtime start failed.",
     "stop_failed": "Local runtime stop failed.",
@@ -610,5 +609,28 @@
   "action": {
     "confirmation_declined": "Подтверждение отклонено.",
     "confirmation_required": "Требуется подтверждение."
+  },
+  "catalog": {
+    "title": "Настройки провайдера и модели",
+    "provider_label": "Провайдер",
+    "model_label": "Модель",
+    "model_capabilities": "Возможности",
+    "cap_text": "Текст",
+    "cap_tools": "Инструменты",
+    "cap_vision": "Зрение",
+    "cap_audio_in": "Аудио ввод",
+    "cap_audio_out": "Аудио вывод",
+    "cap_embeddings": "Эмбеддинги",
+    "cap_structured": "Структурированный вывод",
+    "cap_streaming": "Стриминг",
+    "cap_unknown": "Неизвестно",
+    "err_unknown_provider": "Неизвестный провайдер: {provider}",
+    "err_provider_model_mismatch": "Модель недоступна с этим провайдером",
+    "err_no_models": "Нет доступных моделей для этого провайдера",
+    "err_validation": "Ошибка валидации провайдера",
+    "auto": "Авто (по умолчанию)",
+    "local_only": "Только локально",
+    "capabilities_info": "Поддержка инструментов, зрения и работы с контекстом определяется по реальным данным модели.",
+    "model_not_found": "Модель не найдена в каталоге — возможности неизвестны"
   }
 }
