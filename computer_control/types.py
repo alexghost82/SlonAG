@@ -15,6 +15,45 @@ from typing import Any
 
 
 # ---------------------------------------------------------------------------
+# Loop detection helpers
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CoordinateValidationResult:
+    """Result of coordinate bounds validation."""
+
+    valid: bool = True
+    reason: str = ''
+    clamped_x: int = 0
+    clamped_y: int = 0
+
+
+class DangerousActionKind(StrEnum):
+    """Classification of a dangerous action requiring explicit approval."""
+
+    KILL_PROCESS = 'kill_process'
+    CLOSE_WINDOW = 'close_window'
+    CLOSE_ALL_WINDOWS = 'close_all_windows'
+    FORCE_KILL = 'force_kill'
+    SYSTEM_SHUTDOWN = 'shutdown'
+    FORMAT_DRIVE = 'format'
+    DELETE_FILES = 'delete_files'
+    WRITE_SYSTEM_FILE = 'write_system_file'
+    MODIFY_DANGEROUS_SETTING = 'modify_dangerous_setting'
+
+
+@dataclass
+class DangerousActionApproval:
+    """Request / result for a dangerous action approval gate."""
+
+    kind: DangerousActionKind
+    description: str
+    approved: bool = False
+    reason: str = ''
+    action: ComputerAction | None = None
+
+
+# ---------------------------------------------------------------------------
 # Frame sources
 # ---------------------------------------------------------------------------
 
@@ -350,7 +389,7 @@ class VerificationResult:
     actual_fingerprint: str = ""
     reason: str = ""
     stale: bool = False
-    retryable: bool = True
+    retryable: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -489,4 +528,7 @@ __all__ = [
     "CancellationError",
     "VerificationFailedError",
     "SafetyDenialError",
+    "CoordinateValidationResult",
+    "DangerousActionKind",
+    "DangerousActionApproval",
 ]
