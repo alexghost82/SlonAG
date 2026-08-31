@@ -236,8 +236,13 @@ class MemoryRetriever:
             source=existing.source,
             created_at=existing.created_at,
             updated_at=now,
+            dedup_hash=getattr(existing, "dedup_hash", ""),
+            workspace=getattr(existing, "workspace", ""),
+            user_id=getattr(existing, "user_id", ""),
+            session_id=getattr(existing, "session_id", ""),
+            confidence=getattr(existing, "confidence", 1.0),
+            recency_weight=getattr(existing, "recency_weight", 1.0),
         )
-        # Preserve scoped fields from existing
         self._db.update(updated)
         self._db.upsert_embedding(updated.id, self._embed_service.embed(new_value) or [0.0])
         return MemoryRecord(

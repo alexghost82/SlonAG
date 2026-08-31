@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
@@ -142,7 +142,7 @@ class MemoryStore:
         self._pending[proposal.id] = proposal
         # Check for existing duplicate within the same scope
         self._check_duplicate_in_memory(proposal)
-        return proposal
+        return self._pending[proposal.id]
 
     def _check_duplicate_in_memory(self, proposal: Proposal) -> None:
         """Check for duplicates among in-memory pending proposals only."""
@@ -156,7 +156,7 @@ class MemoryStore:
             if existing.session_id and existing.session_id != proposal.session_id:
                 continue
             if _value_match(existing.value, proposal.value):
-                proposal.confidence = min(proposal.confidence, 0.5)
+                self._pending[proposal.id] = replace(proposal, confidence=min(proposal.confidence, 0.5))
                 break
 
     def _check_duplicate_in_db(self, proposal: Proposal) -> None:
@@ -170,7 +170,7 @@ class MemoryStore:
             if row.session_id and row.session_id != proposal.session_id:
                 continue
             if _value_match(row.value, proposal.value):
-                proposal.confidence = min(proposal.confidence, 0.5)
+                self._pending[proposal.id] = replace(proposal, confidence=min(proposal.confidence, 0.5))
                 break
 
     def commit(self, proposal_id: str) -> MemoryRecord | None:
@@ -181,25 +181,38 @@ class MemoryStore:
         if not self._enabled:
             return None
         now = _now()
+        # Check duplicates before creating record so confidence is correct
+        self._check_duplicate_in_db(proposal)
+        # Re-read from _pending to get any confidence adjustments from dedup
+        current_proposal = self._pending[proposal.id]
         record = MemoryRecord(
-            id=proposal.id,
-            type=proposal.type,
-            key=proposal.key,
-            value=proposal.value,
-            source=proposal.source,
+            id=current_proposal.id,
+            type=current_proposal.type,
+            key=current_proposal.key,
+            value=current_proposal.value,
+            source=current_proposal.source,
             created_at=now,
             updated_at=now,
-            dedup_hash=_make_hash(proposal.value),
-            workspace=proposal.workspace,
-            user_id=proposal.user_id,
-            session_id=proposal.session_id,
-            confidence=proposal.confidence,
+            dedup_hash=_make_hash(current_proposal.value),
+            workspace=current_proposal.workspace,
+            user_id=current_proposal.user_id,
+            session_id=current_proposal.session_id,
+            confidence=current_proposal.confidence,
             recency_weight=1.0,
         )
-        self._check_duplicate_in_db(proposal)
-        self._db().insert(_to_row(record))
+        try:
+            self._db().insert(_to_row(record))
+        except Exception:
+            # DB insert failure: keep proposal in pending for retry
+            # DB stays consistent — nothing was written
+            raise
+        try:
+            self._embed_record(record)
+        except Exception:
+            # Embedding failure: record is persisted, embedding is optional.
+            # Clean up pending so caller doesn't retry an already-committed record.
+            pass
         del self._pending[proposal_id]
-        self._embed_record(record)
         return record
 
     def list(
@@ -210,15 +223,21 @@ class MemoryStore:
         user_id: str | None = None,
         session_id: str | None = None,
     ) -> list[MemoryRecord]:
-        """List records with optional scope filters."""
-        if record_type is None and workspace is None and user_id is None and session_id is None:
+        """List records with optional scope filters.
+
+        When called with no scope arguments, returns all records.
+        When scope arguments are provided (or default scope is set),
+        filtering is applied.
+        """
+        if (record_type is None and workspace is None
+                and user_id is None and session_id is None):
             return [_from_row(row) for row in self._db().list(None)]
-        filtered_type = _coerce_type(record_type) if record_type is not None else None
-        type_name = filtered_type.value if filtered_type is not None else None
-        rows = self._db().list(type_name)
         ws = workspace if workspace is not None else self.default_workspace
         uid = user_id if user_id is not None else self.default_user
         sid = session_id if session_id is not None else self.default_session
+        filtered_type = _coerce_type(record_type) if record_type is not None else None
+        type_name = filtered_type.value if filtered_type is not None else None
+        rows = self._db().list(type_name)
         results = []
         for row in rows:
             if row.workspace != ws:
@@ -325,6 +344,34 @@ class MemoryStore:
                 self._db().delete(row.id)
                 deleted += 1
         return deleted
+
+
+    def export_all(self) -> list[dict[str, object]]:
+        """Export all memory records as plain dicts. Useful for backup or migration."""
+        return [_record_to_dict(r) for r in self.list()]
+
+    def export_scope(
+        self,
+        *,
+        workspace: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Export records matching a scope filter as plain dicts."""
+        ws = workspace if workspace is not None else self.default_workspace
+        uid = user_id if user_id is not None else self.default_user
+        sid = session_id if session_id is not None else self.default_session
+        rows = self._db().list(None)
+        result = []
+        for row in rows:
+            if row.workspace != ws:
+                continue
+            if row.user_id != uid:
+                continue
+            if sid != "" and row.session_id != sid:
+                continue
+            result.append(_record_to_dict(_from_row(row)))
+        return result
 
     def migrate_json(self, old: Mapping[str, object] | Path) -> MigrationStats:
         from mark.memory.migrations.json import migrate_json as _migrate
@@ -495,6 +542,25 @@ def _from_row(row: MemoryRow) -> MemoryRecord:
         confidence=getattr(row, "confidence", 1.0),
         recency_weight=getattr(row, "recency_weight", 1.0),
     )
+
+def _record_to_dict(record: MemoryRecord) -> dict[str, object]:
+    """Convert a MemoryRecord to a plain dict for export."""
+    return {
+        "id": record.id,
+        "type": record.type.value,
+        "key": record.key,
+        "value": record.value,
+        "source": record.source,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+        "dedup_hash": record.dedup_hash,
+        "workspace": record.workspace,
+        "user_id": record.user_id,
+        "session_id": record.session_id,
+        "confidence": record.confidence,
+        "recency_weight": record.recency_weight,
+    }
+
 
 
 __all__ = [

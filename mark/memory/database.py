@@ -11,7 +11,7 @@ from pathlib import Path
 from mark.memory.migrations.schema import SCHEMA_VERSION, apply_schema
 
 
-@dataclass(frozen=True)
+@dataclass
 class MemoryRow:
     """One persisted row. Mapping to ``MemoryRecord`` happens in the store."""
 
@@ -204,9 +204,9 @@ class MemoryDatabase:
         Each returned MemoryRow gets a transient _similarity attribute."""
         rows = self._connection.execute(
             """
-            SELECT r.id, r.type, r.key, r.value, r.source, r.dedup_hash,
+            SELECT r.id, r.content, r.type, r.key, r.value, r.source, r.dedup_hash,
                    r.workspace, r.user_id, r.session_id, r.confidence,
-                   r.recency_weight, r.created_at, r.updated_at
+                   r.recency_weight, r.created_at, r.updated_at, e.vector
             FROM memory_records r
             JOIN memory_embeddings e ON r.id = e.record_id
             """
