@@ -1251,9 +1251,8 @@ class MainWindow(QMainWindow):
         """)
         lay.addWidget(self._provider_cbox)
 
-        # ── Model selector ──
+        # ── Model selector (populated from catalog) ──
         self._model_cbox = QComboBox()
-        self._model_cbox.addItems(["(auto)", "gpt-4o", "gpt-4o-mini", "gemini-2.0-flash", "gemini-2.5-flash", "claude-3.5-sonnet", "llama-3.1-70b", "custom"])
         self._model_cbox.setFont(QFont("Courier New", 8))
         self._model_cbox.setFixedHeight(26)
         self._model_cbox.currentTextChanged.connect(self._on_model_changed)
@@ -1335,26 +1334,38 @@ class MainWindow(QMainWindow):
         return w
 
     def _refresh_settings_ui(self) -> None:
-        """Load current settings into the UI controls."""
+        """Load current settings into the UI controls.
+
+        Model list is populated from the provider catalog (Gemini static
+        catalog, OpenRouter/OpenAI runtime queries, local provider HTTP).
+        """
         try:
-            from config.schema import DEFAULT_PROVIDER_ID
+            from config.schema import DEFAULT_PROVIDER_ID, ProviderBaseURL
+            from config.catalog import get_static_models
+
             loaded = load_settings()
             pid = getattr(loaded, "provider_id", DEFAULT_PROVIDER_ID)
             self._provider_cbox.setCurrentText(pid)
 
             mid = getattr(loaded, "model_id", "")
-            auto_match = False
-            known = ["gpt-4o", "gpt-4o-mini", "gemini-2.0-flash", "gemini-2.5-flash", "claude-3.5-sonnet", "llama-3.1-70b"]
+
+            # Populate model combo from catalog for current provider
+            self._populate_model_combo(pid)
+
+            # Restore saved model selection
             if not mid:
                 self._model_cbox.setCurrentText("(auto)")
-                auto_match = True
-            elif mid in known:
-                self._model_cbox.setCurrentText(mid)
-                auto_match = True
             else:
-                self._model_cbox.setCurrentText("custom")
-                self._model_input.setText(mid)
-                self._model_input.setVisible(True)
+                # Check if the saved model_id is in the combo
+                found = False
+                for i in range(self._model_cbox.count()):
+                    if self._model_cbox.itemData(i) == mid:
+                        self._model_cbox.setCurrentIndex(i)
+                        found = True
+                        break
+                if not found:
+                    self._model_input.setText(mid)
+                    self._model_input.setVisible(True)
 
             ps = getattr(loaded, "provider_settings", {})
             ps_dict = {}
@@ -1370,13 +1381,43 @@ class MainWindow(QMainWindow):
             self._base_url_input.setText(base_url)
 
             self._update_status(f"provider={pid}, model={mid or '(auto)'}")
-        except Exception:
-            self._update_status("load_settings: error")
+        except Exception as exc:
+            self._update_status(f"load_settings: error — {exc}")
 
     def _update_status(self, msg: str) -> None:
         self._status_lbl.setText(f"{t("status.connected")}: {msg}")
 
+    def _populate_model_combo(self, provider_id: str) -> None:
+        """Populate the model combo box from the catalog for a given provider."""
+        from config.catalog import get_static_models
+
+        self._model_cbox.clear()
+        self._model_cbox.addItem("(auto)", "")
+
+        # Query static catalog
+        static_models = get_static_models(provider_id)
+        if static_models:
+            for m in static_models:
+                self._model_cbox.addItem(m.display_name or m.model_id, m.model_id)
+        else:
+            # Fallback: show local models from onboard config
+            from config.onboard import LOCAL_MODELS, CLOUD_MODELS
+            from config.schema import LOCAL_PROVIDER_IDS, CLOUD_PROVIDER_IDS
+
+            models_list = []
+            if provider_id in LOCAL_PROVIDER_IDS:
+                models_list = LOCAL_MODELS.get(provider_id, [])
+            elif provider_id in CLOUD_PROVIDER_IDS:
+                models_list = CLOUD_MODELS.get(provider_id, [])
+
+            for mid, label in models_list:
+                self._model_cbox.addItem(label, mid)
+
+        # Always add custom option at the end
+        self._model_cbox.addItem("… custom", "custom")
+
     def _on_provider_changed(self, _text: str) -> None:
+        self._populate_model_combo(_text)
         self._update_status(f"provider changed to {_text}")
 
     def _on_model_changed(self, _text: str) -> None:

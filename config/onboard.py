@@ -43,6 +43,7 @@ from config.schema import (
 )
 from config.secrets import set_secret, KNOWN_SECRET_NAMES
 from i18n import t
+from config.catalog import get_model_info, model_capabilities_display
 
 
 CLOUD_PROVIDER_IDS = frozenset(PROVIDER_IDS - LOCAL_PROVIDER_IDS)
@@ -81,6 +82,40 @@ LOCAL_MODELS: dict[str, list[tuple[str, str]]] = {
         ("auto", "Авто (определить)"),
     ],
 }
+
+# ---------------------------------------------------------------------------
+# Model capability metadata (read from catalog for validation & display)
+# ---------------------------------------------------------------------------
+
+MODEL_CAPABILITIES: dict[str, dict[str, bool]] = {}
+"""Model id -> capability flags.  Populated from catalog at import time."""
+
+for _pid in ("gemini", "openai", "openrouter"):
+    for _mid, _label in CLOUD_MODELS.get(_pid, []):
+        _info = get_model_info(_pid, _mid)
+        if _info is not None:
+            MODEL_CAPABILITIES[_mid] = {
+                "text": _info.text,
+                "streaming": _info.streaming,
+                "tool_calling": _info.tool_calling,
+                "structured_output": _info.structured_output,
+                "vision": _info.vision,
+                "audio_input": _info.audio_input,
+                "audio_output": _info.audio_output,
+                "embeddings": _info.embeddings,
+            }
+for _pid in ("ollama", "llama_cpp", "local"):
+    for _mid, _label in LOCAL_MODELS.get(_pid, []):
+        _info = get_model_info(_pid, _mid)
+        if _info is not None:
+            MODEL_CAPABILITIES[_mid] = {
+                "text": _info.text,
+                "streaming": _info.streaming,
+                "tool_calling": _info.tool_calling,
+                "structured_output": _info.structured_output,
+                "vision": _info.vision,
+            }
+
 
 STT_ENGINES: list[tuple[str, str]] = [
     ("faster_whisper", "Faster-Whisper (локально, рекомендуется)"),
@@ -379,6 +414,42 @@ def validate_model_id(provider_id: str, value: str) -> tuple[bool, str | None]:
     if not value or value.strip() == "":
         return True, None
     return True, None
+
+def validate_model_for_provider(provider_id: str, model_id: str) -> tuple[bool, str | None]:
+    """Validate that *model_id* is a valid choice for *provider_id*.
+
+    Returns (False, error_message) when the model is not in the catalog
+    for the given provider, or the provider itself is unknown.
+    """
+    if not model_id or not model_id.strip():
+        return True, None  # empty means "auto"
+    info = get_model_info(provider_id, model_id)
+    if info is None:
+        return False, t("catalog.err_provider_model_mismatch")
+    return True, None
+
+
+def get_model_display(provider_id: str, model_id: str) -> str:
+    """Return a human-readable display string for a model.
+
+    Uses the catalog when possible, falls back to a plain fallback.
+    """
+    info = get_model_info(provider_id, model_id)
+    if info is None:
+        return model_id
+    if info.display_name and info.display_name != model_id:
+        return info.display_name
+    return model_id
+
+
+def get_model_capabilities_summary(provider_id: str, model_id: str) -> str:
+    """Return a capability summary string for a model."""
+    info = get_model_info(provider_id, model_id)
+    if info is None:
+        return t("catalog.model_not_found")
+    return model_capabilities_display(info)
+
+
 
 def validate_api_key_field(provider_id: str, key_value: str) -> tuple[bool, str | None]:
     if provider_id in LOCAL_PROVIDER_IDS:
