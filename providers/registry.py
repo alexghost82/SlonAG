@@ -44,3 +44,12 @@ def registered_ids() -> tuple[str, ...]:
 def clear() -> None:
     """Remove all registrations. Intended for tests."""
     _FACTORIES.clear()
+
+__all__ = [
+    "ProviderFactory",
+    "clear",
+    "get",
+    "register",
+    "registered_ids",
+]
+
