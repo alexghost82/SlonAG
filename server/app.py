@@ -218,6 +218,18 @@ class DesktopControlApp:
         )
 
     def _status(self) -> MockResponse:
+        # Check real capabilities to reflect runtime state
+        capabilities_ok = False
+        try:
+            from observability.capabilities import get_capability_report
+            report = get_capability_report()
+            caps = report.get("capabilities", {})
+            capabilities_ok = bool(
+                caps.get("input", False) or caps.get("screenshot", False)
+            )
+        except Exception:
+            pass
+
         return MockResponse(
             status_code=200,
             body={
@@ -229,6 +241,7 @@ class DesktopControlApp:
                 "privacy_profile": "fully_local",
                 "active_tasks": 0,
                 "pending_approvals": 0,
+                "capabilities_ok": capabilities_ok,
             },
         )
 

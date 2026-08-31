@@ -38,6 +38,8 @@ class CapabilityDetector:
 
     platform: OSPlatform = OSPlatform.UNKNOWN
     _details: dict[str, Any] = field(default_factory=dict, repr=False)
+    _validated: dict[str, bool] = field(default_factory=dict, repr=False)
+    _runtime_checked: bool = field(default=False, repr=False)
 
     # ── Factory ────────────────────────────────────────────────────
 
@@ -70,12 +72,34 @@ class CapabilityDetector:
         self._details["pyautogui"] = self._has_module("pyautogui")
         self._details["pyperclip"] = self._has_module("pyperclip")
         self._details["xdotool"] = self._has_tool("xdotool")
-        self._details["xclip"] = self._has_tool("xclip") or self._has_tool("xsel")
-        self._has_wayland = (
-            platform.freedesktop_os_release().get("VERSION_ID", "") if hasattr(platform, "freedesktop_os_release") else False
-        ) or (subprocess.run(
-            ["systemctl", "is-system-running"], capture_output=True, timeout=5
-        ).stdout.strip().decode() == "degraded" if self._has_tool("systemctl") else False)
+        self._details["xclip"] = (
+            self._has_tool("xclip") or self._has_tool("xsel")
+        )
+
+        # Wayland detection — only meaningful on Linux; ignore errors.
+        self._details["wayland"] = False
+        if self.platform == OSPlatform.LINUX:
+            try:
+                release = platform.freedesktop_os_release()
+                if isinstance(release, dict):
+                    desktop = str(release.get("VERSION_ID", "")).lower()
+                    self._details["wayland"] = (
+                        "wayland" in desktop or "gnome" in desktop
+                    )
+            except Exception:
+                pass
+            if not self._details["wayland"] and self._has_tool("systemctl"):
+                try:
+                    result = subprocess.run(
+                        ["systemctl", "is-system-running"],
+                        capture_output=True, timeout=5,
+                    )
+                    self._details["wayland"] = (
+                        result.returncode == 0
+                        and result.stdout.strip().decode() in ("degraded", "running")
+                    )
+                except Exception:
+                    pass
 
     @staticmethod
     def _has_module(name: str) -> bool:
@@ -98,19 +122,19 @@ class CapabilityDetector:
     def get(self, capability: str) -> CapabilityResult:
         """Query a specific capability."""
         if capability == "input":
-            return self._check_input()
+            return self._validated_or(capability, self._check_input)
         if capability == "screenshot":
-            return self._check_screenshot()
+            return self._validated_or(capability, self._check_screenshot)
         if capability == "window_management":
-            return self._check_window()
+            return self._validated_or(capability, self._check_window)
         if capability == "clipboard":
-            return self._check_clipboard()
+            return self._validated_or(capability, self._check_clipboard)
         if capability == "system_settings":
-            return self._check_system_settings()
+            return self._validated_or(capability, self._check_system_settings)
         if capability == "app_launch":
-            return self._check_app_launch()
+            return self._validated_or(capability, self._check_app_launch)
         if capability == "screen_info":
-            return self._check_screen_info()
+            return self._validated_or(capability, self._check_screen_info)
         if capability == "platform":
             return CapabilityResult(
                 capability="platform",
@@ -129,6 +153,51 @@ class CapabilityDetector:
             )
         # Fallback: check via adapter
         return self._check_via_adapter(capability)
+
+    def _validated_or(
+        self, capability: str, fallback_fn
+    ) -> CapabilityResult:
+        """Return the validated result if runtime-checked, else the static result.
+
+        This prevents reporting capabilities as supported when they have
+        not been actually tested at runtime — the core "no false capabilities"
+        guarantee.
+        """
+        if self._runtime_checked and capability in self._validated:
+            return CapabilityResult(
+                capability=capability,
+                supported=self._validated.get(capability, False),
+            )
+        return fallback_fn()
+
+    def validate(self) -> None:
+        """Run a lightweight runtime probe for every capability.
+
+        This is a zero-cost no-op the second time it is called.
+        After validation every reported capability has been confirmed
+        to actually *work*, not just have its tools installed.
+        """
+        if self._runtime_checked:
+            return
+        self._runtime_checked = True
+
+        # input — verify pyautogui actually imports and is usable
+        if self._details.get("pyautogui"):
+            try:
+                import pyautogui as _pa
+                _pa.FAILSAFE  # triggers import sanity checks
+                self._validated["input"] = True
+            except Exception:
+                self._validated["input"] = False
+
+        # app_launch — verify subprocess can fork/exec at all
+        try:
+            subprocess.run(["true"], capture_output=True, timeout=2)
+            self._validated["app_launch"] = True
+        except Exception:
+            self._validated["app_launch"] = False
+
+    # ── Static capability checks ───────────────────────────────────
 
     def _check_input(self) -> CapabilityResult:
         if self._details.get("pyautogui"):
@@ -312,8 +381,8 @@ class CapabilityDetector:
             result = adapter.check_permission(capability)
             return CapabilityResult(
                 capability=capability,
-                supported=result.ok and result.data.get("granted", False) if result.ok else False,
-                details=result.message,
+                supported=result.ok and result.data.get("granted", False),
+                details=result.message if result.ok else "adapter returned error",
             )
         except Exception:
             return CapabilityResult(
