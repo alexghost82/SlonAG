@@ -12,16 +12,34 @@ import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from playwright.async_api import (
-    async_playwright,
-    Browser as AsyncBrowser,
-    BrowserContext as AsyncBrowserContext,
-    Page as AsyncPage,
-    Playwright as AsyncPlaywright,
-    TimeoutError as PlaywrightTimeout,
-)
+if TYPE_CHECKING:
+    from playwright.async_api import (
+        Browser as AsyncBrowser,
+        BrowserContext as AsyncBrowserContext,
+        Page as AsyncPage,
+        Playwright as AsyncPlaywright,
+    )
+
+# Lazy import for runtime use — playwright is optional at import time
+_playwright_mod = None
+
+
+def _get_playwright():
+    """Lazy import of playwright.async_api — fails only when actually needed."""
+    global _playwright_mod, PlaywrightTimeout
+    if _playwright_mod is None:
+        from playwright import async_api as _m
+        _playwright_mod = _m
+        PlaywrightTimeout = _m.TimeoutError
+    return _playwright_mod
+
+
+# Stub so 'except PlaywrightTimeout' has a name at import time.
+# Set to None; _get_playwright() replaces it with the real class.
+PlaywrightTimeout: type[Exception] | None = None  # noqa: E999
+
 
 from runtime.browser.exceptions import (
     BrowserError,
@@ -29,7 +47,7 @@ from runtime.browser.exceptions import (
     BrowserPageError,
     BrowserTimeoutError,
 )
-from runtime.browser.status import BrowserAvailability, BrowserStatus, detect_runtime_availability
+from runtime.browser.status import BrowserAvailability, BrowserStatus, detect_runtime_availability, get_runtime_status
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +242,8 @@ class BrowserService:
 
     async def _launch(self) -> None:
         """Initialize Playwright and Chromium."""
-        self._playwright = await async_playwright().start()
+        pa = _get_playwright()
+        self._playwright = await pa.async_playwright().start()
         engine = self._playwright.chromium
 
         chromium_args = [
@@ -687,10 +706,14 @@ class BrowserService:
             raise BrowserTimeoutError(
                 "Browser action timed out"
             )
-        except PlaywrightTimeout:
-            raise BrowserTimeoutError(
-                "Playwright timeout"
-            )
+        except Exception as exc:
+            # Re-raise known exception types
+            pw = _get_playwright()
+            if isinstance(exc, pw.TimeoutError):
+                raise BrowserTimeoutError(
+                    "Playwright timeout"
+                ) from exc
+            raise
 
 
 # ── Singleton accessor ───────────────────────────────────────────────────
