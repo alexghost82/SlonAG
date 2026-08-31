@@ -8,10 +8,10 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import json
 import requests
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("openrouter_client")
+logger = logging.getLogger(__name__)
 
 def _get_base_dir() -> Path:
     if getattr(sys, "frozen", False):

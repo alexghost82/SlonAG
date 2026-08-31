@@ -36,6 +36,7 @@ import os
 import shlex
 import subprocess
 import sys
+import logging
 import threading
 import unicodedata
 from dataclasses import dataclass
@@ -163,6 +164,10 @@ _BLOCKED_PREFIXES: tuple[str, ...] = (
 # Internal tracker for process-tree cleanup on cancellation / timeout.
 _active_procs: set[subprocess.Popen[Any]] = set()
 _active_lock = threading.Lock()
+
+logger = logging.getLogger(__name__)
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +395,9 @@ def _truncate(text: str, max_bytes: int) -> str:
 
 def _kill_tree(proc: subprocess.Popen[Any]) -> None:
     """Terminate the process tree rooted at ``proc``."""
+    logger.info("shell_exec: killing process tree — pid=%s", proc.pid)
     if proc.poll() is not None:
+        logger.debug("shell_exec: process %s already finished, skipping kill", proc.pid)
         return  # already finished
 
     try:
@@ -450,6 +457,10 @@ async def _run_subprocess_async(
     if sys.platform != "win32":
         start_kwargs["preexec_fn"] = os.setsid
 
+    logger.info(
+        "shell_exec: spawning process — %s",
+        " ".join(cmd_args),
+    )
     proc = subprocess.Popen(
         cmd_args,
         stdin=subprocess.PIPE if stdin_data else None,
@@ -490,6 +501,11 @@ async def _run_subprocess_async(
     stdout_data = _truncate(stdout_data, stdout_max)
     stderr_data = _truncate(stderr_data, stderr_max)
 
+    logger.info(
+        "shell_exec: process finished — exit_code=%d  %s",
+        exit_code,
+        "stdout" if stdout_data else "no output",
+    )
     return ShellExecResult(
         command=" ".join(cmd_args),
         stdout=stdout_data or "",
@@ -528,6 +544,10 @@ def _run_subprocess_sync(
     if sys.platform != "win32":
         start_kwargs["preexec_fn"] = os.setsid
 
+    logger.info(
+        "shell_exec: spawning process — %s",
+        " ".join(cmd_args),
+    )
     proc = subprocess.Popen(
         cmd_args,
         stdin=subprocess.PIPE if stdin_data else None,
@@ -568,6 +588,11 @@ def _run_subprocess_sync(
     stdout_data = _truncate(stdout_data, stdout_max)
     stderr_data = _truncate(stderr_data, stderr_max)
 
+    logger.info(
+        "shell_exec: process finished — exit_code=%d  %s",
+        exit_code,
+        "stdout" if stdout_data else "no output",
+    )
     return ShellExecResult(
         command=" ".join(cmd_args),
         stdout=stdout_data or "",
@@ -670,12 +695,14 @@ def shell_exec(
     # Block dangerous commands
     full_cmd = cmd_args[0]
     if cmd_str is not None and _is_blocked(cmd_str):
+        logger.warning("shell_exec: blocked command — %s", cmd_str or cmd_args[0])
         return ToolResult(
             ok=False,
             code="blocked",
             message="Команда заблокирована политикой безопасности.",
         )
     if cmd_args and _is_blocked(cmd_args[0]):
+        logger.warning("shell_exec: blocked command — %s", cmd_args[0])
         return ToolResult(
             ok=False,
             code="blocked",
@@ -738,6 +765,7 @@ def shell_exec(
     )
 
     if decision.kind == DecisionKind.DENY:
+        logger.warning("shell_exec: denied by safety policy — %s", decision.reason)
         return ToolResult(
             ok=False,
             code="denied",
