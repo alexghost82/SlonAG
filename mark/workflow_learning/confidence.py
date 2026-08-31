@@ -79,15 +79,12 @@ class ConfidenceEngine:
     def _success_rate_score(self, candidate: WorkflowCandidate) -> float:
         """Score based on success rate.
 
-        Only meaningful if there have been actual executions (not just
-        observations). For raw observations the rate is effectively 1.0
-        if the candidate was created from successful sequences.
+        For zero executions the score is 1.0 (observed from successful runs).
+        For executed workflows the actual success rate is used.
         """
         total = candidate.total_executions
         if total == 0:
             # Candidate created from successful observations only
-            return 1.0
-        if total < self.REPETITION_MAX:
             return 1.0
         return candidate.successful_executions / total if total > 0 else 0.0
 

@@ -155,6 +155,7 @@ class WorkflowExecutor:
 
             if not step_result.ok:
                 result.ok = False
+                result.error = step_result.message or "Step failed"
                 result.finished_at = time.time()
                 return result
 
@@ -226,6 +227,7 @@ class WorkflowExecutor:
 
             if not step_result.ok:
                 result.ok = False
+                result.error = step_result.message or "Step failed"
                 result.finished_at = time.time()
                 return result
 

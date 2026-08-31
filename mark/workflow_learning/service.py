@@ -190,9 +190,9 @@ class WorkflowService:
 
         elif c.state == WorkflowState.DEPRECATED:
             if force:
-                c.transition_to(WorkflowState.DRAFT)
+                c.transition_to(WorkflowState.PARAMETERIZED)
                 self.store.save_candidate(c)
-                return c, "Deprecated workflow reinstated to DRAFT (force)."
+                return c, "Deprecated workflow reinstated to PARAMETERIZED (force). Re-promote to ACTIVE when ready."
             return c, "Workflow is DEPRECATED. Use force=True to reinstate."
 
         return c, f"Unexpected state: {c.state}"

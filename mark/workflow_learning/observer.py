@@ -305,12 +305,7 @@ class WorkflowObserver:
         })
         # Also notify the underlying observer if it exists
         try:
-            event = ActionSequenceEvent(
-                tool_name=name,
-                tool_args={"recorded": True},
-                result_ok=success,
-                result_message=message,
-            )
+            event = ActionSequenceEvent(tool_name=name, args={"recorded": True})
             self._observer.record_event(event, ok=success, message=message, result_data=result_data)
         except Exception:
             pass
