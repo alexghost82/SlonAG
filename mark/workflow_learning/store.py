@@ -27,6 +27,7 @@ from typing import Any
 
 from mark.workflow_learning.types import (
     ExecutionRecord,
+    ExecutionResult,
     WorkflowCandidate,
     WorkflowState,
     WorkflowTemplate,
@@ -247,10 +248,34 @@ class WorkflowStore:
         return d
 
     def _deserialize_candidate(self, raw: dict[str, Any]) -> WorkflowCandidate:
-        from mark.workflow_learning.types import WorkflowCandidate
+        from mark.workflow_learning.types import WorkflowCandidate, WorkflowStep
         d = dict(raw)
         d["state"] = WorkflowState(d["state"])
+        # Reconstruct nested dataclass objects from dicts
+        if d.get("steps"):
+            d["steps"] = [
+                WorkflowStep(**s) if isinstance(s, dict) else s
+                for s in d["steps"]
+            ]
+        if d.get("parameter_slots"):
+            d["parameter_slots"] = [
+                self._deserialize_slot(s) if isinstance(s, dict) else s
+                for s in d["parameter_slots"]
+            ]
         return WorkflowCandidate(**d)
+
+    @staticmethod
+    def _deserialize_slot(raw: dict[str, Any]) -> Any:
+        """Deserialize a ParameterSlot from a dict."""
+        from mark.workflow_learning.types import ParameterSlot
+        d = dict(raw)
+        # Handle JSON-encoded defaults
+        if "default" in d and d["default"] is not None and d["default"] != "":
+            try:
+                d["default"] = json.loads(d["default"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return ParameterSlot(**d)
 
     def _serialize_template(self, t: WorkflowTemplate) -> dict[str, Any]:
         d = asdict(t)
@@ -264,7 +289,7 @@ class WorkflowStore:
 
     def _serialize_execution(self, e: ExecutionRecord) -> dict[str, Any]:
         d = asdict(e)
-        if e.result is not None:
+        if e.result is not None and isinstance(e.result, ExecutionResult):
             d["result"] = asdict(e.result)
         return d
 
@@ -272,7 +297,8 @@ class WorkflowStore:
         d = dict(raw)
         if d.get("result") is not None:
             from mark.workflow_learning.types import ExecutionResult
-            d["result"] = ExecutionResult(**d["result"])
+            if isinstance(d["result"], dict):
+                d["result"] = ExecutionResult(**d["result"])
         return ExecutionRecord(**d)
 
     # ------------------------------------------------------------------
