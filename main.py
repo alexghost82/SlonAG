@@ -2,6 +2,7 @@ import asyncio
 import threading
 import queue
 import uuid
+import logging
 import sys
 from pathlib import Path
 
@@ -110,7 +111,7 @@ def _build_stack():
             key_provider=_key_provider,
         )
     except Exception as exc:
-        print(f"[Bridge] {t("bridge.unavailable", exc=type(exc).__name__)}")
+        logger.error("[Bridge] %s", t("bridge.unavailable", exc=type(exc).__name__))
         return None
 
 
@@ -142,10 +143,10 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
         data = extract_memory(user_text, assistant_text, api_key)
         if data:
             update_memory(data)
-            print(f"[Memory] ✅ {t("bridge.memory_loaded", keys=list(data.keys()))}")
+            logger.info("[Memory] %s", t("bridge.memory_loaded", keys=list(data.keys())))
     except Exception as exc:
         if "429" not in str(exc):
-            print(f"[Memory] ⚠️ {t("bridge.memory_error", exc=type(exc).__name__)}")
+            logger.warning("[Memory] %s", t("bridge.memory_error", exc=type(exc).__name__))
 
 from mark.tools.exporters.gemini import export_gemini_tools
 from agent.latency import TurnLatencyTracker
@@ -155,6 +156,9 @@ from runtime.live_session import receive_live_session
 from runtime.tool_bridge import LiveToolBridge, build_live_registry
 from runtime.events import RuntimeEventBus, RuntimeEventKind, UIRuntimeEventSink
 from sessions import ModelPolicy, TranscriptKind
+
+
+logger = logging.getLogger(__name__)
 
 
 class SlonLive:
@@ -247,7 +251,7 @@ class SlonLive:
                 try:
                     self.ui.write_log(f"SYS: bridge {line}")
                 except Exception:
-                    print(f"[Bridge] {line}")
+                    logger.info("[Bridge] %s", line)
 
     def _on_text_command(self, text: str):
         if self._closed or not self._loop or not self.session:
@@ -397,7 +401,7 @@ class SlonLive:
         await self._start_live_turn()
         name = fc.name
         args = dict(fc.args or {})
-        print(f"[SLON] 🔧 {name}")
+        logger.info("[SLON] 🔧 %s", name)
         self._emit_event(
             RuntimeEventKind.TOOL_STARTED,
             tool_call_id=fc.id,
@@ -433,7 +437,7 @@ class SlonLive:
             self.ui.write_log(
                 f"{t("error.tool_execution_failed", code=name)}: {str(result.message or result.code)[:120]}"
             )
-        print(f"[SLON] 📤 {name} → {'ok' if result.ok else result.code}")
+        logger.info("[SLON] 📤 %s → %s", name, "ok" if result.ok else result.code)
         self.latency_trace.mark("observation_returned")
         if result_sink is not None:
             result_sink[fc.id] = (result, value if result.ok else None)
@@ -714,7 +718,7 @@ def _run_chat_agent(ui, settings, stack=None):
                 provider_instance = router._resolve(provider_id)
             except Exception as exc:  # pragma: no cover - needs api key
                 ui.write_log(t("error.unknown", ) + ": " + str(exc))
-                print(f"[Main] {t("error.unknown")}: {exc}")
+                logger.error("[Main] %s: %s", t("error.unknown"), exc)
                 return True
         else:
             router = None
@@ -740,7 +744,7 @@ def _run_chat_agent(ui, settings, stack=None):
             provider_instance = router._resolve(provider_id)
         except Exception as exc:  # pragma: no cover - needs api key
             ui.write_log(t("error.unknown", ) + ": " + str(exc))
-            print(f"[Main] {t("error.unknown")}: {exc}")
+            logger.error("[Main] %s: %s", t("error.unknown"), exc)
             return True
 
     # Build tool registry / executor when stack didn't provide them
@@ -824,14 +828,14 @@ def _run_chat_agent(ui, settings, stack=None):
                     continue
                 except Exception as exc:
                     ui.write_log(t("error.unknown", ) + ": " + str(exc))
-                    print(f"[Main] {t("error.unknown")}: {exc}", exc_info=True)
+                    logger.error("[Main] %s: %s", t("error.unknown"), exc, exc_info=True)
 
         except asyncio.CancelledError:
             _running[0] = False
         finally:
             _running[0] = False
 
-    print(f"[Main] provider={provider_id} model={model_id or model_info.model_id}")
+    logger.info("[Main] provider=%s model=%s", provider_id, model_id or model_info.model_id)
     ui.write_log(f"{t("status.connected")} [{provider_id}]")
     asyncio.create_task(_chat_loop())
     return True
@@ -859,11 +863,11 @@ def main():
             try:
                 asyncio.run(slon.run())
             except KeyboardInterrupt:
-                print(f"\n{t("status.disconnected")}")
+                logger.info("\n%s", t("status.disconnected"))
         else:
             # Chat-based agent loop for non-Gemini or non-audio models
             _run_chat_agent(ui, settings, stack)
-            print(f"\n{t("agent.completed")}")
+            logger.info("\n%s", t("agent.completed"))
 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()
