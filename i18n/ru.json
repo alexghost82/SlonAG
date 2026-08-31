@@ -11,97 +11,99 @@
   },
   "setup": {
     "title": "Требуется настройка",
-    "subtitle": "Настройте J.A.R.V.I.S. перед первым запуском.",
+    "subtitle": "Настройте Slon перед первым запуском.",
     "gemini_key": "Ключ Gemini API",
     "openrouter_key": "Ключ OpenRouter API",
     "os": "Операционная система",
     "initialise": "Инициализировать системы",
-    "complete": "✅ Настройка завершена! Запустите \"python main.py\" для старта Slon."
+    "complete": "✅ Настройка завершена! Запустите \"python main.py\" для старта Slon.",
+    "api_key_in_secrets": "API Key (сохраняется в секретах)..."
   },
   "window": {
-    "title": "J.A.R.V.I.S — Slon"
+    "title": "Slon — J.A.R.V.I.S."
   },
   "input": {
-    "placeholder": "Type a command or question…"
+    "placeholder": "Введите команду или вопрос…"
   },
   "file": {
-    "drop_hint": "Drop a file here or click to upload",
-    "none_loaded": "No file loaded — drop or click above to upload"
+    "drop_hint": "Перетащите файл сюда или нажмите для загрузки",
+    "none_loaded": "Файл не выбран — перетащите или нажмите для загрузки",
+    "file_not_loaded": "Файл не загружен — перетащите или нажмите выше для загрузки"
   },
   "mic": {
-    "active": "Microphone active",
-    "muted": "Microphone muted"
+    "active": "Микрофон активен",
+    "muted": "Микрофон выключен"
   },
   "dialog": {
-    "confirm_delete": "Delete {name}?"
+    "confirm_delete": "Удалить {name}?"
   },
   "error": {
-    "unknown_tool": "Unknown tool",
-    "gemini_key_missing": "Gemini API key is not configured.",
-    "openrouter_key_missing": "OpenRouter API key is not configured.",
-    "tool_execution_failed": "Tool execution failed ({code}).",
-    "no_provider_configured": "No ChatProvider configured.",
-    "no_tool_executor": "No tool_executor provided and default cannot be built.",
-    "unsupported_tool_executor": "Unsupported tool_executor type: {type}",
-    "model_info_missing": "Gemini Live requires an audio-capable Gemini ModelInfo.",
-    "invalid_plan_structure": "Invalid plan structure.",
-    "gemini_empty_response": "Gemini returned an empty response.",
-    "camera_open_failed": "Camera could not be opened: index {index}.",
-    "camera_capture_failed": "Could not capture camera frame.",
-    "vision_session_timeout": "Vision session did not start within 20s.",
-    "pyautogui_missing": "PyAutoGUI not installed. Run: pip install pyautogui",
-    "browser_thread_not_started": "BrowserThread not started.",
-    "unsupported_reminder_os": "Unsupported reminder OS: {raw}",
-    "dialog_not_found": "Dialog not found",
-    "runtime_stack_required": "RuntimeStack SessionManager is required",
-    "mcp_client_not_started": "MCP client not started",
-    "mcp_init_failed": "MCP initialization failed: {exc}",
-    "mcp_discovery_failed": "Tool discovery failed: {exc}",
-    "invalid_envelope_id": "Envelope id is invalid.",
-    "invalid_envelope_type": "Envelope type is unsupported.",
-    "invalid_timestamp": "Timestamp is invalid.",
-    "timestamp_no_tz": "Timestamp needs a timezone.",
-    "invalid_payload": "Payload must be an object.",
-    "oversized_frame": "Envelope is too large.",
-    "malformed_frame": "Malformed Gateway frame.",
-    "malformed_frame_object": "Envelope must be an object.",
-    "malformed_frame_fields": "Envelope fields are invalid.",
-    "malformed_frame_types": "Envelope fields have invalid types.",
-    "incomplete_ws_frame": "Incomplete WebSocket frame.",
-    "fragmented_frames": "Fragmented frames are unsupported.",
-    "unsupported_opcode": "Unsupported WebSocket opcode.",
-    "client_frame_must_be_masked": "Client frames must be masked.",
-    "incomplete_frame_length": "Incomplete frame length.",
-    "control_frame_too_large": "WebSocket control frame is too large.",
-    "frame_too_large": "WebSocket frame is too large.",
-    "frame_size_mismatch": "WebSocket frame size mismatch.",
-    "transport_stopped": "Transport already stopped",
-    "streamable_http_requires_url": "STREAMABLE_HTTP transport requires a URL",
-    "stdio_requires_command": "MCP stdio transport requires a non-empty command",
-    "subprocess_no_stdin_stdout": "MCP subprocess opened without stdin or stdout",
+    "unknown_tool": "Неизвестный инструмент",
+    "gemini_key_missing": "Ключ Gemini API не настроен.",
+    "openrouter_key_missing": "Ключ OpenRouter API не настроен.",
+    "tool_execution_failed": "Ошибка выполнения инструмента ({code}).",
+    "no_provider_configured": "Не настроен ChatProvider.",
+    "no_tool_executor": "tool_executor не предоставлен, и стандартный построить невозможно.",
+    "unsupported_tool_executor": "Неподдерживаемый тип tool_executor: {type}",
+    "model_info_missing": "Gemini Live требует ModelInfo с поддержкой аудио.",
+    "invalid_plan_structure": "Неверная структура плана.",
+    "gemini_empty_response": "Gemini вернул пустой ответ.",
+    "camera_open_failed": "Камеру не удалось открыть: индекс {index}.",
+    "camera_capture_failed": "Не удалось захватить кадр с камеры.",
+    "vision_session_timeout": "Сессия зрения не началась за 20 с.",
+    "pyautogui_missing": "PyAutoGUI не установлен. Выполните: pip install pyautogui",
+    "browser_thread_not_started": "BrowserThread не запущен.",
+    "unsupported_reminder_os": "Неподдерживаемая ОС для напоминания: {raw}",
+    "dialog_not_found": "Диалог не найден",
+    "runtime_stack_required": "Требуется SessionManager в RuntimeStack",
+    "mcp_client_not_started": "MCP-клиент не запущен",
+    "mcp_init_failed": "Ошибка инициализации MCP: {exc}",
+    "mcp_discovery_failed": "Ошибка обнаружения инструментов: {exc}",
+    "invalid_envelope_id": "Недопустимый id конверта.",
+    "invalid_envelope_type": "Неподдерживаемый тип конверта.",
+    "invalid_timestamp": "Недопустимая метка времени.",
+    "timestamp_no_tz": "Метка времени должна содержать часовой пояс.",
+    "invalid_payload": "Payload должен быть объектом.",
+    "oversized_frame": "Конверт слишком большой.",
+    "malformed_frame": "Некорректный кадр Gateway.",
+    "malformed_frame_object": "Конверт должен быть объектом.",
+    "malformed_frame_fields": "Поля конверта некорректны.",
+    "malformed_frame_types": "Типы полей конверта некорректны.",
+    "incomplete_ws_frame": "Неполный кадр WebSocket.",
+    "fragmented_frames": "Фрагментированные кадры не поддерживаются.",
+    "unsupported_opcode": "Неподдерживаемый opcode WebSocket.",
+    "client_frame_must_be_masked": "Клиентские кадры должны быть замаскированы.",
+    "incomplete_frame_length": "Неполная длина кадра.",
+    "control_frame_too_large": "Кадр управления WebSocket слишком большой.",
+    "frame_too_large": "Кадр WebSocket слишком большой.",
+    "frame_size_mismatch": "Несоответствие размера кадра WebSocket.",
+    "transport_stopped": "Транспорт уже остановлен",
+    "streamable_http_requires_url": "Транспорт STREAMABLE_HTTP требует URL",
+    "stdio_requires_command": "Транспорт MCP stdio требует непустую команду",
+    "subprocess_no_stdin_stdout": "MCP subprocess запущен без stdin или stdout",
     "unknown": "Неизвестная ошибка"
   },
   "api": {
-    "ok": "Request accepted.",
-    "invalid_request": "Request body failed validation.",
-    "missing_field": "A required field is missing.",
-    "invalid_type": "A field has the wrong type.",
-    "unauthorized": "Pairing or authentication is required.",
-    "not_found": "Resource not found.",
-    "approval_required": "Mutating operation requires safety approval.",
-    "idempotency_conflict": "Idempotency key was reused with a different body.",
+    "ok": "Запрос принят.",
+    "invalid_request": "Тело запроса не прошло валидацию.",
+    "missing_field": "Отсутствует обязательное поле.",
+    "invalid_type": "Поле имеет неверный тип.",
+    "unauthorized": "Требуется привязка или аутентификация.",
+    "not_found": "Ресурс не найден.",
+    "approval_required": "Для изменяющей операции требуется одобрение.",
+    "idempotency_conflict": "Ключ идемпотентности использован с другим телом.",
     "unknown": "Desktop Control API rejected the request."
   },
   "agent": {
-    "max_tool_calls": "Max tool calls ({n}) reached.",
-    "max_turns": "Max turns ({n}) reached.",
-    "timeout_exceeded": "Timeout ({s}s) exceeded.",
-    "oscillating_pattern": "Detected oscillating call pattern.",
-    "zero_progress_loop": "Detected zero-progress repetition loop.",
-    "cancelled": "Cancelled by steering signal.",
-    "completed": "Completed successfully.",
-    "interrupted": "Execution was interrupted.",
-    "tool_timed_out": "Tool execution timed out.",
+    "max_tool_calls": "Достигнут максимум вызовов инструментов ({n}).",
+    "max_turns": "Достигнуто максимум ходов ({n}).",
+    "timeout_exceeded": "Превышено время ожидания ({s} с).",
+    "oscillating_pattern": "Обнаружена осциллирующая последовательность вызовов.",
+    "zero_progress_loop": "Обнаружен цикл без прогресса.",
+    "cancelled": "Отменено сигналом управления.",
+    "completed": "Завершено успешно.",
+    "interrupted": "Выполнение прервано.",
+    "tool_timed_out": "Таймаут выполнения инструмента.",
     "replan_forced": "Максимум попыток для шага — форсирую перепланирование",
     "decision": "Решение: {decision} — {reason}",
     "analysis_failed": "Анализ не удался: {error} — перепланирование",
@@ -114,40 +116,40 @@
     "callback_error": "Ошибка callback on_complete: {error}"
   },
   "actions": {
-    "whatsapp_error": "WhatsApp error: {msg}",
-    "whatsapp_cannot_open": "Could not open WhatsApp.",
-    "message_sent": "Message sent to: {to}",
-    "search_done": "Search complete.",
-    "video_search_done": "Video search complete.",
-    "video_summary_done": "Video summary complete.",
-    "plan_steps": "Plan: {n} steps",
-    "plan_step": "Step {step}: [{tool}] {desc}",
-    "plan_json_failed": "JSON parse failed: {e}",
-    "plan_failed": "Planning failed: {e}",
-    "fallback_plan": "Fallback plan",
-    "fix_failed": "Fix failed: {err}",
-    "translating_to": "Translating to: {lang}",
-    "translation_done": "Translation done ({lang})",
-    "translation_failed": "Translation failed: {e}",
-    "injecting_translated": "Injected + translated content",
-    "skipping_step": "Skipping step {step}",
-    "installing_reqs": "Installing requirements from {req_name}...",
-    "installing_playwright": "Installing Playwright browsers...",
-    "session_ready": "Session ready — {t:.2f}s",
-    "sent_incoming": "Sent — {t:.3f}s | audio incoming...",
+    "whatsapp_error": "Ошибка WhatsApp: {msg}",
+    "whatsapp_cannot_open": "Не удалось открыть WhatsApp.",
+    "message_sent": "Сообщение отправлено: {to}",
+    "search_done": "Поиск завершён.",
+    "video_search_done": "Видеопоиск завершён.",
+    "video_summary_done": "Видеосуммаризация завершена.",
+    "plan_steps": "План: {n} шагов",
+    "plan_step": "Шаг {step}: [{tool}] {desc}",
+    "plan_json_failed": "Ошибка парсинга JSON: {e}",
+    "plan_failed": "Планирование не удалось: {e}",
+    "fallback_plan": "Резервный план",
+    "fix_failed": "Исправление не удалось: {err}",
+    "translating_to": "Перевод на: {lang}",
+    "translation_done": "Перевод завершён ({lang})",
+    "translation_failed": "Ошибка перевода: {e}",
+    "injecting_translated": "Внедрён + переведённый контент",
+    "skipping_step": "Пропускаем шаг {step}",
+    "installing_reqs": "Установка зависимостей из {req_name}…",
+    "installing_playwright": "Установка браузеров Playwright…",
+    "session_ready": "Сессия готова — {t:.2f} с",
+    "sent_incoming": "Отправлено — {t:.3f} с | входящий аудио…",
     "slon_speaking": "Slon: {text}",
-    "updating_game": "Updating game…",
-    "game_update_cancelled": "Update cancelled by user.",
-    "steam_check_failed": "Failed to check Steam: {err}",
-    "game_not_found": "Game not found.",
+    "updating_game": "Обновление игры…",
+    "game_update_cancelled": "Обновление отменено пользователем.",
+    "steam_check_failed": "Не удалось проверить Steam: {err}",
+    "game_not_found": "Игра не найдена.",
     "browser": {
       "response": "{result}"
     },
     "code_helper": {
-      "auto_detected": "[Code] 🤖 Auto-detected: {action}"
+      "auto_detected": "[Код] 🤖 Автоопределено: {action}"
     },
     "computer": {
-      "action_failed": "[ComputerControl] ❌ {action}: {e}"
+      "action_failed": "[УправлениеПК] ❌ {action}: {e}"
     },
     "settings": {
       "intent": "Действие: {action}  Значение: {value}  ОС: {os}"
@@ -156,13 +158,13 @@
       "op": "Действие: {op}"
     },
     "dev_agent": {
-      "fixed": "[DevAgent] 🔧 Fixed: {path}"
+      "fixed": "[DevAgent] 🔧 Исправлено: {path}"
     },
     "file": {
       "write_ok": "Записано: {path}"
     },
     "game_updater": {
-      "complete": "[GameUpdater] ✅ Update {game} completed"
+      "complete": "[GameUpdater] ✅ Обновление {game} завершено"
     },
     "open_app": {
       "desktop_entry_failed": "Не удалось найти .desktop для {app}"
@@ -183,16 +185,16 @@
       "scrape_failed_open": "Ошибка парсинга, открывается страница поиска"
     },
     "screen": {
-      "failed": "[Screen] Screenshot processing failed: {e}"
+      "failed": "[Экран] Ошибка обработки скриншота: {e}"
     },
     "browser_control": {
-      "failed": "[BrowserCtrl] ❌ {e}"
+      "failed": "[БраузерCtrl] ❌ {e}"
     },
     "flight": {
       "editor_open_failed": "Не удалось открыть текстовый редактор: {error}"
     },
     "code": {
-      "auto_detected": "Авто-определено: {action}"
+      "auto_detected": "Автоопределено: {action}"
     },
     "dev": {
       "msg": "{msg}"
@@ -208,75 +210,75 @@
     }
   },
   "gateway": {
-    "frame_incomplete": "Incomplete frame.",
-    "frame_fragmented": "Fragmented frames are unsupported.",
-    "frame_opcode": "Unsupported opcode.",
-    "frame_unmasked": "Client frame must be masked.",
-    "frame_length": "Incomplete length.",
-    "frame_control_large": "Control frame too large.",
-    "frame_too_large": "Frame too large.",
-    "frame_size": "Size mismatch."
+    "frame_incomplete": "Неполный кадр.",
+    "frame_fragmented": "Фрагментированные кадры не поддерживаются.",
+    "frame_opcode": "Неподдерживаемый opcode.",
+    "frame_unmasked": "Клиентские кадры должны быть замаскированы.",
+    "frame_length": "Неполная длина.",
+    "frame_control_large": "Кадр управления слишком большой.",
+    "frame_too_large": "Кадр слишком большой.",
+    "frame_size": "Несоответствие размера."
   },
   "mcp": {
-    "transport_stopped": "Transport already stopped",
-    "transport_not_connected": "Transport not connected",
-    "not_initialized": "MCP not initialized",
-    "session_failed": "Streamable HTTP connection error: {exc}"
+    "transport_stopped": "Транспорт уже остановлен",
+    "transport_not_connected": "Транспорт не подключён",
+    "not_initialized": "MCP не инициализирован",
+    "session_failed": "Ошибка подключения Streamable HTTP: {exc}"
   },
   "bridge": {
-    "unavailable": "Bridge unavailable: {exc}",
-    "memory_loaded": "Memory loaded: {keys}",
-    "memory_error": "Memory error: {exc}"
+    "unavailable": "Мост недоступен: {exc}",
+    "memory_loaded": "Память загружена: {keys}",
+    "memory_error": "Ошибка памяти: {exc}"
   },
   "planner": {
-    "plan_created": "Plan: {n} steps",
-    "plan_step": "Step {step}: [{tool}] {desc}",
-    "plan_json_failed": "JSON parse failed: {e}",
-    "plan_failed": "Planning failed: {e}",
-    "fallback_plan": "Fallback plan",
-    "plan_revised": "Revised plan: {n} steps",
-    "replan_failed": "Replan failed: {e}"
+    "plan_created": "План: {n} шагов",
+    "plan_step": "Шаг {step}: [{tool}] {desc}",
+    "plan_json_failed": "Ошибка парсинга JSON: {e}",
+    "plan_failed": "Планирование не удалось: {e}",
+    "fallback_plan": "Резервный план",
+    "plan_revised": "Пересмотренный план: {n} шагов",
+    "replan_failed": "Ошибка перепланирования: {e}"
   },
   "ui": {
-    "base_url_placeholder": "Base URL (custom endpoint)…",
-    "stt_listen": "🎤  LOCAL STT",
-    "stt_na": "🎤  LOCAL STT N/A",
-    "tts_on": "🗣  LOCAL TTS ON",
-    "tts_off": "🗣  LOCAL TTS OFF",
-    "tts_na": "🗣  LOCAL TTS N/A",
-    "desktop_api_off": "📡  DESKTOP API OFF",
-    "desktop_api_on": "📡  DESKTOP API ON",
-    "mic_muted": "🔇  MICROPHONE MUTED",
-    "mic_active": "🎙  MICROPHONE ACTIVE",
-    "file_hint_default": "Tell Slon what to do with it",
+    "base_url_placeholder": "Базовый URL (пользовательская точка)…",
+    "stt_listen": "🎤  МЕСТНЫЙ STT",
+    "stt_na": "🎤  МЕСТНЫЙ STT Н/Д",
+    "tts_on": "🗣  МЕСТНЫЙ TTS ВКЛ",
+    "tts_off": "🗣  МЕСТНЫЙ TTS ВЫКЛ",
+    "tts_na": "🗣  МЕСТНЫЙ TTS Н/Д",
+    "desktop_api_off": "📡  DESKTOP API ВЫКЛ",
+    "desktop_api_on": "📡  DESKTOP API ВКЛ",
+    "mic_muted": "🔇  МИКРОФОН ВЫКЛ",
+    "mic_active": "🎙  МИКРОФОН АКТИВЕН",
+    "file_hint_default": "Скажите Slon, что делать с файлом",
     "uptime": "UP  {h:02d}:{m:02d}",
     "uptime_none": "UP  --:--",
     "proc_count": "PROC  {n}",
     "proc_none": "PROC  --"
   },
   "tools": {
-    "unknown": "Unknown tool",
-    "registry_empty": "Registry empty.",
-    "already_registered": "Tool already registered: {name}"
+    "unknown": "Неизвестный инструмент",
+    "registry_empty": "Реестр пуст.",
+    "already_registered": "Инструмент уже зарегистрирован: {name}"
   },
   "safety": {
-    "policy_violation": "Security policy rejected the request.",
-    "source_not_recognized": "Source not recognized: {source}",
-    "ok": "Security policy accepted the request.",
-    "unknown_tool": "Unknown tool.",
-    "invalid_args": "Tool arguments failed validation.",
-    "unsafe_url": "URL is blocked by policy."
+    "policy_violation": "Политика безопасности отклонила запрос.",
+    "source_not_recognized": "Источник не опознан: {source}",
+    "ok": "Политика безопасности приняла запрос.",
+    "unknown_tool": "Неизвестный инструмент.",
+    "invalid_args": "Аргументы инструмента не прошли валидацию.",
+    "unsafe_url": "URL заблокирован политикой."
   },
   "network": {
-    "request_denied": "Request denied by network policy.",
-    "host_blocked": "Host blocked: {host}",
-    "ok": "Network policy accepted the request.",
-    "offline": "External network access is disabled.",
-    "tool_not_allowed": "Tool not allowlisted for network access.",
-    "unsafe_host": "Host blocked by network policy: {host}.",
-    "proxy_forced_external": "Proxy settings would send request through external proxy.",
-    "invalid_url": "URL is not a valid http(s) target.",
-    "cloud_denied": "Cloud providers blocked by policy."
+    "request_denied": "Запрос отклонён политикой сети.",
+    "host_blocked": "Хост заблокирован: {host}",
+    "ok": "Политика сети приняла запрос.",
+    "offline": "Внешний сетевой доступ отключён.",
+    "tool_not_allowed": "Инструмент не в allowlist для сетевого доступа.",
+    "unsafe_host": "Хост заблокирован политикой сети: {host}.",
+    "proxy_forced_external": "Настройки прокси отправили бы запрос через внешний прокси.",
+    "invalid_url": "URL не является допустимой http(s) целью.",
+    "cloud_denied": "Облачные провайдеры заблокированы политикой."
   },
   "memory": {
     "store_error": "Memory store error.",
@@ -295,50 +297,51 @@
     "not_found": "Запись не найдена"
   },
   "documents": {
-    "bad_mime": "Unsupported MIME type.",
-    "path_traversal": "Path traversal attempt detected.",
-    "zip_bomb": "Zip bomb detected.",
-    "ok": "Document ingest succeeded.",
-    "too_large": "Document exceeds size limit.",
-    "failed": "Document ingest failed.",
-    "missing_hook": "Не найден хук для документа"
+    "bad_mime": "Неподдерживаемый MIME-тип.",
+    "path_traversal": "Обнаружена попытка обхода путей.",
+    "zip_bomb": "Обнаружена zip-бомба.",
+    "ok": "Импортирование документа завершено.",
+    "too_large": "Документ превышает лимит размера.",
+    "failed": "Ошибка импортирования документа.",
+    "missing_hook": "Нет хука для документа"
   },
   "speech": {
-    "tts_unavailable": "Local TTS unavailable.",
-    "tts_ready": "Local TTS ready.",
-    "tts_unknown_command": "Unknown command: {cmd}",
+    "tts_unavailable": "Модуль локального TTS недоступен.",
+    "tts_ready": "Локальный TTS готов.",
+    "tts_unknown_command": "Неизвестная команда: {cmd}",
     "unknown_command": "Неизвестная команда: {cmd}",
     "tts_started": "TTS запущен",
     "tts_config": "конфиг={config}",
-    "tts_model": "модель={model}"
+    "tts_model": "модель={model}",
+    "stt_unavailable": "Модуль локального STT недоступен."
   },
   "chat": {
-    "user": "You: {text}",
+    "user": "Вы: {text}",
     "assistant": "Slon: {text}",
-    "latency": "SYS: latency {lat}",
-    "playback_cleared": "SYS: playback interrupted cleared={inv}",
-    "online": "SYS: Slon online.",
-    "reconnecting": "SYS: reconnecting in {d}s..."
+    "latency": "СИСТ: задержка {lat}",
+    "playback_cleared": "СИСТ: сброс прерывания воспроизведения cleared={inv}",
+    "online": "СИСТ: Slon в сети.",
+    "reconnecting": "СИСТ: повторное подключение через {d} с…",
+    "user_label": "Вы"
   },
   "runtime": {
-    "approval_denied": "APPROVAL denied: {tool} ({reason})",
-    "state": "STATE {state}",
-    "latency_stats": "LATENCY_STATISTICS",
-    "resource_snapshots": "RESOURCE_SNAPSHOTS",
+    "approval_denied": "ОДОТРЕНИЕ отклонено: {tool} ({reason})",
+    "state": "СОСТОЯНИЕ {state}",
+    "latency_stats": "СТАТИСТИКА_ЗАДЕРЖЕК",
+    "resource_snapshots": "СНАПШОТЫ_РЕСУРСОВ",
     "ok": "Локальный runtime запущен.",
     "oom": "Не хватает памяти для локальной модели.",
-
-    "not_running": "Local runtime not running.",
-    "start_failed": "Local runtime start failed.",
-    "stop_failed": "Local runtime stop failed.",
-    "remote_url": "Remote runtime URL blocked. Only local addresses allowed.",
-    "pull_unconfirmed": "Model pull requires size and license confirmation.",
-    "failed": "Local runtime error."
+    "not_running": "Локальный runtime не запущен.",
+    "start_failed": "Ошибка запуска локального runtime.",
+    "stop_failed": "Ошибка остановки локального runtime.",
+    "remote_url": "URL удалённого runtime заблокирован. Только локальные адреса.",
+    "pull_unconfirmed": "Для скачивания модели требуется подтверждение размера и лицензии.",
+    "failed": "Ошибка локального runtime."
   },
   "server": {
-    "pairing_rejected": "gateway pairing rejected: --gateway-lan is required",
-    "tls_warning": "WARNING: TLS-only LAN/iOS Gateway ENABLED (opt-in; no internet publication).",
-    "control_stopped": "Desktop Control API stopped.",
+    "pairing_rejected": "Привязка gateway отклонена: требуется --gateway-lan",
+    "tls_warning": "ВНИМАНИЕ: TLS-only LAN/iOS Gateway ВКЛЮЧЁН (опционально; без публикации в интернет).",
+    "control_stopped": "Desktop Control API остановлен.",
     "pairing_code": "Код сопряжения Slon (только локально): {code}",
     "pairing_rejected_code": "Код сопряжения отклонён"
   },
@@ -347,7 +350,7 @@
       "pull_unconfirmed": "Pull не подтверждён."
     },
     "safety": {
-      "unsafe_url": "URL содержит unsafe host."
+      "unsafe_url": "URL содержит небезопасный хост."
     },
     "network": {
       "cloud_denied": "Облачный запрос отклонён политикой."
@@ -605,10 +608,16 @@
     "test_gemini_ok": "onboard.test_gemini_ok (пропущено)",
     "test_gemini_fail": "onboard.test_gemini_fail (пропущено)",
     "test_quota": "onboard.test_quota (пропущено)",
-    "test_generic_ok": "onboard.test_generic_ok (пропущено)"
+    "test_generic_ok": "onboard.test_generic_ok (пропущено)",
+    "step_complete": "Готово",
+    "hint_complete": "Примените настройки и перезапустите Slon."
   },
   "action": {
     "confirmation_declined": "Подтверждение отклонено.",
     "confirmation_required": "Требуется подтверждение."
+  },
+  "filedrop": {
+    "drop_select": "Перетащите файл сюда  или  Нажмите для выбора",
+    "release_to_upload": "Отпустите для загрузки"
   }
 }

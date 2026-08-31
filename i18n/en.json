@@ -16,7 +16,8 @@
     "openrouter_key": "OpenRouter API key",
     "os": "Operating system",
     "initialise": "Initialise systems",
-    "complete": "✅ Setup complete! Run 'python main.py' to start Slon."
+    "complete": "✅ Setup complete! Run 'python main.py' to start Slon.",
+    "api_key_in_secrets": "API Key (stored in secrets)..."
   },
   "window": {
     "title": "J.A.R.V.I.S — Slon"
@@ -26,7 +27,8 @@
   },
   "file": {
     "drop_hint": "Drop a file here or click to upload",
-    "none_loaded": "No file loaded — drop or click above to upload"
+    "none_loaded": "No file loaded — drop or click above to upload",
+    "file_not_loaded": "No file loaded — drag and drop or click above to upload"
   },
   "mic": {
     "active": "Microphone active",
@@ -304,13 +306,14 @@
     "missing_hook": "No hook configured for document"
   },
   "speech": {
-    "tts_unavailable": "Local TTS unavailable.",
+    "tts_unavailable": "Local TTS module unavailable.",
     "tts_ready": "Local TTS ready.",
     "tts_unknown_command": "Unknown command: {cmd}",
     "unknown_command": "Неизвестная команда: {cmd}",
     "tts_started": "TTS запущен",
     "tts_config": "конфиг={config}",
-    "tts_model": "модель={model}"
+    "tts_model": "модель={model}",
+    "stt_unavailable": "Local STT module unavailable."
   },
   "chat": {
     "user": "You: {text}",
@@ -318,7 +321,8 @@
     "latency": "SYS: latency {lat}",
     "playback_cleared": "SYS: playback interrupted cleared={inv}",
     "online": "SYS: Slon online.",
-    "reconnecting": "SYS: reconnecting in {d}s..."
+    "reconnecting": "SYS: reconnecting in {d}s...",
+    "user_label": "You"
   },
   "runtime": {
     "approval_denied": "APPROVAL denied: {tool} ({reason})",
@@ -604,10 +608,16 @@
     "test_gemini_ok": "onboard.test_gemini_ok (missing)",
     "test_gemini_fail": "onboard.test_gemini_fail (missing)",
     "test_quota": "onboard.test_quota (missing)",
-    "test_generic_ok": "onboard.test_generic_ok (missing)"
+    "test_generic_ok": "onboard.test_generic_ok (missing)",
+    "step_complete": "Complete",
+    "hint_complete": "Apply settings and restart Slon."
   },
   "action": {
     "confirmation_declined": "Confirmation declined.",
     "confirmation_required": "Confirmation is required."
+  },
+  "filedrop": {
+    "drop_select": "Drop a file here  or  Click to select",
+    "release_to_upload": "Release to upload"
   }
 }
