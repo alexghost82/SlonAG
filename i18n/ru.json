@@ -327,7 +327,6 @@
     "resource_snapshots": "RESOURCE_SNAPSHOTS",
     "ok": "Локальный runtime запущен.",
     "oom": "Не хватает памяти для локальной модели.",
-
     "not_running": "Local runtime not running.",
     "start_failed": "Local runtime start failed.",
     "stop_failed": "Local runtime stop failed.",
@@ -610,5 +609,16 @@
   "action": {
     "confirmation_declined": "Подтверждение отклонено.",
     "confirmation_required": "Требуется подтверждение."
+  },
+  "proactive": {
+    "ok": "Предустановка выполнена.",
+    "invalid_event": "Некорректная структура события.",
+    "spam_detected": "Превышен лимит частоты событий (анти-спам).",
+    "cooldown_active": "Тип события в периоде охлаждения.",
+    "permission_denied": "Действие запрещено границей разрешений.",
+    "relevance_too_low": "Релевантность события ниже порога.",
+    "action_blocked": "Автономное действие заблокировано политикой.",
+    "duplicate_event": "Дублирующее событие сжато.",
+    "invalid_action": "Действие не поддерживается безопасным исполнителем."
   }
 }
