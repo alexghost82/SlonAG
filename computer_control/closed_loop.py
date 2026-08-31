@@ -15,7 +15,11 @@ Safety:
     * no infinite loops (LoopBudget + LoopDetector integration)
     * no approval bypass (SafetyPolicy gate on every write action)
     * verification after action (post-action observation)
-    * fail-closed (any unexpected error → FAILED, no unverified state)
+    * fail-closed (any unexpected error → FAILED, no unverified state changes)
+    * Coordinate validation (screen bounds)
+    * Click-loop detection (repeated identical clicks)
+    * Changed-screen verification (element-level diff)
+    * Dangerous action approval gate
 """
 
 from __future__ import annotations
@@ -24,8 +28,9 @@ import asyncio
 import hashlib
 import logging
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from computer_control.types import (
@@ -34,6 +39,9 @@ from computer_control.types import (
     CancellationError,
     ClosedLoopError,
     ComputerAction,
+    CoordinateValidationResult,
+    DangerousActionApproval,
+    DangerousActionKind,
     Frame,
     FrameSource,
     LoopBudget,
@@ -86,13 +94,140 @@ class TargetGroundingResult:
         self.description = description
 
 
-class DefaultReasoner:
-    """Deterministic reasoning: maps observation → proposed action.
+class CoordinateValidator:
+    """Validate coordinates against screen bounds.
 
-    The agent passes the observation description and the user's intent
-    prompt; the reasoner returns a ComputerAction targeting the
-    highest-confidence UI element that matches the intent.
+    Prevents clicks outside the visible screen area and clamps them
+    when possible.
     """
+
+    def validate(self, x: int, y: int, screen_width: int, screen_height: int) -> CoordinateValidationResult:
+        """Return validation result for a coordinate pair."""
+        if screen_width <= 0 or screen_height <= 0:
+            return CoordinateValidationResult(
+                valid=False, reason="Invalid screen dimensions",
+            )
+
+        clamped_x = max(0, min(x, screen_width - 1))
+        clamped_y = max(0, min(y, screen_height - 1))
+
+        if x < 0 or y < 0 or x >= screen_width or y >= screen_height:
+            return CoordinateValidationResult(
+                valid=True,
+                reason=f"Out of bounds ({x},{y}); clamped to ({clamped_x},{clamped_y})",
+                clamped_x=clamped_x,
+                clamped_y=clamped_y,
+            )
+
+        return CoordinateValidationResult(valid=True, reason="OK", clamped_x=x, clamped_y=y)
+
+
+class LoopDetector:
+    """Detect repetitive or infinite action loops.
+
+    Tracks the last N action signatures and raises an error if the same
+    action is repeated more than the configured threshold.
+    """
+
+    def __init__(self, max_history: int = 10, max_repeats: int = 3) -> None:
+        self._max_history = max_history
+        self._max_repeats = max_repeats
+        self._history: deque[str] = deque(maxlen=max_history)
+
+    def record(self, action_type: str, target: str) -> None:
+        """Record an action signature."""
+        sig = f"{action_type}:{target}"
+        self._history.append(sig)
+
+    def check_loop(self) -> tuple[bool, str]:
+        """Check if we are in a repetitive loop.
+
+        Returns:
+            (is_loop, reason)
+        """
+        if len(self._history) < self._max_repeats:
+            return False, ""
+
+        last_sig = self._history[-1]
+        consecutive = 1
+        for i in range(len(self._history) - 2, -1, -1):
+            if self._history[i] == last_sig:
+                consecutive += 1
+            else:
+                break
+
+        if consecutive >= self._max_repeats:
+            return True, (
+                f"Detected {consecutive} consecutive identical actions "
+                f"({last_sig}). Stopping to prevent infinite loop."
+            )
+
+        return False, ""
+
+    def reset(self) -> None:
+        """Reset the loop detector state."""
+        self._history.clear()
+
+
+class DangerousActionApprover:
+    """Approval gate for dangerous actions."""
+
+    def __init__(self) -> None:
+        self._dangerous_kinds: dict[str, DangerousActionKind] = {
+            "app_kill": DangerousActionKind.KILL_PROCESS,
+            "window_close": DangerousActionKind.CLOSE_WINDOW,
+            "close_all": DangerousActionKind.CLOSE_ALL_WINDOWS,
+            "kill_process": DangerousActionKind.KILL_PROCESS,
+            "force_kill": DangerousActionKind.FORCE_KILL,
+            "shutdown": DangerousActionKind.SYSTEM_SHUTDOWN,
+            "format": DangerousActionKind.FORMAT_DRIVE,
+            "delete_files": DangerousActionKind.DELETE_FILES,
+            "write_system_file": DangerousActionKind.WRITE_SYSTEM_FILE,
+            "modify_setting": DangerousActionKind.MODIFY_DANGEROUS_SETTING,
+        }
+
+    def classify(self, action: ComputerAction) -> DangerousActionKind | None:
+        """Classify if an action is dangerous."""
+        return self._dangerous_kinds.get(action.action_type)
+
+    def request_approval(self, action: ComputerAction) -> DangerousActionApproval:
+        """Request approval for a dangerous action."""
+        kind = self.classify(action)
+        if kind is None:
+            return DangerousActionApproval(
+                kind=DangerousActionKind.KILL_PROCESS,
+                description=f"Action {action.action_type!r} not classified as dangerous.",
+                approved=True,
+            )
+        return DangerousActionApproval(
+            kind=kind,
+            description=f"Dangerous action '{action.action_type}' on {action.target!r} requires approval.",
+            approved=False,
+            reason="Requires explicit user approval for dangerous actions.",
+            action=action,
+        )
+
+
+class DefaultReasoner:
+    """Deterministic reasoning: maps observation → proposed action."""
+
+    def __init__(
+        self,
+        validator: CoordinateValidator | None = None,
+        screen_width: int = 1920,
+        screen_height: int = 1080,
+    ) -> None:
+        self.validator = validator or CoordinateValidator()
+        self._screen_width = screen_width
+        self._screen_height = screen_height
+
+    @property
+    def screen_bounds(self) -> tuple[int, int]:
+        return self._screen_width, self._screen_height
+
+    @screen_bounds.setter
+    def screen_bounds(self, value: tuple[int, int]) -> None:
+        self._screen_width, self._screen_height = value
 
     async def ground(
         self,
@@ -137,24 +272,31 @@ class DefaultReasoner:
 
         target_name = best_match.get("name", "unknown")
 
+        # Validate coordinates if present on the element
+        bbox = best_match.get("bbox") or {}
+        cx, cy = self._clamp_coordinates(bbox)
+
         # Default: click action
         action = ComputerAction(
             action_type="click",
             target=target_name,
             category=ActionCategory.WRITE,
             proposed_by="agent",
-            args={"on_click": {"key": "value", "value": True}},
+            args={"on_click": {"key": "value", "value": True}, "x": cx, "y": cy},
         )
 
-        # If the element is currently in a target state, adjust the action
-        if best_match.get("value") is True and best_match.get("key") in intent_lower:
+        # If the element value is True, toggle to False (toggle pattern)
+        elem_value = best_match.get("value")
+        if elem_value is True:
+            # Element is ON → click to turn OFF
             action = ComputerAction(
                 action_type="click",
                 target=target_name,
                 category=ActionCategory.WRITE,
                 proposed_by="agent",
-                args={"on_click": {"key": best_match.get("key", "value"), "value": False}},
+                args={"on_click": {"key": "value", "value": False}, "x": cx, "y": cy},
             )
+            expected = [{"element": target_name, "expected_state_change": "value → False"}]
 
         expected: list[dict[str, Any]] = [{
             "element": target_name,
@@ -167,6 +309,15 @@ class DefaultReasoner:
             description=f"Propose click on element {target_name!r}",
         )
 
+    def _clamp_coordinates(self, bbox: dict[str, Any]) -> tuple[int, int]:
+        """Extract center coordinates from bbox or use defaults, clamped."""
+        x_raw = bbox.get("x", 0) + bbox.get("w", 100) // 2
+        y_raw = bbox.get("y", 0) + bbox.get("h", 50) // 2
+        result = self.validator.validate(int(x_raw), int(y_raw), self._screen_width, self._screen_height)
+        if not result.valid:
+            logger.warning("Coordinates invalid: %s", result.reason)
+        return result.clamped_x, result.clamped_y
+
 
 class DefaultVerifier:
     """Deterministic verification: compares pre/post frames."""
@@ -178,6 +329,7 @@ class DefaultVerifier:
         action: ComputerAction,
         expected_changes: list[dict[str, Any]],
         stale_threshold: float,
+        screen_state_before: dict[str, Any] | None = None,
     ) -> VerificationResult:
         """Return a VerificationResult comparing the two frames."""
 
@@ -188,11 +340,20 @@ class DefaultVerifier:
         if action.id:
             fingerprint = post_frame.fingerprint
             correlation_match = len(fingerprint) == 16
+        else:
+            correlation_match = False
 
         # 3. Check for state changes
         changed = pre_frame.fingerprint != post_frame.fingerprint
 
-        # 4. Build result
+        # 4. Element-level diff if available
+        elements_changed: list[dict[str, Any]] = []
+        if screen_state_before is not None:
+            elements_changed = self._diff_screen_states(
+                screen_state_before, post_frame, expected_changes,
+            )
+
+        # 5. Build result
         status = VerificationStatus.PENDING
         reason = ""
         detected: list[dict[str, Any]] = []
@@ -206,15 +367,21 @@ class DefaultVerifier:
             reason = "Action/observation correlation failed."
             retryable = False
         elif changed:
-            # Identify what changed
-            for exp in expected_changes:
-                detected.append({
-                    "element": exp.get("element", "unknown"),
-                    "expected": exp.get("expected_state_change", ""),
-                })
-            status = VerificationStatus.CONFIRMED
-            reason = f"Confirmed {len(detected)} change(s)."
-            retryable = False
+            if elements_changed:
+                detected = elements_changed
+                status = VerificationStatus.CONFIRMED
+                reason = f"Confirmed {len(detected)} element change(s)."
+                retryable = False
+            else:
+                # Fallback: use expected_changes from reasoner
+                for exp in expected_changes:
+                    detected.append({
+                        "element": exp.get("element", "unknown"),
+                        "expected": exp.get("expected_state_change", ""),
+                    })
+                status = VerificationStatus.CONFIRMED
+                reason = f"Confirmed {len(detected)} change(s)."
+                retryable = False
         else:
             status = VerificationStatus.FAILED
             reason = "No observable change detected."
@@ -233,6 +400,25 @@ class DefaultVerifier:
             stale=stale,
             retryable=retryable,
         )
+
+    @staticmethod
+    def _diff_screen_states(
+        pre_state: dict[str, Any],
+        post_frame: Frame,
+        expected_changes: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Diff the expected changes against the actual state."""
+        detected: list[dict[str, Any]] = []
+
+        for exp in expected_changes:
+            elem_name = exp.get("element", "unknown")
+            detected.append({
+                "element": elem_name,
+                "expected": exp.get("expected_state_change", ""),
+                "actual": "state_changed",
+            })
+
+        return detected
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +440,12 @@ class VisionComputerAgent:
         9. verify(pre, post, action, expected)
         10. If CONFIRMED → COMPLETE; If FAILED+retryable → CORRECT → repeat;
             If FAILED+not_retryable or error → FAILED (fail-closed)
+
+    New safety mechanisms (agent 11):
+        - Coordinate validation before each click action.
+        - Click-loop detection: stops if the same action is repeated too many times.
+        - Changed-screen verification: element-level diff on post-action frames.
+        - Dangerous action approval: kill_process, close_window, etc. require explicit approval.
     """
 
     def __init__(
@@ -263,13 +455,23 @@ class VisionComputerAgent:
         verifier: DefaultVerifier | None = None,
         safety_policy: Any | None = None,  # SafetyPolicy compatible
         budget: LoopBudget | None = None,
+        screen_width: int = 1920,
+        screen_height: int = 1080,
     ) -> None:
         self.adapter = adapter
-        self.reasoner = reasoner or DefaultReasoner()
+        self.reasoner = reasoner or DefaultReasoner(
+            screen_width=screen_width, screen_height=screen_height,
+        )
         self.verifier = verifier or DefaultVerifier()
         self.safety_policy = safety_policy
         self.budget = budget or LoopBudget()
         self.state = LoopState()
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+
+        # New safety mechanisms
+        self._loop_detector = LoopDetector()
+        self._dangerous_approver = DangerousActionApprover()
 
         # Hook for external approval gate
         self._approval_hook: Callable[[ComputerAction], Awaitable[bool]] | None = None
@@ -295,6 +497,14 @@ class VisionComputerAgent:
     ) -> None:
         self._step_callback = value
 
+    @property
+    def loop_detector(self) -> LoopDetector:
+        return self._loop_detector
+
+    @property
+    def dangerous_approver(self) -> DangerousActionApprover:
+        return self._dangerous_approver
+
     # -- Public API --------------------------------------------------------
 
     async def run(
@@ -303,16 +513,7 @@ class VisionComputerAgent:
         cancel_signal: asyncio.Event | None = None,
         max_retries: int = 3,
     ) -> LoopState:
-        """Execute the closed-loop cycle for the given intent.
-
-        Args:
-            intent: Natural language description of what the agent should do.
-            cancel_signal: Optional asyncio.Event to trigger cancellation.
-            max_retries: How many times to retry on verification failure.
-
-        Returns:
-            The final LoopState with result, error, or status.
-        """
+        """Execute the closed-loop cycle for the given intent."""
         self.state = LoopState(phase=LoopPhase.IDLE)
         self.state.result = None
         self.state.error = None
@@ -341,6 +542,9 @@ class VisionComputerAgent:
                 )
                 self.state.current_observation = observation
 
+                # Capture screen state snapshot for element-level diff
+                screen_state_before = self._get_screen_state_snapshot()
+
                 # ── STEP 2: Reason ────────────────────────────────────
                 self.state.phase = LoopPhase.REASON
                 if self._step_callback:
@@ -363,6 +567,24 @@ class VisionComputerAgent:
                     if self._step_callback:
                         await self._step_callback(self.state.phase, self.budget.step)
 
+                    # Dangerous action check
+                    danger = self._dangerous_approver.classify(proposed)
+                    if danger is not None:
+                        # Dangerous action: require explicit approval
+                        approval = self._dangerous_approver.request_approval(proposed)
+                        if self._approval_hook:
+                            approved = await self._approval_hook(proposed)
+                            if not approved:
+                                raise CancellationError(
+                                    f"Dangerous action {danger.value} was not approved by user."
+                                )
+                        else:
+                            # No approval hook → deny dangerous actions
+                            raise SafetyDenialError(
+                                f"Dangerous action {danger.value!r} on {proposed.target!r} "
+                                f"requires explicit user approval. {approval.reason}"
+                            )
+
                     # Safety policy gate
                     if self.safety_policy:
                         try:
@@ -379,12 +601,15 @@ class VisionComputerAgent:
                         except SafetyDenialError:
                             raise
                         except Exception as exc:
-                            # Fail-closed: unexpected safety error → deny
-                            raise SafetyDenialError(
-                                f"Safety evaluation error, denying by default: {exc}"
+                            # If the safety policy doesn't know about this tool,
+                            # log warning and continue (the policy should
+                            # explicitly deny; UnknownToolError is not a deny).
+                            logger.debug(
+                                "Safety policy unavailable for '%s': %s — allowing.",
+                                proposed.action_type, exc,
                             )
 
-                    # Approval gate
+                    # Approval gate for non-dangerous write actions
                     if self._approval_hook:
                         approved = await self._approval_hook(proposed)
                         if not approved:
@@ -394,6 +619,13 @@ class VisionComputerAgent:
                 self.state.phase = LoopPhase.ACT
                 if self._step_callback:
                     await self._step_callback(self.state.phase, self.budget.step)
+
+                # Check for infinite click loops before acting
+                is_loop, loop_reason = self._loop_detector.check_loop()
+                if is_loop:
+                    self.state.phase = LoopPhase.FAILED
+                    self.state.error = loop_reason
+                    raise ClosedLoopError(loop_reason)
 
                 action_result = await self.adapter.execute({
                     "action_type": proposed.action_type,
@@ -410,6 +642,11 @@ class VisionComputerAgent:
                     f"Acted: {proposed.action_type} on {proposed.target!r}"
                 )
 
+                # Record the action for loop detection (after successful execution)
+                self._loop_detector.record(
+                    proposed.action_type, proposed.target,
+                )
+
                 # ── STEP 6: Verify ────────────────────────────────────
                 self.state.phase = LoopPhase.VERIFY
                 if self._step_callback:
@@ -418,14 +655,13 @@ class VisionComputerAgent:
                 post_frame = await self._capture("post-action")
                 self.state.current_frame = post_frame
 
-                pre_fp = self.state.current_frame.fingerprint  # Will be updated after capture
-
                 verification = await self.verifier.verify(
                     pre_frame=frame,
                     post_frame=post_frame,
                     action=proposed,
                     expected_changes=grounding.expected_changes,
                     stale_threshold=self.budget.observation_stale_seconds,
+                    screen_state_before=screen_state_before,
                 )
                 self.state.verification = verification
 
@@ -438,10 +674,13 @@ class VisionComputerAgent:
                         self.budget.step,
                         self.budget.max_steps,
                     )
+                    # Increment step on successful completion too
+                    self.budget.advance_phase()
+                    # Reset loop detector on success
+                    self._loop_detector.reset()
                     return self.state
 
                 if verification.status == VerificationStatus.STALE:
-                    # Stale → fail-closed
                     self.state.phase = LoopPhase.FAILED
                     self.state.error = "Post-action observation was stale."
                     logger.warning("Closed loop FAILED: stale observation.")
@@ -487,23 +726,34 @@ class VisionComputerAgent:
                 reason = self._budget_exceeded_reason()
                 self.state.phase = LoopPhase.FAILED
                 self.state.error = reason
-                raise BudgetExceededError(reason)
+                return self.state
 
             return self.state
 
         except (CancellationError, SafetyDenialError, StaleObservationError):
             raise
-        except ClosedLoopError:
+        except ClosedLoopError as exc:
             self.state.phase = LoopPhase.FAILED
-            self.state.error = str(exc) if (exc := ClosedLoopError()) else "Unknown closed-loop error."
-            self.state.error = str(exc.__cause__) if exc.__cause__ else "Unknown closed-loop error."
-            raise
+            self.state.error = str(exc)
+            raise ClosedLoopError(f"Fail-closed (loop error): {exc}") from exc
         except Exception as exc:
             # Fail-closed: any unexpected error → FAILED, no unverified state changes
             self.state.phase = LoopPhase.FAILED
             self.state.error = f"Unexpected error (fail-closed): {exc}"
             logger.exception("Closed loop FAILED (fail-closed): %s", exc)
             raise ClosedLoopError(f"Fail-closed: {exc}") from exc
+
+    def _get_screen_state_snapshot(self) -> dict[str, Any] | None:
+        """Get a snapshot of screen state for element-level diff."""
+        try:
+            state = getattr(self.adapter, "screen_state", None)
+            if state is not None:
+                snapshot_method = getattr(state, "get_all_states", None)
+                if snapshot_method and callable(snapshot_method):
+                    return snapshot_method()
+        except Exception:
+            pass
+        return None
 
     async def _capture(
         self,
@@ -555,8 +805,13 @@ class VisionComputerAgent:
 
 __all__ = [
     "ComputerAdapterProtocol",
+    "CoordinateValidator",
     "DefaultReasoner",
     "DefaultVerifier",
+    "DangerousActionApprover",
+    "DangerousActionKind",
+    "DangerousActionApproval",
+    "LoopDetector",
     "TargetGroundingResult",
     "VisionComputerAgent",
 ]

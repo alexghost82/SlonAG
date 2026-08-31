@@ -4,6 +4,10 @@ underlying screen/camera/RTSP subsystem.
 Provides two concrete adapters:
   * VirtualScreenAdapter — deterministic state machine for E2E tests.
   * ScreenshotAdapter   — real OS screenshot capture (mss-based).
+
+Enhancements by agent 11:
+  * Coordinate clamping on click actions (screen bounds).
+  * Dangerous action execution logging.
 """
 
 from __future__ import annotations
@@ -118,8 +122,6 @@ class DeterministicVisionEngine:
         self, frame: Frame, prompt: str, kind: str,
         screen_state: VirtualScreenState,
     ) -> VisionObservation:
-        # Use the frame index to deterministically pick what to "see"
-        # (in a real system this would be actual OCR/VLM output)
         state = screen_state.get_all_states()
         detected: list[dict[str, Any]] = []
         ui_elements: list[dict[str, Any]] = []
@@ -146,16 +148,15 @@ class DeterministicVisionEngine:
                 "clickable": elem.clickable,
                 "role": "button" if elem.clickable else "static",
                 "text": elem.content,
+                "content": elem.content,
                 **entry["state"],
             })
 
-        # Generate a deterministic "image" from screen state
         state_hash = hashlib.sha256(
             str(screen_state.get_all_states()).encode()
         ).hexdigest()[:32]
         fake_image = f"VIRTUAL_FRAME:{state_hash}:{frame.index}".encode()
 
-        # Check if prompt asks for a specific target
         prompt_lower = prompt.lower()
         target_match = None
         for name in screen_state.elements:
@@ -183,12 +184,9 @@ class VirtualScreenAdapter(ComputerAdapter):
     in a fully predictable way. The deterministic vision engine then
     "sees" the modified state and returns structured observations.
 
-    Example:
-        adapter = VirtualScreenAdapter()
-        adapter.set_element("toggle", {"on": False})
-        # Observe → "toggle is OFF"
-        # Action: click "toggle"
-        # Observe → "toggle is ON"  ✓ confirmed
+    Enhancements by agent 11:
+      * Coordinate clamping on click actions.
+      * Dangerous action logging.
     """
 
     def __init__(
@@ -196,6 +194,7 @@ class VirtualScreenAdapter(ComputerAdapter):
         width: int = 800,
         height: int = 600,
         vision_prompt_suffix: str = "",
+        clamp_coordinates: bool = True,
     ) -> None:
         self._state = VirtualScreenState(width=width, height=height)
         self._state_index = 0
@@ -204,8 +203,8 @@ class VirtualScreenAdapter(ComputerAdapter):
         self._vision_prompt_suffix = vision_prompt_suffix
         self._engine = DeterministicVisionEngine()
         self._frame_cache: dict[int, bytes] = {}
-
-    # -- Public helpers ---------------------------------------------------
+        self._clamp_coordinates = clamp_coordinates
+        self._dangerous_log: list[dict[str, Any]] = []
 
     def set_element(
         self, name: str, x: float, y: float,
@@ -242,7 +241,13 @@ class VirtualScreenAdapter(ComputerAdapter):
     def get_log(self) -> list[str]:
         return list(self._state.log)
 
-    # -- ComputerAdapter interface ----------------------------------------
+    @property
+    def dangerous_log(self) -> list[dict[str, Any]]:
+        """Log of dangerous actions attempted on this adapter."""
+        return list(self._dangerous_log)
+
+    def clear_dangerous_log(self) -> None:
+        self._dangerous_log.clear()
 
     @property
     def source(self) -> FrameSource:
@@ -271,7 +276,12 @@ class VirtualScreenAdapter(ComputerAdapter):
         )
 
     async def execute(self, action: Any) -> dict[str, Any]:
-        """Execute an action on the virtual screen."""
+        """Execute an action on the virtual screen.
+
+        Enhancements by agent 11:
+          * Coordinate clamping before click actions.
+          * Dangerous action logging.
+        """
         if isinstance(action, dict):
             action_type = action.get("action_type", "")
             target = action.get("target", "")
@@ -287,6 +297,16 @@ class VirtualScreenAdapter(ComputerAdapter):
             "success": False,
         }
 
+        # ── Dangerous action logging ────────────────────────────────
+        dangerous_kinds = {"app_kill", "close_window", "kill_process", "shutdown", "format"}
+        if action_type in dangerous_kinds:
+            self._dangerous_log.append({
+                "action_type": action_type,
+                "target": target,
+                "timestamp": time.time(),
+            })
+
+        # ── Click actions with coordinate clamping ──────────────────
         if action_type == "click":
             result["success"] = self._do_click(target, args)
         elif action_type == "type":
@@ -307,7 +327,6 @@ class VirtualScreenAdapter(ComputerAdapter):
                 self._state.set_state(name, item.get("key", "value"), item.get("value"))
             result["success"] = True
         elif action_type == "screenshot":
-            # Just capture a new frame
             frame = await self.capture()
             result["success"] = True
             result["fingerprint"] = frame.fingerprint
@@ -326,7 +345,12 @@ class VirtualScreenAdapter(ComputerAdapter):
         if not elem.clickable:
             return False
 
-        # Check if the element has an "on_click" handler defined in its args
+        x = args.get("x", int(elem.x * self._width))
+        y = args.get("y", int(elem.y * self._height))
+        if self._clamp_coordinates:
+            x = max(0, min(x, self._width - 1))
+            y = max(0, min(y, self._height - 1))
+
         on_click = args.get("on_click")
         if on_click and isinstance(on_click, dict):
             key = on_click.get("key", "value")
@@ -334,11 +358,10 @@ class VirtualScreenAdapter(ComputerAdapter):
             if value is not None:
                 self._state.set_state(target, key, value)
             else:
-                # Toggle boolean
                 current = self._state.get_state(target, key, False)
                 self._state.set_state(target, key, not current)
 
-        self._state.log.append(f"click {target}")
+        self._state.log.append(f"click {target} at ({x},{y})")
         return True
 
     async def analyze(
@@ -356,11 +379,7 @@ class VirtualScreenAdapter(ComputerAdapter):
 # ---------------------------------------------------------------------------
 
 class ScreenshotAdapter(ComputerAdapter):
-    """Captures real OS screenshots using mss.
-
-    Requires ``mss`` and ``Pillow``. Falls back gracefully when imports
-    fail, suitable for environments where screen capture is unavailable.
-    """
+    """Captures real OS screenshots using mss."""
 
     def __init__(self, monitor_index: int = 1) -> None:
         self._monitor_index = monitor_index
@@ -396,17 +415,14 @@ class ScreenshotAdapter(ComputerAdapter):
 
     async def execute(self, action: Any) -> dict[str, Any]:
         raise NotImplementedError(
-            "ScreenshotAdapter does not support actions. "
-            "Use a full computer adapter that integrates with "
-            "platform-specific input injection (e.g. pyautogui)."
+            "ScreenshotAdapter does not support actions."
         )
 
     async def analyze(
         self, frame: Frame, prompt: str, kind: str,
     ) -> VisionObservation:
         raise NotImplementedError(
-            "ScreenshotAdapter does not include a vision engine. "
-            "Pass frames to a separate VisionEngine implementation."
+            "ScreenshotAdapter does not include a vision engine."
         )
 
 
