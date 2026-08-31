@@ -54,6 +54,8 @@ def _redact_secrets(message: str) -> str:
         re.compile(r"(?i)Bearer\s+\S+"),
         re.compile(r"(?i)mk_[A-Za-z0-9_-]{8,}"),
         re.compile(r"(?i)rt_[A-Za-z0-9_-]{8,}"),
+        # JWT tokens: base64url segments separated by dots
+        re.compile(r"[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{3,}(\.[A-Za-z0-9_\-]{3,})?"),
     )
     redacted = message
     for pattern in patterns:

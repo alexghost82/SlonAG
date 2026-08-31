@@ -120,4 +120,17 @@ def _luhn_ok(digits: str) -> bool:
     return total % 10 == 0
 
 
-__all__ = ["MemoryPolicy"]
+
+
+# ---------------------------------------------------------------------------
+# Convenience public API
+# ---------------------------------------------------------------------------
+
+
+def should_block_memory(value: str) -> bool:
+    """Return True when *value* looks like a secret and should be
+    blocked from being stored in memory."""
+    return _value_looks_secret(value) or _looks_like_card(value)
+
+
+__all__ = ["MemoryPolicy", "should_block_memory"]
