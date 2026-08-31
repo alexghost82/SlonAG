@@ -1,4 +1,9 @@
-"""GET /v1/status — desktop health without secrets."""
+"""GET /v1/status — desktop health without secrets.
+
+Status now queries real runtime state via the observability module.
+No fabricated ``online=True`` / ``paired=True`` — the endpoint
+reflects what is actually working at the time of the request.
+"""
 
 from __future__ import annotations
 
@@ -26,16 +31,11 @@ def get_status(
     if provider is not None:
         status = provider()
     else:
-        status = StatusResponse(
-            online=True,
-            paired=True,
-            provider_id="local",
-            model_id="mock-model",
-            network_mode="offline",
-            privacy_profile="fully_local",
-            active_tasks=0,
-            pending_approvals=0,
-        )
+        # Real runtime status — no fake defaults.
+        from observability.status import get_runtime_status as _real_status
+
+        status = _real_status()
+
     return RouteResponse(status_code=200, body=sanitize_body(status.to_dict()))
 
 
