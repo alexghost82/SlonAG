@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from speech.stt.engines import EmptySTTEngine, try_whisper_engine
+from speech.stt.engines import EmptySTTEngine, try_faster_whisper_engine
 from speech.stt.mic import MicCapture, MicCaptureError
 from speech.stt.provider import DEFAULT_LANGUAGE, LocalSTTProvider
 
@@ -41,10 +41,13 @@ def try_build_local_stt(
     _ = repo_root
     asr_backend = "empty"
     engine: object
-    whisper = try_whisper_engine() if prefer_whisper else None
-    if whisper is not None:
-        engine = whisper
-        asr_backend = "whisper"
+    model_path = Path(repo_root or Path.cwd()) / "models" / "whisper" / "base"
+    faster_whisper = (
+        try_faster_whisper_engine(str(model_path)) if prefer_whisper and model_path.is_dir() else None
+    )
+    if faster_whisper is not None:
+        engine = faster_whisper
+        asr_backend = "faster_whisper"
     else:
         engine = EmptySTTEngine()
 
@@ -86,7 +89,7 @@ def try_build_local_stt(
     ready = True
     parts = [f"asr={asr_backend}", mic_message]
     if asr_backend == "empty":
-        parts.append("install openai-whisper for offline ASR (optional)")
+        parts.append(f"offline ASR model missing: {model_path}")
     return LocalSTTBuildResult(
         provider=provider,
         mic=mic if mic_ready else None,

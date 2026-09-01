@@ -34,6 +34,8 @@ those options is outside this task.
 | Package | License | Notes |
 |---|---|---|
 | sounddevice | MIT | PyPI `license_expression`: MIT |
+| faster-whisper | MIT | Local STT backend, selected for lower-latency inference. |
+| openwakeword | Apache-2.0 | Optional local wake-word detector; custom model files require separate license review. |
 | google-genai | Apache-2.0 | Supported Google GenAI SDK. PyPI `license_expression`: Apache-2.0 |
 | google-generativeai | Apache 2.0 | **Deprecated.** `google-genai` is the supported replacement. This inventory does not change requirements files. |
 | pillow | MIT-CMU | Same PyPI project as `Pillow` below |
@@ -78,6 +80,7 @@ voices to complete them.
 | Item | Status |
 |---|---|
 | Piper TTS implementation license | **Decided 2026-08-15** — runtime rhasspy/piper (MIT); voice `ru_RU-dmitri-medium` (MIT). Implementation task `W12-T01`; do not download models in this inventory. |
+| Faster-Whisper STT model | Downloaded 2026-09-01: `Systran/faster-whisper-base`, revision `ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66`, MIT, stored at `models/whisper/base`. `model.bin` SHA-256: `d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9`. |
 | Model licenses (local or hosted weights) | Open — not inventoried; no models downloaded |
 | Voice licenses (local voices, Gemini prebuilt voices, other TTS voices) | Piper voice decided above; other voices still open — not inventoried; no voices downloaded |
 | Dataset licenses | Open — not inventoried |

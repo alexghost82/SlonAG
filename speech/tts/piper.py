@@ -127,7 +127,7 @@ class PiperSpeechSynthesizer:
         return bytes(stdout)
 
     def _build_argv(self, *, length_scale: float) -> list[str]:
-        return [
+        argv = [
             str(self.binary_path),
             "--model",
             str(self.model_path),
@@ -136,6 +136,10 @@ class PiperSpeechSynthesizer:
             "--length-scale",
             f"{length_scale:.6g}",
         ]
+        espeak_data = self.binary_path.parent / "espeak-ng-data"
+        if espeak_data.is_dir():
+            argv.extend(("--espeak_data", str(espeak_data)))
+        return argv
 
     def _require_paths(self) -> None:
         binary = self.binary_path

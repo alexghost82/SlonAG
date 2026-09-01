@@ -59,9 +59,9 @@ def _get_api_key() -> str:
 
 def _key_provider(name: str) -> str | None:
     """Injected secret reader for the runtime bridge (no values logged)."""
-    from config.secrets import get_secret
+    from config.secrets import get_provider_secret
 
-    return get_secret(name)
+    return get_provider_secret(name)
 
 
 def _get_settings() -> Settings:
@@ -704,8 +704,8 @@ def _run_chat_agent(ui, settings, stack=None):
 
     # Build key provider callback
     def key_provider(name: str) -> str | None:
-        from config.secrets import get_secret
-        return get_secret(name)
+        from config.secrets import get_provider_secret
+        return get_provider_secret(name)
 
     # Prefer the stack's Router (already wired with model_id / base_url)
     if stack is not None:
@@ -774,6 +774,7 @@ def _run_chat_agent(ui, settings, stack=None):
             input_queue.put_nowait(text)
 
     ui.on_text_command = _on_command
+    ui.start_wake_word_listener(_on_command)
 
     async def _chat_loop():
         """Async loop that processes user commands through AgentLoop."""
@@ -811,16 +812,19 @@ def _run_chat_agent(ui, settings, stack=None):
                         history=history,
                         on_message=_on_message,
                     )
+                    response_text = getattr(result, "text", "") or getattr(result, "content", "")
+                    if response_text:
+                        ui.speak_local(str(response_text))
 
                     # Update history with agent response for multi-turn
                     try:
                         if result.steps:
                             last_step = result.steps[-1]
                             if last_step.tool_name and last_step.observation:
-                                history = history + [
+                                history.extend([
                                     {"role": "assistant", "content": last_step.tool_name or ""},
                                     {"role": "tool", "content": str(last_step.observation)},
-                                ]
+                                ])
                     except Exception:
                         pass
 
@@ -837,7 +841,7 @@ def _run_chat_agent(ui, settings, stack=None):
 
     logger.info("[Main] provider=%s model=%s", provider_id, model_id or model_info.model_id)
     ui.write_log(f"{t("status.connected")} [{provider_id}]")
-    asyncio.create_task(_chat_loop())
+    asyncio.run(_chat_loop())
     return True
 
 def main():

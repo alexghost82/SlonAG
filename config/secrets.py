@@ -25,12 +25,22 @@ from pathlib import Path
 KNOWN_SECRET_NAMES = frozenset(
     {"gemini_api_key", "openrouter_api_key", "openai_api_key", "gateway_signing_key"}
 )
+PROVIDER_SECRET_NAMES = {
+    "gemini": "gemini_api_key",
+    "openrouter": "openrouter_api_key",
+    "openai": "openai_api_key",
+}
 SERVICE_NAME = "Slon"
 FALLBACK_PATH = Path(__file__).resolve().parent / "api_keys.json"
 
 
 class SecretStoreError(RuntimeError):
     """Secret store failure. Messages must never include secret values."""
+
+
+def get_provider_secret(provider_id: str) -> str | None:
+    """Return the API key for a provider ID used by the runtime router."""
+    return get_secret(PROVIDER_SECRET_NAMES.get(provider_id, provider_id))
 
 
 def get_secret(name: str) -> str | None:

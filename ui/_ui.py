@@ -74,7 +74,7 @@ except Exception:  # pragma: no cover
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
-    return Path(__file__).resolve().parent
+    return Path(__file__).resolve().parent.parent
 
 BASE_DIR   = _base_dir()
 
@@ -931,6 +931,7 @@ class MainWindow(QMainWindow):
         self._gateway = None
         self._desktop_tls = False
         self._runtime_stack = None
+        self._wake_word_listener = None
 
         central = QWidget()
         central.setStyleSheet(f"background: {C.BG};")
@@ -992,6 +993,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         try:
+            if self._wake_word_listener is not None:
+                self._wake_word_listener.stop()
+                self._wake_word_listener = None
             if self._desktop_listener is not None:
                 self._desktop_listener.stop()
                 self._desktop_listener = None
@@ -1496,8 +1500,8 @@ class MainWindow(QMainWindow):
         """Rebuild RuntimeStack using current UI settings."""
         try:
             def _keys(name: str) -> str | None:
-                from config.secrets import get_secret
-                return get_secret(name)
+                from config.secrets import get_provider_secret
+                return get_provider_secret(name)
 
             loaded = load_settings()
             pid = getattr(loaded, "provider_id", "gemini")
@@ -2050,11 +2054,15 @@ class MainWindow(QMainWindow):
 
         def _run() -> None:
             import asyncio
+            from speech.tts.sentences import split_sentences
             try:
                 self._state_sig.emit("SPEAKING")
-                audio = asyncio.run(provider.preview(str(text)))
-                if play_wav_bytes is not None and audio.data:
-                    play_wav_bytes(audio.data)
+                for sentence in split_sentences(str(text)):
+                    if self._muted:
+                        break
+                    audio = asyncio.run(provider.preview(sentence))
+                    if play_wav_bytes is not None and audio.data:
+                        play_wav_bytes(audio.data)
             except Exception as exc:
                 self._log_sig.emit(f"SYS: Local TTS error — {exc}")
             finally:
@@ -2062,6 +2070,26 @@ class MainWindow(QMainWindow):
                     self._state_sig.emit("LISTENING")
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def start_wake_word_listener(self, on_command) -> bool:
+        """Start always-on local voice input for text-based providers."""
+        if not self._local_stt_ready or self._local_stt_provider is None or self._local_stt_mic is None:
+            self._log_sig.emit("SYS: Wake word unavailable — local STT/microphone is not ready.")
+            return False
+        from runtime.wake_word import WakeWordListener
+
+        self._local_tts_enabled = bool(self._local_tts_ready)
+        self._style_tts_btn()
+        self._wake_word_listener = WakeWordListener(
+            mic=self._local_stt_mic,
+            stt_provider=self._local_stt_provider,
+            on_command=on_command,
+            on_log=self._log_sig.emit,
+            on_state=self._state_sig.emit,
+            wake_model_path=BASE_DIR / "models" / "wake_word" / "slon.onnx",
+        )
+        self._wake_word_listener.start()
+        return True
 
     def _on_file_selected(self, path: str):
         self._current_file = path
@@ -2256,6 +2284,9 @@ class SlonUI:
 
     def speak_local(self, text: str) -> None:
         self._win.speak_local(text)
+
+    def start_wake_word_listener(self, on_command) -> bool:
+        return self._win.start_wake_word_listener(on_command)
 
     def start_desktop_api(self) -> tuple[str, int] | None:
         if self._win._desktop_listener and self._win._desktop_listener.listening:

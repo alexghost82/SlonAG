@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import threading
+from types import SimpleNamespace
 
 from providers.contracts import (
     AudioRequest,
@@ -10,6 +11,7 @@ from providers.contracts import (
     Transcript,
 )
 from providers.registry import get
+from speech.stt.engines import OptionalFasterWhisperEngine
 from speech.stt.provider import DEFAULT_LANGUAGE, PROVIDER_ID, LocalSTTProvider
 
 from tests.unit.speech.stt.fakes import ExplodingEngine, FakeEngine, PartialEngine
@@ -149,3 +151,41 @@ def test_package_import_registers_stt_local_factory() -> None:
     assert isinstance(provider, stt_pkg.LocalSTTProvider)
     assert isinstance(provider, SpeechToTextProvider)
     assert stt_pkg.PROVIDER_ID == "stt_local"
+
+
+def test_faster_whisper_engine_uses_fast_command_settings() -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeModel:
+        def transcribe(self, _path: str, **kwargs: object):
+            calls.append(kwargs)
+            return iter((SimpleNamespace(text=" включи "), SimpleNamespace(text=" свет "))), None
+
+    class FakeModule:
+        @staticmethod
+        def WhisperModel(*_args: object, **_kwargs: object) -> FakeModel:
+            return FakeModel()
+
+    engine = OptionalFasterWhisperEngine(module=FakeModule())
+    assert engine.transcribe(AUDIO, "ru") == "включи свет"
+    assert calls == [
+        {
+            "language": "ru",
+            "beam_size": 1,
+            "vad_filter": True,
+            "condition_on_previous_text": False,
+        }
+    ]
+
+
+def test_faster_whisper_engine_disables_network_model_downloads() -> None:
+    seen: dict[str, object] = {}
+
+    class FakeModule:
+        @staticmethod
+        def WhisperModel(*_args: object, **kwargs: object) -> object:
+            seen.update(kwargs)
+            return object()
+
+    OptionalFasterWhisperEngine(module=FakeModule())._load()
+    assert seen["local_files_only"] is True

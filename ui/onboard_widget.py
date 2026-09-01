@@ -389,7 +389,7 @@ class CredentialsStep(_StepWidget):
         self._test_btn.setEnabled(False)
 
         provider_id = getattr(self, "_last_provider", "") or ""
-        state = OnboardState(step=STEP_CREDENTIALS, provider_id=provider_id)
+        state = OnboardState(provider_id=provider_id)
         setattr(state, f"{provider_id}_api_key", self._key_input.text())
 
         def _check():
@@ -1140,12 +1140,11 @@ class OnboardingWizard(QWidget):
 
     def _on_complete_done(self):
         """Handle Apply & Restart button."""
-        from config.onboard import apply_onboard_result, OnboardResult
+        from config.onboard import apply_onboard_result
         
         # Build result from collected state
         try:
-            state = self._state.build_result()
-            result = OnboardResult(state=state)
+            result = self._state.build_result()
 
             # Collect provider credentials from the credential step
             cred_step = self._steps.get(STEP_CREDENTIALS)
