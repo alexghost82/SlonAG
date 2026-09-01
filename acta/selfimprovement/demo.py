@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 # Ensure the project root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from acta.selfimprovement.pipeline import SelfImprovementPipeline
 from acta.selfimprovement.collector import MetricsCollector
-from acta.selfimprovement.rules import generate_candidates
-from acta.selfimprovement.types import Observation, ObservationKind
+from acta.selfimprovement.pipeline import SelfImprovementPipeline
+from acta.selfimprovement.types import ObservationKind
 
 
 def main() -> None:

@@ -6,20 +6,15 @@ pattern.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from acta.proactive.errors import (
-    CODE_ACTION_BLOCKED,
-    CODE_PERM_DENIED,
     ActionBlockedError,
-    PermissionDeniedError,
 )
 from acta.proactive.types import (
+    SAFE_AUTO_ACTIONS,
     ProactiveAction,
     ProactiveDecision,
     ProactiveEvent,
     RiskLevel,
-    SAFE_AUTO_ACTIONS,
 )
 
 

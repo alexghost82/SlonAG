@@ -15,9 +15,9 @@ from typing import Any
 from providers.capabilities import require_capability, require_provider_match
 from providers.contracts import (
     ChatEvent,
-    ConversationMessage,
     ChatRequest,
     ChatResponse,
+    ConversationMessage,
     ModelInfo,
     ProviderStatus,
     ToolCall,

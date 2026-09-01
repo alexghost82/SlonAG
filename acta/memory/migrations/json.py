@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import hashlib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 

@@ -7,6 +7,7 @@ credentials, or other secret values.
 from __future__ import annotations
 
 from i18n import t
+
 CODE_OK = "ok"
 CODE_UNKNOWN_TOOL = "unknown_tool"
 CODE_INVALID_ARGS = "invalid_args"

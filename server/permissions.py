@@ -7,8 +7,8 @@ can enforce SafetyPolicy without this module executing tools.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from server.auth import DevicePrincipal
 

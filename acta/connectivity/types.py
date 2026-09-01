@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Transport kinds
 # ---------------------------------------------------------------------------
@@ -86,12 +85,13 @@ class DeviceIdentity:
     extra: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
-    def generate(display_name: str, **kwargs: Any) -> "DeviceIdentity":
-        import os, platform
-        import time
+    def generate(display_name: str, **kwargs: Any) -> DeviceIdentity:
         import hashlib
-        from cryptography.hazmat.primitives.asymmetric import ec
+        import platform
+        import time
+
         from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
 
         private_key = ec.generate_private_key(ec.SECP256R1())
         public_pem = private_key.public_key().public_bytes(

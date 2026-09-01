@@ -214,11 +214,8 @@ from providers.contracts import (
     ChatProvider,
     ChatRequest,
     ChatResponse,
-    ConversationMessage,
     ModelInfo,
     ProviderStatus,
-    ToolCall,
-    ToolDefinition,
 )
 
 

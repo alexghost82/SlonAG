@@ -7,48 +7,39 @@ monitor → rollback.
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from typing import Any
 
 from .collector import MetricsCollector
 from .localized_strings import (
-    RU_OBSERVATION_TOOL_FAILURE,
-    RU_OBSERVATION_TOOL_TIMEOUT,
-    RU_OBSERVATION_PROVIDER_SLOW,
-    RU_OBSERVATION_PROVIDER_FAILED,
-    RU_OBSERVATION_PREFERENCE_CORRECTION,
-    RU_CANDIDATE_GENERATED,
-    RU_APPROVE_SUCCESS,
-    RU_REJECT_SUCCESS,
-    RU_NOT_FOUND,
-    RU_EVALUATION_PASS,
-    RU_EVALUATION_FAIL,
-    RU_APPLY_SUCCESS,
     RU_APPLY_ERROR,
+    RU_APPLY_NO_APPROVAL,
+    RU_APPLY_SUCCESS,
+    RU_APPROVE_SUCCESS,
+    RU_CANDIDATE_GENERATED,
+    RU_ERROR_INVALID_STATE_TRANSITION,
+    RU_ERROR_SECURITY_VIOLATION,
+    RU_EVALUATION_FAIL,
+    RU_EVALUATION_PASS,
     RU_MONITOR_DEGRADATION,
     RU_MONITOR_STABLE,
+    RU_OBSERVATION_TOOL_FAILURE,
+    RU_REJECT_SUCCESS,
     RU_ROLLBACK_SUCCESS,
-    RU_ERROR_SECURITY_VIOLATION,
-    RU_ERROR_INVALID_STATE_TRANSITION,
-    RU_APPLY_NO_APPROVAL,
-    RU_ROLLBACK_FAILED,
     ru_f,
 )
-from .storage import load_state, save_state
 from .rules import generate_candidates
-
+from .storage import load_state, save_state
 from .types import (
-    AuditEntry,
     AuditAction,
+    AuditEntry,
     EvaluationStatus,
     ImprovementCandidate,
     ImprovementStatus,
     Observation,
     ObservationKind,
-    RiskLevel,
     SelfImprovementRecord,
-    SelfImprovementState,
     apply_bounded_change,
 )
 
@@ -472,8 +463,8 @@ class SelfImprovementPipeline:
             if rollback_data:
                 try:
                     if rollback_change["target"] == "config":
-                        from config.settings import load_settings, save_settings
                         from config.schema import Settings
+                        from config.settings import save_settings
                         old = Settings(**rollback_data)
                         save_settings(old)
                     elif rollback_change["target"] == "memory":

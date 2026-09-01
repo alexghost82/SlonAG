@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from i18n import t
 import base64
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from gateway.service import SlonGateway
+from i18n import t
 
 
 class GatewayConfigurationError(RuntimeError):

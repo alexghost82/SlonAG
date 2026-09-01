@@ -12,14 +12,12 @@ Responsible for:
 from __future__ import annotations
 
 import hashlib
-import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from acta.memory.database import MemoryDatabase, MemoryRow
 from acta.memory.embeddings import EmbeddingService
-from acta.memory.errors import MemoryStoreError, memory_message
+from acta.memory.errors import MemoryStoreError
 from acta.memory.policy import MemoryPolicy
 from acta.memory.repository import MemoryRecord, RecordType
 
@@ -226,8 +224,7 @@ class MemoryRetriever:
             self._policy.check(new_key, new_value)
         except MemoryStoreError:
             return None
-        import json
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        now = datetime.now(UTC).replace(microsecond=0).isoformat()
         updated = MemoryRow(
             id=existing.id,
             type=existing.type,
@@ -336,8 +333,8 @@ class MemoryRetriever:
         try:
             dt = datetime.fromisoformat(iso_date)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            days = (datetime.now(timezone.utc) - dt).total_seconds() / 86400
+                dt = dt.replace(tzinfo=UTC)
+            days = (datetime.now(UTC) - dt).total_seconds() / 86400
             return max(0.0, 1.0 - days / 30.0)
         except (ValueError, TypeError):
             return 0.5

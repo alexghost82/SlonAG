@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Mapping
-
-from acta.tools.contracts import ToolResult
-from providers.contracts import UserMessage
+from collections.abc import Mapping
 
 from server.routes._common import (
     DevicePrincipal,

@@ -33,7 +33,6 @@ from providers.openai_compat import (
     message_payload,
     parse_tool_calls,
 )
-from providers.registry import register
 
 PROVIDER_ID = "openai"
 

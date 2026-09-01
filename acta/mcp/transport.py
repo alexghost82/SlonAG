@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from i18n import t
 import asyncio
 import json
 import os
 import uuid
-from collections.abc import Mapping
 from typing import Any
 
 from acta.mcp.types import McpServerConfig
@@ -52,7 +50,6 @@ class McpStdioTransport:
         self._reader_task = asyncio.create_task(self._reader_loop())
 
     def _make_env(self) -> dict[str, str]:
-        import os
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
@@ -122,7 +119,7 @@ class McpStdioTransport:
             await self._process.stdin.drain()
             result = await asyncio.wait_for(future, timeout=timeout)
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(request_id, None)
             raise
         except asyncio.CancelledError:
@@ -172,7 +169,7 @@ class McpStdioTransport:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=3.0)
-            except (asyncio.TimeoutError, ProcessLookupError):
+            except (TimeoutError, ProcessLookupError):
                 try:
                     self._process.kill()
                     await self._process.wait()

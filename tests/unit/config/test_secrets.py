@@ -21,7 +21,7 @@ def test_production_code_does_not_access_legacy_key_file_directly() -> None:
     root = Path(__file__).resolve().parents[3]
     forbidden_names = ("API_FILE", "API_CONFIG_PATH", "API_KEY_PATH")
     violations: list[str] = []
-    candidates = [root / "main.py", root / "ui.py", root / "or_client.py"]
+    candidates = [root / "main.py", root / "or_client.py", root / "setup.py"]
     for package in ("actions", "agent", "runtime", "providers", "acta"):
         candidates.extend((root / package).rglob("*.py"))
 

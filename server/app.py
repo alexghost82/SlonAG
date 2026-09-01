@@ -11,10 +11,9 @@ TLS remains a separate hard requirement for non-lab deployments.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping
 from urllib.parse import unquote
 
 from server.bind_policy import BindHostError, validate_bind_host

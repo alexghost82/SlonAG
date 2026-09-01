@@ -7,9 +7,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from string import Formatter
-from typing import Any, Mapping
+from typing import Any
 
 DEFAULT_LOCALE = "ru"
 SUPPORTED_LOCALES = ("ru", "en")

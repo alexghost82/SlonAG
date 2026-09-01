@@ -36,7 +36,7 @@ Security principles:
 
 from __future__ import annotations
 
-from acta.filesystem import security, operations, tools
+from acta.filesystem import operations, security, tools
 
 __all__ = [
     "security",

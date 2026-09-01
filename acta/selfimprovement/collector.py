@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import time
 import threading
-from collections import defaultdict
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from .localized_strings import (
-    ru_f,
-    RU_OBSERVATION_TOOL_FAILURE,
-    RU_OBSERVATION_TOOL_TIMEOUT,
-    RU_OBSERVATION_PREFERENCE_CORRECTION,
-)
-from .types import MetricBucket, MetricKind, MetricSnapshot, Observation, ObservationKind
+from .types import Observation, ObservationKind
 
 
 @dataclass
@@ -77,7 +70,7 @@ class MetricsCollector:
         self._user_feedback: list[UserFeedback] = []
 
     @classmethod
-    def instance(cls) -> "MetricsCollector":
+    def instance(cls) -> MetricsCollector:
         import acta.selfimprovement
         return acta.selfimprovement.get_collector()
 

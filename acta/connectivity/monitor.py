@@ -34,7 +34,7 @@ class ConnectivityMonitor:
     - Discovers LAN devices while on remote transport.
     """
 
-    def __init__(self, session: "ConnectivitySession") -> None:
+    def __init__(self, session: ConnectivitySession) -> None:
         self._session = session
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
@@ -116,7 +116,7 @@ class ConnectivityMonitor:
                         timeout=min(interval, 5.0),
                     )
                     break  # stop requested
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
 
                 # Send heartbeat.
@@ -185,7 +185,7 @@ class ConnectivityMonitor:
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=delay)
                 return  # stop requested during delay
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         # All attempts failed.

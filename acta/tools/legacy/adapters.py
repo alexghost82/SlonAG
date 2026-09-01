@@ -7,19 +7,18 @@ must remain safe in headless/offline environments.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from importlib import import_module
-from pathlib import Path
 import asyncio
 import inspect
 import subprocess
+from collections.abc import Callable, Mapping
 from functools import partial
+from importlib import import_module
+from pathlib import Path
 from typing import Any
 
+from acta.filesystem.operations import filesystem_operation
 from acta.safety.types import DecisionKind
 from acta.tools.contracts import ToolResult
-from acta.filesystem.operations import filesystem_operation, FileSystemResult
-
 
 LegacyHandler = Callable[[Mapping[str, object]], ToolResult]
 
@@ -244,7 +243,7 @@ async def shell_exec_handler(
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return ToolResult(
@@ -328,9 +327,9 @@ def vision_analyze(args: Mapping[str, object]) -> ToolResult:
         )
 
     try:
-        from acta.vision.provider import LocalVisionProvider
         from acta.vision.engine import build_engine as build_vision_engine
-        from providers.contracts import VisionRequest, ModelInfo
+        from acta.vision.provider import LocalVisionProvider
+        from providers.contracts import ModelInfo, VisionRequest
         from providers.errors import ProviderError
 
         try:
@@ -415,7 +414,6 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
         )
 
     try:
-        import inspect
         import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -483,7 +481,6 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
         )
 
     try:
-        import inspect
         import tempfile
 
         repo_root = Path.cwd()

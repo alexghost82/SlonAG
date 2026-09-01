@@ -7,13 +7,7 @@ before reaching the relevance filter or downstream action.
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 
-from acta.proactive.errors import (
-    CODE_SPAM_DETECTED,
-    ProactiveError,
-    SpamDetectedError,
-)
 from acta.proactive.types import AntiSpamSnapshot, ProactiveEvent
 
 

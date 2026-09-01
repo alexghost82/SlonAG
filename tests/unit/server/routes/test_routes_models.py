@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from server.routes._common import DevicePrincipal
-from server.routes.models import ModelsHandler
+from server.routes.models import ModelsHandler, ModelStore
 from server.schemas import CODE_APPROVAL_REQUIRED
 
 
@@ -14,13 +14,22 @@ def test_models_list_unauthenticated_returns_401() -> None:
 
 
 def test_models_list_and_activate() -> None:
-    handler = ModelsHandler()
+    from server.schemas import ModelInfo
+
+    mock_model = ModelInfo(
+        id="mock-model",
+        provider_id="mock",
+        display_name="Mock Model",
+        active=False,
+    )
+    store = ModelStore(models=(mock_model,))
+    handler = ModelsHandler(store=store)
     principal = DevicePrincipal(device_id="dev_ok")
     listed = handler.list_models(principal=principal)
     assert listed.status_code == 200
     models = listed.body["models"]
     assert isinstance(models, list)
-    assert models
+    assert len(models) >= 1
 
     activated = handler.activate(
         principal=principal,

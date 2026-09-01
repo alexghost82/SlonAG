@@ -5,19 +5,20 @@ so detection/tracking tests don't depend on external model weights.
 """
 
 from acta.vision.fixtures.image import (
-    create_test_image,
-    create_moving_object_image,
     create_grid_image,
-    create_text_image,
+    create_moving_object_image,
     create_person_roi,
+    create_test_image,
+    create_text_image,
 )
 from acta.vision.fixtures.video import (
     create_test_video,
 )
+
 try:
     from acta.vision.fixtures.rtsp import (
-        create_rtsp_fixture,
         RTSPFixture,
+        create_rtsp_fixture,
     )
 except ImportError:
     # cv2/rtsp unavailable without OpenCV installed

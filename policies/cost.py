@@ -12,7 +12,7 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +54,7 @@ class CostLedger:
     ) -> None:
         self.path = Path(path)
         self._reject_memory_path(self.path)
-        self._now = now or (lambda: datetime.now(timezone.utc))
+        self._now = now or (lambda: datetime.now(UTC))
 
     @property
     def daily(self) -> UsageTotals:
@@ -121,9 +121,9 @@ class CostLedger:
     def _period_keys(self) -> tuple[str, str]:
         now = self._now()
         if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
+            now = now.replace(tzinfo=UTC)
         else:
-            now = now.astimezone(timezone.utc)
+            now = now.astimezone(UTC)
         return now.date().isoformat(), now.strftime("%Y-%m")
 
     def _totals(self, period: str) -> UsageTotals:

@@ -34,7 +34,7 @@ def _make_test_config(**overrides: object) -> McpServerConfig:
 class TestMcpIntegrationLifecycle:
     """Tests for the full MCP integration lifecycle."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_integration_start_discover_invoke(self) -> None:
         """MCP integration: start -> discover tools in registry -> invoke via handler."""
         policy = SafetyPolicy()
@@ -79,7 +79,7 @@ class TestMcpIntegrationLifecycle:
 
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_safety_policy_gates_mcp_tool(self) -> None:
         """SafetyPolicy gates MCP tool invocations through invoke_tool."""
         config = _make_test_config()
@@ -100,7 +100,7 @@ class TestMcpIntegrationLifecycle:
 
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_integration_not_initialized(self) -> None:
         """invoke_tool on unstarted integration returns error."""
         config = _make_test_config()
@@ -113,7 +113,7 @@ class TestMcpIntegrationLifecycle:
         assert not result.ok
         assert result.code == "mcp_not_initialized"
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_integration_stop_releases_client(self) -> None:
         """Stopping the integration releases the MCP client."""
         config = _make_test_config()
@@ -130,7 +130,7 @@ class TestMcpIntegrationLifecycle:
 class TestMcpIntegrationWithSafety:
     """Tests for SafetyPolicy integration with MCP tools."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_tool_through_safety(self) -> None:
         """MCP tool invocation flows through SafetyPolicy.authorize()."""
         config = _make_test_config()
@@ -166,7 +166,7 @@ class TestMcpIntegrationWithSafety:
 class TestMcpIntegrationRegistrySharing:
     """Tests that MCP tools flow into the shared registry used by AgentLoop."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_agentloop_sees_mcp_tools(self) -> None:
         """MCP tools registered in the shared registry are discoverable via registry.list()."""
         shared_registry = build_builtin_registry()
@@ -188,7 +188,7 @@ class TestMcpIntegrationRegistrySharing:
 
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_no_duplicate_registration(self) -> None:
         """Calling discover_tools twice does not register duplicate tools."""
         shared_registry = build_builtin_registry()

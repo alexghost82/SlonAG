@@ -7,15 +7,19 @@ import hashlib
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from gateway.store import GatewayStore
 from server.auth import (
-    DeviceCredential, DevicePrincipal, IssuedTokens, RateLimiter, TokenService,
+    DeviceCredential,
+    DevicePrincipal,
+    IssuedTokens,
+    RateLimiter,
+    TokenService,
     _RefreshRecord,
 )
 from server.pairing import PairingService, PairingStart

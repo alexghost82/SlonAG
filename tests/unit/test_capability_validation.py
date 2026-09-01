@@ -11,9 +11,16 @@ from __future__ import annotations
 
 import pytest
 
+try:
+    import tkinter  # noqa: F401
+    _HAS_TKINTER = True
+except ImportError:
+    _HAS_TKINTER = False
+
 from computer_control.capabilities import CapabilityDetector, CapabilityResult
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_detect_creates_detector():
     """Basic detection works."""
     det = CapabilityDetector.detect()
@@ -22,6 +29,7 @@ def test_detect_creates_detector():
     assert det._runtime_checked is False
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_validate_is_idempotent():
     """Calling validate() twice is a no-op."""
     det = CapabilityDetector.detect()
@@ -54,6 +62,7 @@ def test_validated_or_returns_static_before_validate():
     assert isinstance(result, CapabilityResult)
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_validate_populates_runtime_flags():
     """validate() sets validated flags for checked capabilities."""
     det = CapabilityDetector.detect()
@@ -67,6 +76,7 @@ def test_validate_populates_runtime_flags():
     assert "app_launch" in det._validated
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_validate_app_launch_subprocess():
     """validate() checks app_launch by actually running subprocess."""
     det = CapabilityDetector.detect()
@@ -81,6 +91,7 @@ def test_validate_app_launch_subprocess():
             assert result.supported is True
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_full_report_after_validate():
     """full_report() reflects validated capabilities."""
     det = CapabilityDetector.detect()

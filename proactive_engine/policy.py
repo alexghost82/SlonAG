@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from proactive.types import (
+from proactive_engine.types import (
     ProactiveAction,
     ProactiveAgentConfig,
     ProactiveDecision,

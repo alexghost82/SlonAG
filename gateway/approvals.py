@@ -33,7 +33,7 @@ class DurableApprovalCoordinator:
         timeout: float, session_id: str | None = None, run_id: str | None = None,
         tool_call_id: str | None = None,
     ) -> ApprovalRequest:
-        if not tool_call_id:
+        if not (tool_call_id or "").strip():
             raise ValueError("durable approval requires canonical tool_call_id")
         now = time.time()
         approval_id = str(uuid4())

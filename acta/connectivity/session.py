@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 from acta.connectivity.discovery import LANDevice, LANDeviceScanner
 from acta.connectivity.migration import LANRemoteMigration
@@ -21,11 +21,10 @@ from acta.connectivity.transport import LANTransport, LANTransportError, Transpo
 from acta.connectivity.types import (
     ConnectionConnectionReason,
     ConnectionInfo,
-    ConnectionState,
     ConnectionReason,
+    ConnectionState,
     ConnectivityMode,
     ConnectivityPolicy,
-    MigrationEvent,
     TransportKind,
 )
 

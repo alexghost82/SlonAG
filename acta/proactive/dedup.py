@@ -10,10 +10,6 @@ import hashlib
 import json
 import time
 
-from acta.proactive.errors import (
-    CODE_DUPLICATE_EVENT,
-    DuplicateEventError,
-)
 from acta.proactive.types import DedupState, ProactiveEvent
 
 # How long a fingerprint is considered "active" before it's

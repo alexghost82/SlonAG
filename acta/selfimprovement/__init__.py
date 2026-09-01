@@ -8,11 +8,16 @@ All changes are observable, readable, and logged.
 
 from __future__ import annotations
 
+from acta.selfimprovement import localized_strings
+from acta.selfimprovement.collector import MetricsCollector
+from acta.selfimprovement.pipeline import SelfImprovementPipeline
+from acta.selfimprovement.rules import generate_candidates
+from acta.selfimprovement.storage import _load_state, _save_state
 from acta.selfimprovement.types import (
     AuditAction,
     AuditEntry,
-    EvidenceType,
     EvaluationStatus,
+    EvidenceType,
     ImprovementCandidate,
     ImprovementCategory,
     ImprovementStatus,
@@ -26,11 +31,6 @@ from acta.selfimprovement.types import (
     SelfImprovementState,
     apply_bounded_change,
 )
-from acta.selfimprovement.collector import MetricsCollector
-from acta.selfimprovement.rules import generate_candidates
-from acta.selfimprovement.pipeline import SelfImprovementPipeline
-from acta.selfimprovement.storage import _load_state, _save_state
-from acta.selfimprovement import localized_strings
 
 __all__ = [
     # Types

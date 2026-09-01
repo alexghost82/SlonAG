@@ -5,10 +5,10 @@ No real WebSocket server, no ``0.0.0.0`` listen, no sockets.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Mapping
 
 from server.routes._common import DevicePrincipal
 from server.schemas import CODE_UNAUTHORIZED, ApiError

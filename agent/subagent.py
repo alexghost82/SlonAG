@@ -355,6 +355,14 @@ def _build_subagent_safety(
     return _BoundedSafetyPolicy(parent_policy, config.denied_tools)
 
 
+def _coerce_tool_source(tool_name: str) -> UntrustedSource:
+    """Safely coerce a tool name to a valid UntrustedSource enum value."""
+    try:
+        return UntrustedSource(tool_name)
+    except ValueError:
+        return UntrustedSource.TOOL_RESULT
+
+
 class _BoundedSafetyPolicy(SafetyPolicy):
     """SafetyPolicy wrapper that enforces tool denylists for subagents."""
 
@@ -382,7 +390,7 @@ class _BoundedSafetyPolicy(SafetyPolicy):
                 source=(
                     source
                     if isinstance(source, UntrustedSource)
-                    else UntrustedSource(tool_name)
+                    else _coerce_tool_source(tool_name)
                 ),
                 intent=intent,
                 args={},

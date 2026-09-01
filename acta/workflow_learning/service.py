@@ -15,13 +15,11 @@ All state transitions go through the service with validation.
 from __future__ import annotations
 
 import time
-import uuid
 from typing import Any
 
 from acta.safety.types import UntrustedSource
 from acta.workflow_learning.types import (
     ActionSequence,
-    ActionSequenceEvent,
     ExecutionRecord,
     ExecutionResult,
     ParameterSlot,
@@ -163,7 +161,7 @@ class WorkflowService:
             c.transition_to(WorkflowState.CANDIDATE)
             self.confidence.update(c)
             self.store.save_candidate(c)
-            return c, f"Moved to CANDIDATE state."
+            return c, "Moved to CANDIDATE state."
 
         elif c.state == WorkflowState.CANDIDATE:
             c.transition_to(WorkflowState.APPROVED)
@@ -338,7 +336,6 @@ class WorkflowService:
         self, candidate: WorkflowCandidate
     ) -> WorkflowTemplate:
         """Build a WorkflowTemplate from a parameterized candidate."""
-        import json
         step_descriptors = []
         for idx, step in enumerate(candidate.steps):
             # Build arg template from slots

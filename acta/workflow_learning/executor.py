@@ -12,18 +12,15 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
-from acta.safety import SafetyPolicy, authorize, risk_for, validate_args
-from acta.safety.types import DecisionKind, SafetyDecision, UntrustedSource
-
+from acta.safety import SafetyPolicy
+from acta.safety.types import DecisionKind, UntrustedSource
 from acta.workflow_learning.types import (
     ApprovalResult,
-    ExecutionRecord,
     ExecutionResult,
-    ParameterSlot,
-    StepDescriptor,
     StepExecutionResult,
     WorkflowCandidate,
     WorkflowTemplate,

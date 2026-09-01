@@ -8,7 +8,6 @@ AgentLoop prompt/context → response.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -67,8 +66,8 @@ class MemoryInjector:
         """
         if not self._retrieve_on_turn or not self._store.enabled:
             return ""
-        from acta.memory.retriever import MemoryRetriever
         from acta.memory.context import MemoryContextAssembler
+        from acta.memory.retriever import MemoryRetriever
 
         retriever = MemoryRetriever(
             self._store._db(),

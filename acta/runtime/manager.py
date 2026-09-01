@@ -12,13 +12,6 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from providers.local import (
-    DEFAULT_LLAMA_CPP_BASE_URL,
-    DEFAULT_LOCAL_BASE_URL,
-    DEFAULT_OLLAMA_BASE_URL,
-)
-from providers.local.endpoint import is_loopback_url
-
 from acta.runtime.errors import (
     CODE_NOT_RUNNING,
     CODE_OK,
@@ -30,6 +23,12 @@ from acta.runtime.errors import (
     RuntimeManagerError,
     runtime_message_ru,
 )
+from providers.local import (
+    DEFAULT_LLAMA_CPP_BASE_URL,
+    DEFAULT_LOCAL_BASE_URL,
+    DEFAULT_OLLAMA_BASE_URL,
+)
+from providers.local.endpoint import is_loopback_url
 
 CLOUD_FALLBACK_ENABLED = False
 

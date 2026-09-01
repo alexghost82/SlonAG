@@ -7,6 +7,7 @@ They must never include API keys, tokens, or other secrets.
 from __future__ import annotations
 
 from i18n import t
+
 CODE_OK = "ok"
 CODE_OOM = "oom"
 CODE_NOT_RUNNING = "not_running"

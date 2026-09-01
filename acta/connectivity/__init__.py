@@ -9,12 +9,12 @@ This package provides the full connectivity stack for Slon:
 """
 
 from acta.connectivity import types
-from acta.connectivity.discovery import LANDeviceScanner, LANDevice
-from acta.connectivity.transport import LANTransport, LANTransportError
-from acta.connectivity.session import ConnectivitySession, ConnectivitySessionError
+from acta.connectivity.discovery import LANDevice, LANDeviceScanner
 from acta.connectivity.migration import LANRemoteMigration
 from acta.connectivity.monitor import ConnectivityMonitor
 from acta.connectivity.remote import RemoteAdapter, RemoteAdapterError
+from acta.connectivity.session import ConnectivitySession, ConnectivitySessionError
+from acta.connectivity.transport import LANTransport, LANTransportError
 
 __all__ = [
     "LANDeviceScanner",

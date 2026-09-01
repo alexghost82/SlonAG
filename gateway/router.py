@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import inspect
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Awaitable, Callable
 from uuid import uuid4
 
 from gateway.contracts import GatewayEnvelope, GatewayProtocolError, utc_timestamp

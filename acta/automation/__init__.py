@@ -4,8 +4,8 @@ from __future__ import annotations
 from acta.automation.engine import (
     AutomationEngine,
     AutomationRecord,
-    CronScheduler,
     CronParser,
+    CronScheduler,
     OneShotTrigger,
     RecurringTrigger,
     SimpleAutomationEngine,

@@ -6,6 +6,7 @@ Messages must never include API keys, tokens, file payloads, or other secrets.
 from __future__ import annotations
 
 from i18n import t
+
 CODE_OK = "ok"
 CODE_TOO_LARGE = "too_large"
 CODE_BAD_MIME = "bad_mime"

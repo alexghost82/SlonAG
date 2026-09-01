@@ -6,11 +6,10 @@ boundary allows it).
 """
 from __future__ import annotations
 
-import time
 import logging
-from typing import Any
+import time
 
-from acta.proactive.types import ProactiveAction, ProactiveDecision
+from acta.proactive.types import ProactiveDecision
 
 logger = logging.getLogger(__name__)
 

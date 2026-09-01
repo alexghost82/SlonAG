@@ -9,29 +9,27 @@ Each spec provides:
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 
 from acta.filesystem.operations import (
     FileSystemResult,
-    filesystem_operation,
-    read,
-    write,
-    create_file,
-    create_directory,
-    list_directory,
-    search,
-    metadata,
-    disk_usage,
     copy,
-    move,
-    rename,
-    trash,
+    create_directory,
+    create_file,
     delete,
+    disk_usage,
+    filesystem_operation,
+    list_directory,
+    metadata,
+    move,
     organize_desktop,
+    read,
+    rename,
+    search,
+    trash,
+    write,
 )
 from acta.safety.types import RiskLevel
 from acta.tools.contracts import SideEffectClass, ToolSpec
-
 
 # ---------------------------------------------------------------------------
 # Schema helpers

@@ -1,8 +1,10 @@
 """Session engine for isolation tests."""
 from __future__ import annotations
+
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+
 
 @dataclass
 class SessionContext:

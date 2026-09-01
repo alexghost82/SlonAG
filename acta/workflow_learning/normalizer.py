@@ -12,13 +12,11 @@ from __future__ import annotations
 
 import re
 import threading
-import time
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
 from acta.workflow_learning.types import ParameterSlot, WorkflowCandidate, WorkflowStep
-
 
 # Pattern detectors
 _URL_RE = re.compile(r'^https?://')

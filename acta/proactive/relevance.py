@@ -9,13 +9,6 @@ Each source_type can have its own default weight.
 """
 from __future__ import annotations
 
-import time
-from typing import Any
-
-from acta.proactive.errors import (
-    CODE_RELEVANCE_TOO_LOW,
-    RelevanceTooLowError,
-)
 from acta.proactive.types import (
     EventSource,
     ProactiveAction,

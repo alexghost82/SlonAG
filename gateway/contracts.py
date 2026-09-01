@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from i18n import t
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Mapping
+
+from i18n import t
 
 MAX_ENVELOPE_BYTES = 256 * 1024
 ALLOWED_NAMESPACES = frozenset(
@@ -22,7 +23,7 @@ class GatewayProtocolError(ValueError):
 
 
 def utc_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,7 @@ class GatewayEnvelope:
         return raw
 
     @classmethod
-    def from_json(cls, raw: bytes | str) -> "GatewayEnvelope":
+    def from_json(cls, raw: bytes | str) -> GatewayEnvelope:
         encoded = raw.encode("utf-8") if isinstance(raw, str) else raw
         if len(encoded) > MAX_ENVELOPE_BYTES:
             raise GatewayProtocolError("oversized_frame", t("error.oversized_frame"))

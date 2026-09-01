@@ -6,9 +6,7 @@ acquisition pipeline with video input.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any
 
 
 def create_test_video(

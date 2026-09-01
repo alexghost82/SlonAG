@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+try:
+    import tkinter  # noqa: F401
+    _HAS_TKINTER = True
+except ImportError:
+    _HAS_TKINTER = False
+
+import pytest
+
 from server.app import DesktopControlApp, MockResponse
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_no_cors_when_no_origins_configured() -> None:
     """With no allowed origins, every response must carry no CORS header."""
     app = DesktopControlApp()
@@ -12,6 +21,7 @@ def test_no_cors_when_no_origins_configured() -> None:
     assert response._cors_origin is None
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_no_cors_when_origin_not_whitelisted() -> None:
     """Origin not in the whitelist must not receive CORS headers."""
     app = DesktopControlApp(cors_allowed_origins=["https://allowed.com"])
@@ -22,6 +32,7 @@ def test_no_cors_when_origin_not_whitelisted() -> None:
     assert response._cors_origin is None
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_cors_origin_set_when_whitelisted() -> None:
     """Whitelisted origin must appear in the response's CORS field."""
     app = DesktopControlApp(cors_allowed_origins=["https://allowed.com"])
@@ -86,6 +97,7 @@ def test_cors_header_on_unauthenticated_routes_when_whitelisted() -> None:
     assert response.status_code == 401  # still 401, but CORS header present
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_cors_empty_list_is_no_cors() -> None:
     """Explicit empty whitelist must not allow any origin."""
     app = DesktopControlApp(cors_allowed_origins=[])

@@ -12,8 +12,9 @@ import hashlib
 import logging
 import ssl
 import time
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class TransportConfig:
         return f"{self.scheme}://{self.host}:{self.port}"
 
     @classmethod
-    def from_lan_device(cls, device: Any) -> "TransportConfig":
+    def from_lan_device(cls, device: Any) -> TransportConfig:
         """Build transport config from a LANDevice or DiscoveredDevice."""
         fingerprint = getattr(device, "fingerprint", "") or ""
         return cls(
@@ -312,10 +313,8 @@ async def _open_websocket_stdlib(
     """
     import asyncio
     import base64
-    import hashlib
     import random
     import re
-
     from urllib.parse import urlparse
 
     parsed = urlparse(url)

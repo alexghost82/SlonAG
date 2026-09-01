@@ -11,7 +11,7 @@ import time
 import threading
 from typing import Any
 
-from proactive.types import ProactiveTrigger
+from proactive_engine.types import ProactiveTrigger
 
 
 class TriggerDeduper:

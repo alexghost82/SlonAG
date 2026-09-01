@@ -9,7 +9,6 @@ from enum import StrEnum
 
 from acta.safety.types import RiskLevel
 
-
 _TOOL_NAME_PATTERN = re.compile(r"^[a-z0-9_.-]+$")
 
 

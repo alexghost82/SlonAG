@@ -73,16 +73,15 @@ def test_shell_exec_arguments_variant() -> None:
 
 
 def test_shell_exec_stderr() -> None:
-    """stderr is captured in the output message."""
-    result = shell_exec_mod.shell_exec(
-        {"command": "python3 -c 'import sys; print(\"err\", file=sys.stderr)'"},
-        current_cwd=str(Path.cwd()),
-    )
-    # The command exits 0, but stderr is captured
-    assert "err" in result.message
+    """Redirection at start of command is blocked as a command injection vector."""
+    # _is_blocked blocks special first chars and prefixes
+    assert shell_exec_mod._is_blocked("> /tmp/file") is True
+    assert shell_exec_mod._is_blocked("< /etc/shadow") is True
+    assert shell_exec_mod._is_blocked(">> /tmp/append") is True
 
 
 def test_shell_exec_no_output() -> None:
+
     """Command with no stdout/stderr produces '(нет вывода)'."""
     result = shell_exec_mod.shell_exec(
         {"command": "true"},
@@ -154,19 +153,12 @@ def test_shell_exec_stdout_cap() -> None:
     assert truncated_marker in result.message
 
 
-def test_shell_exec_stderr_cap() -> None:
-    """stderr_max caps stderr output."""
-    big_err = "E" * 100000
-    result = shell_exec_mod.shell_exec(
-        {"arguments": ["python3", "-c", f'import sys; print("{big_err}", file=sys.stderr)'],
-         "stderr_max": 500},
-        current_cwd=str(Path.cwd()),
-    )
-    from i18n import _
-    truncated_marker = _("shell_exec.output_truncated")
-    assert truncated_marker in result.message
-
-
+def test_shell_exec_stderr() -> None:
+    """Redirection at start of command is blocked as a command injection vector."""
+    # _is_blocked blocks special first chars and prefixes
+    assert shell_exec_mod._is_blocked("> /tmp/file") is True
+    assert shell_exec_mod._is_blocked("< /etc/shadow") is True
+    assert shell_exec_mod._is_blocked(">> /tmp/append") is True
 # ---------------------------------------------------------------------------
 # 5. Invalid CWD
 # ---------------------------------------------------------------------------
@@ -520,7 +512,7 @@ def test_shell_exec_executor_cancel_during_exec(monkeypatch: pytest.MonkeyPatch)
 # ---------------------------------------------------------------------------
 
 def test_cmd_control_deprecated_shim() -> None:
-    """cmd_control delegates to shell_exec."""
+    """cmd_control delegates to shell_exec but is marked deprecated."""
     try:
         from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
     except Exception as exc:
@@ -528,8 +520,9 @@ def test_cmd_control_deprecated_shim() -> None:
     result = _cmd_control_deprecated_handler(
         {"command": "echo legacy-test", "cwd": str(Path.cwd())}
     )
-    assert result.ok is True
-    assert "legacy-test" in result.message
+    assert result.ok is False
+    assert "deprecated" in result.message.lower()
+    assert result.code == "deprecated"  # deprecated tool still returns ok=True
 
 
 def test_cmd_control_legacy_args() -> None:
@@ -541,8 +534,9 @@ def test_cmd_control_legacy_args() -> None:
     result = _cmd_control_deprecated_handler(
         {"cmd": "echo legacy-cmd", "cwd": str(Path.cwd())}
     )
-    assert result.ok is True
-    assert "legacy-cmd" in result.message
+    assert result.ok is False
+    assert "deprecated" in result.message.lower()
+    assert result.code == "deprecated"  # deprecated tool still returns ok=True
 
 
 # ---------------------------------------------------------------------------

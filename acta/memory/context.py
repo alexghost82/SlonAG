@@ -10,7 +10,6 @@ from acta.memory.errors import MemoryPolicyError
 from acta.memory.policy import MemoryPolicy
 from acta.memory.retriever import ContextChunk, RetrievalResult
 
-
 MAX_MEMORY_CHUNKS = 10
 _MAX_MEMORY_BYTES = 4096  # Cap assembled context at ~4 KB
 DEFAULT_MEMORY_PREFIX = "# CONTEXT — PERSONAL MEMORY (trustworthy, up-to-date)"

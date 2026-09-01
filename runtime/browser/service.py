@@ -105,9 +105,20 @@ class BrowserService:
 
     def stop(self) -> None:
         """Close browser and stop the background thread."""
-        self.run(self._close_all())
+        # Close browser resources (best-effort)
+        try:
+            self.run(self._close_all())
+        except Exception:
+            pass
+        # Stop the event loop so the background thread can exit run_forever
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:
+                pass  # loop may have been closed by another thread
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=2)
+            self._thread.join(timeout=5)
             self._thread = None
 
     @property
@@ -236,7 +247,7 @@ class BrowserService:
         )
 
     def close(self) -> str:
-        return self.run(self._do_close_current_page)
+        return self.run(self._do_close_current_page())
 
     # ── Internal async methods ───────────────────────────────────────────
 

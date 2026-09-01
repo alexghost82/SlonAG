@@ -7,7 +7,6 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from typing import Any
 
 EventSink = Callable[[Mapping[str, object]], object]
 CommandHandler = Callable[[], object]

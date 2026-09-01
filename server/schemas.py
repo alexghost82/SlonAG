@@ -6,8 +6,8 @@ Messages and error envelopes never carry API keys or raw key material.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields, is_dataclass
-from typing import Any, Mapping
 
 API_VERSION_PREFIX = "/v1"
 
@@ -65,7 +65,7 @@ def api_message(code: str) -> str:
     Uses the catalog-backed translator (``tr``) so messages adapt
     to the active locale.  Falls back to English if a key is missing.
     """
-    from localization.translator import tr, MissingTranslationError
+    from localization.translator import MissingTranslationError, tr
 
     key = _ERROR_KEYS.get(code, _UNKNOWN_KEY)
     try:

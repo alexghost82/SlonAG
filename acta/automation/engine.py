@@ -20,23 +20,20 @@ import asyncio
 import json
 import logging
 import os
-import re
 import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-
-from enum import StrEnum
 
 from acta.automation.types import (
     AutomationExecution,
     AutomationHistoryEntry,
     AutomationJob,
-    AutomationRule,
     ConcurrencyPolicy,
     ExecutionStatus,
     RetryPolicy,
@@ -126,7 +123,7 @@ class CronParser:
                 base, step_s = part.split("/", 1)
                 step = int(step_s)
                 if step < 1:
-                    raise ValueError(f"cron step must be >= 1")
+                    raise ValueError("cron step must be >= 1")
                 if base == "*":
                     vals = list(range(lo, hi + 1))
                 elif "-" in base:
@@ -152,8 +149,7 @@ class CronParser:
                 from zoneinfo import ZoneInfo
                 tz = ZoneInfo("UTC")
             except ImportError:
-                from datetime import timezone
-                tz = timezone.utc
+                tz = UTC
 
         now = datetime.fromtimestamp(from_time, tz=tz)
         # Search up to ~1 year ahead (sufficient for all practical needs)
@@ -529,8 +525,7 @@ class AutomationEngine:
             try:
                 tz_str = _get_tz(job.timezone_str)
                 if tz_str == "UTC":
-                    from datetime import timezone as _tz
-                    tz_obj = _tz.utc
+                    tz_obj = UTC
                 else:
                     from zoneinfo import ZoneInfo
                     tz_obj = ZoneInfo(tz_str)

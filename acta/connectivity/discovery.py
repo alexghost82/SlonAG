@@ -12,8 +12,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, MutableSequence
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ class LANDeviceScanner:
 
     def _scan_zeroconf(self) -> list[LANDevice]:
         from zeroconf import IPVersion, Zeroconf
-        from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
+        from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 
         aiozc: AsyncZeroconf | None = None
         results: list[LANDevice] = []
@@ -276,7 +277,7 @@ async def _discover_all(aiozc: Any) -> list[LANDevice]:
         f"Slon Desktop Control.{SERVICE_TYPE}",
     )
     try:
-        await info.async_request(aiozc, int(3000))
+        await info.async_request(aiozc, 3000)
         dev = _make_lan_device(info)
         if dev:
             found.append(dev)
@@ -339,7 +340,6 @@ def _discover_sync(
     zc: Any, timeout: float = 5.0
 ) -> list[LANDevice]:
     """Synchronous discovery using zeroconf."""
-    import time as _time
 
     from zeroconf import ServiceStateChange
 

@@ -10,13 +10,13 @@ from sessions.contracts import (
     TranscriptKind,
     TranscriptState,
 )
-from sessions.engine import SessionEngine, SessionContext
+from sessions.engine import SessionContext, SessionEngine
 from sessions.manager import SessionManager
 from sessions.store import (
-    SessionStore,
-    SessionStoreError,
     SessionCorruptionError,
     SessionInactiveError,
+    SessionStore,
+    SessionStoreError,
 )
 from sessions.transcript import entry_fields, messages_from_entries
 

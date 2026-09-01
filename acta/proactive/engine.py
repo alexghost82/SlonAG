@@ -13,38 +13,26 @@ It only exposes the event ingestion API and internal processing pipeline.
 """
 from __future__ import annotations
 
-import time
 import logging
-import uuid
-from typing import Any, Callable
+from collections.abc import Callable
 
 from acta.proactive.anti_spam import AntiSpamFilter
 from acta.proactive.cooldown import CooldownManager
 from acta.proactive.dedup import EventDedup
 from acta.proactive.errors import (
-    CODE_INVALID_EVENT,
-    CODE_SPAM_DETECTED,
-    CODE_COOLDOWN_ACTIVE,
-    CODE_RELEVANCE_TOO_LOW,
-    CODE_ACTION_BLOCKED,
-    CODE_DUPLICATE_EVENT,
+    CooldownActiveError,
+    DuplicateEventError,
     InvalidEventError,
     SpamDetectedError,
-    CooldownActiveError,
-    RelevanceTooLowError,
-    ActionBlockedError,
-    DuplicateEventError,
 )
 from acta.proactive.permissions import PermissionBoundary, ProactiveAuthorization
 from acta.proactive.persistence import ProactivePersistence
 from acta.proactive.relevance import RelevanceFilter
 from acta.proactive.safe_actions import SafeActionExecutor
 from acta.proactive.types import (
-    EventSource,
     ProactiveAction,
     ProactiveDecision,
     ProactiveEvent,
-    ProactiveDecisionKind,
     RiskLevel,
 )
 
@@ -133,7 +121,7 @@ class ProactiveAgent:
         # Step 2: Dedup check
         if self._dedup.is_duplicate(event):
             raise DuplicateEventError(
-                f"Duplicate event (fingerprint collapsed within TTL)."
+                "Duplicate event (fingerprint collapsed within TTL)."
             )
 
         # Step 3: Cooldown check

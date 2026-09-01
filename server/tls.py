@@ -6,10 +6,10 @@ Personal/non-commercial use: generate a short-lived self-signed cert via the
 
 from __future__ import annotations
 
-import ssl
-import subprocess
 import ipaddress
 import os
+import ssl
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 

@@ -9,6 +9,14 @@ Covers:
 
 from __future__ import annotations
 
+try:
+    import tkinter  # noqa: F401
+    _HAS_TKINTER = True
+except ImportError:
+    _HAS_TKINTER = False
+
+import pytest
+
 from observability import RuntimeStatus, get_status, get_capability_report, is_capable
 
 
@@ -50,6 +58,7 @@ def test_runtime_status_to_dict():
     assert d["capabilities_ok"] is True
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_get_status_returns_structure():
     """get_status() returns a RuntimeStatus with expected fields."""
     status = get_status()
@@ -65,6 +74,7 @@ def test_get_status_returns_structure():
         assert key in d, f"Missing key in to_dict: {key}"
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_get_capability_report_has_validation():
     """capability report includes runtime validation metadata."""
     report = get_capability_report()
@@ -76,6 +86,7 @@ def test_get_capability_report_has_validation():
     assert "validated_capabilities" in report
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_is_capable_returns_bool():
     """is_capable() returns a bool for known capabilities."""
     for cap in ("input", "screenshot", "clipboard",
@@ -85,6 +96,7 @@ def test_is_capable_returns_bool():
         assert isinstance(result, bool), f"is_capable({cap!r}) returned {type(result)}"
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_capability_report_platform():
     """Report includes platform info from the detector."""
     report = get_capability_report()

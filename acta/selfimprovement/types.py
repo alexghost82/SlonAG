@@ -10,10 +10,9 @@ import dataclasses
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum, auto
 from typing import Any
-
 
 # ── Observations ──────────────────────────────────────────────
 
@@ -106,7 +105,7 @@ class AuditEntry:
         return d
 
     @staticmethod
-    def from_dict(d: dict[str, Any]) -> "AuditEntry":
+    def from_dict(d: dict[str, Any]) -> AuditEntry:
         return AuditEntry(
             action=AuditAction(d["action"]),
             timestamp=d.get("timestamp", 0.0),
@@ -263,8 +262,7 @@ class SelfImprovementRecord:
         return [e.to_dict() for e in self._audit_log]
 
     @staticmethod
-    def _record_from_dict(d: dict[str, Any]) -> "SelfImprovementRecord":
-        import dataclasses
+    def _record_from_dict(d: dict[str, Any]) -> SelfImprovementRecord:
         if dataclasses.is_dataclass(SelfImprovementRecord):
             # Convert enum values back
             for k, v in list(d.items()):
@@ -288,7 +286,6 @@ class SelfImprovementRecord:
         return SelfImprovementRecord(**d)
 
     def _to_dict(self) -> dict[str, Any]:
-        import dataclasses
         if dataclasses.is_dataclass(self):
             result = {}
             for f in dataclasses.fields(self):
@@ -360,8 +357,8 @@ def apply_bounded_change(
     action = change.get("action", "set")
 
     if target == "config":
+        from config.schema import SettingsValidationError
         from config.settings import load_settings, save_settings
-        from config.schema import Settings, SettingsValidationError
         try:
             settings = load_settings()
             rollback_data = settings.to_dict()
@@ -385,10 +382,10 @@ def apply_bounded_change(
             memory = load_memory()
             old_entry = memory.get("system", {}).get(prompt_key)
             rollback = {"type": "memory", "category": "system", "key": prompt_key, "old": old_entry}
-            update_memory({"system": {prompt_key: {"value": value, "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d")}}})
+            update_memory({"system": {prompt_key: {"value": value, "updated": datetime.now(UTC).strftime("%Y-%m-%d")}}})
         elif action_type == "prune_stale_entries":
             # Memory pruning: mark entries as stale (reversible)
-            from memory.memory_manager import update_memory, load_memory
+            from memory.memory_manager import load_memory, update_memory
             stale_count = change.get("stale_count", 0)
             memory = load_memory()
             # Snapshot the current memory state for rollback
@@ -396,7 +393,7 @@ def apply_bounded_change(
             # Store pruning metadata (non-destructive: just marks as stale)
             update_memory({
                 "audit": {
-                    "last_stale_prune_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "last_stale_prune_at": datetime.now(UTC).strftime("%Y-%m-%d"),
                     "pruned_count": stale_count,
                 }
             })
@@ -410,7 +407,7 @@ def apply_bounded_change(
             memory = load_memory()
             old_entry = memory.get(category, {}).get(key)
             rollback = {"type": "memory", "category": "category", "key": key, "old": old_entry}
-            update_memory({category: {key: {"value": value, "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d")}}})
+            update_memory({category: {key: {"value": value, "updated": datetime.now(UTC).strftime("%Y-%m-%d")}}})
 
     elif target == "timeout":
         # Adjust timeout in a known config path

@@ -135,7 +135,7 @@ def deterministic_img() -> str:
 class TestProviderAgentLoopResponse:
     """Test 1: provider UI → AgentLoop → Russian response."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_gemini_agentloop_russian(self):
         from providers.contracts import ChatRequest, ModelInfo, AssistantMessage
         from agent.runtime import AgentLoop, LoopBudget
@@ -161,7 +161,7 @@ class TestProviderAgentLoopResponse:
 class TestProviderOpenAIToolContinuation:
     """Test 2: OpenAI tool continuation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_openai_tool_chain(self):
         from providers.contracts import (
             ChatRequest, ModelInfo, AssistantToolCallMessage,
@@ -212,7 +212,7 @@ class TestProviderOpenAIToolContinuation:
 class TestProviderGeminiToolContinuation:
     """Test 3: Gemini tool continuation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_gemini_tool_chain(self):
         from providers.contracts import ModelInfo
         from agent.runtime import AgentLoop, LoopBudget
@@ -255,7 +255,7 @@ class TestProviderGeminiToolContinuation:
 class TestProviderOpenRouterToolContinuation:
     """Test 4: OpenRouter tool continuation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_openrouter_tool_chain(self):
         from providers.contracts import ModelInfo
         from agent.runtime import AgentLoop, LoopBudget
@@ -298,7 +298,7 @@ class TestProviderOpenRouterToolContinuation:
 class TestProviderOllamaLocal:
     """Test 5: Ollama / local provider."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_ollama_local_provider(self):
         from providers.contracts import ChatRequest, ModelInfo, ProviderStatus
 
@@ -329,7 +329,7 @@ class TestProviderOllamaLocal:
 class TestProviderLMStudio:
     """Test 6: LM Studio / OpenAI-compatible provider."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_lmstudio_compatible(self):
         from providers.contracts import ChatRequest, ModelInfo
 
@@ -369,7 +369,7 @@ class TestProviderLMStudio:
 class TestShellTool:
     """Test 7: shell tool."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_shell_exec_tool(self):
         from acta.tools.legacy.adapters import legacy_handler_factory
         from acta.safety.registry import tool_spec
@@ -393,7 +393,7 @@ class TestShellTool:
 class TestFilesystemTool:
     """Test 8: filesystem tool."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_read_write_file(self, tmp_workspace: Path):
         from acta.tools.legacy import LEGACY_HANDLERS
 
@@ -417,7 +417,7 @@ class TestFilesystemTool:
 class TestComputerTool:
     """Test 9: computer / desktop tool."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_desktop_control(self):
         from acta.tools.legacy import LEGACY_HANDLERS
 
@@ -432,7 +432,7 @@ class TestComputerTool:
 class TestBrowserTool:
     """Test 10: browser tool."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_browser_control(self):
         from acta.tools.legacy import LEGACY_HANDLERS
 
@@ -451,7 +451,7 @@ class TestBrowserTool:
 class TestVisionTools:
     """Test 11: image/screen Vision."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_vision_analyze(self, deterministic_img: str):
         from acta.tools.legacy import LEGACY_HANDLERS
 
@@ -473,7 +473,7 @@ class TestVisionTools:
 class TestRTSPVision:
     """Test 12: RTSP pipeline (deterministic)."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_rtsp_pipeline(self, tmp_path: Path):
         from acta.vision.fixtures.rtsp import create_rtsp_fixture
         from acta.vision.provider import VisionProvider
@@ -525,7 +525,7 @@ class TestRTSPVision:
 class TestTemporalVision:
     """Test 13: persistent tracking + temporal Vision."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_temporal_tracking(self, tmp_path: Path):
         from acta.vision.config import VisionConfig
         from acta.vision.fixtures.image import create_test_image
@@ -558,7 +558,7 @@ class TestTemporalVision:
 class TestVisionComputerClosedLoop:
     """Test 15: Vision→Computer closed loop."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_vision_to_computer_loop(self, tmp_path: Path):
         # Mock pyautogui before any import to avoid tkinter requirement on headless systems
         from unittest.mock import MagicMock as _MagicMock
@@ -617,7 +617,7 @@ class TestVisionComputerClosedLoop:
 class TestSemanticMemory:
     """Test 16: semantic memory."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_memory_crud(self, tmp_path: Path):
         from acta.memory.repository import MemoryRepository
 
@@ -640,7 +640,7 @@ class TestSemanticMemory:
 class TestPreferencesCorrections:
     """Test 17: preferences / corrections."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_memory_preference_update(self, tmp_path: Path):
         from acta.memory.repository import MemoryRepository
         from acta.memory.database import init_db
@@ -662,7 +662,7 @@ class TestPreferencesCorrections:
 class TestWorkflowLearning:
     """Test 18: workflow learning."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_workflow_observer(self):
         from acta.workflow_learning.observer import WorkflowObserver
         from acta.workflow_learning.store import WorkflowStore
@@ -681,7 +681,7 @@ class TestWorkflowLearning:
 class TestControlledImprovement:
     """Test 19: controlled improvement."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_confidence_tracking(self):
         from acta.workflow_learning.confidence import ConfidenceTracker
 
@@ -698,7 +698,7 @@ class TestControlledImprovement:
 class TestProviderIndependentVoice:
     """Test 20: provider-independent voice."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_voice_stt_tts(self):
         # STT check
         from acta.tools.legacy import LEGACY_HANDLERS
@@ -724,7 +724,7 @@ class TestProviderIndependentVoice:
 class TestMCPIntegration:
     """Test 21: MCP tool server."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_client_connect(self):
         from acta.mcp.client import MCPClient
 
@@ -736,7 +736,7 @@ class TestMCPIntegration:
 class TestSubagent:
     """Test 22: Subagent."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_creation(self):
         from agent.subagent import SubagentSession
 
@@ -750,7 +750,7 @@ class TestSubagent:
 class TestParentSubagentMCP:
     """Test 23: Parent → Subagent → MCP."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_parent_subagent_mcp_chain(self):
         from agent.subagent import SubagentSession
         from acta.mcp.client import MCPClient
@@ -771,7 +771,7 @@ class TestParentSubagentMCP:
 class TestAutomation:
     """Test 24: automation engine."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_automation_engine(self):
         from acta.automation.engine import AutomationEngine
         from acta.automation.types import AutomationRule
@@ -790,7 +790,7 @@ class TestAutomation:
 class TestRestartAutomation:
     """Test 25: restart automation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_automation_restart(self):
         from acta.automation.engine import AutomationEngine
 
@@ -810,9 +810,9 @@ class TestRestartAutomation:
 class TestProactiveAgent:
     """Test 26: proactive agent."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_proactive_scheduler(self):
-        from proactive.scheduler import ProactiveScheduler
+        from proactive_engine.scheduler import ProactiveScheduler
 
         scheduler = ProactiveScheduler()
         scheduler.start()
@@ -836,7 +836,7 @@ class TestProactiveAgent:
 class TestGatewayApproval:
     """Test 27: Gateway agent/approval/tool/result."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_gateway_approval_flow(self):
         from gateway.approvals import ApprovalGate
 
@@ -855,7 +855,7 @@ class TestGatewayApproval:
 class TestServerRoutes:
     """Test 28: Server canonical routes."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_server_routes_exist(self):
         from server.schemas import (
             ChatRequestSchema, SessionCreateSchema, ToolResultSchema,
@@ -875,7 +875,7 @@ class TestServerRoutes:
 class TestDocumentsRetrieval:
     """Test 29: documents retrieval."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_document_ingest(self, tmp_path: Path):
         docs_path = tmp_path / "docs"
         docs_path.mkdir()
@@ -893,7 +893,7 @@ class TestDocumentsRetrieval:
 class TestLanDiscovery:
     """Test 30: LAN discovery / pairing / TLS."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_pairing_store(self):
         from server.pairing import PairingStore
         from server.tls import load_or_create_tls
@@ -912,7 +912,7 @@ class TestLanDiscovery:
 class TestRemoteFallback:
     """Test 31: remote fallback policy."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_fallback_policy(self):
         from providers.router import Router, FallbackPolicy
 
@@ -939,7 +939,7 @@ class TestRemoteFallback:
 class TestCancelProvider:
     """Test 33: cancellation — provider."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_provider_cancel(self):
         from agent.runtime import AgentLoop, LoopBudget
         from providers.contracts import ModelInfo
@@ -966,7 +966,7 @@ class TestCancelProvider:
 class TestCancelShell:
     """Test 33: cancellation — shell."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_shell_cancel(self):
         import asyncio.subprocess
         with patch("asyncio.create_subprocess_shell") as mock_create:
@@ -985,7 +985,7 @@ class TestCancelShell:
 class TestCancelBrowser:
     """Test 34: cancellation — browser."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_browser_cancel(self):
         from acta.tools.legacy import LEGACY_HANDLERS
 
@@ -1003,7 +1003,7 @@ class TestCancelBrowser:
 class TestCancelVision:
     """Test 35: cancellation — Vision."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_vision_cancel(self, tmp_path: Path):
         from acta.vision.config import VisionConfig
         from acta.vision.fixtures.image import create_test_image
@@ -1028,7 +1028,7 @@ class TestCancelVision:
 class TestCancelMCPSubagent:
     """Test 36: cancellation — MCP/Subagent."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_subagent_cancel(self):
         from acta.mcp.client import MCPClient
         from agent.subagent import SubagentSession
@@ -1050,7 +1050,7 @@ class TestCancelMCPSubagent:
 class TestWorkspaceIsolation:
     """Test 37: workspace isolation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_workspace_isolation(self, tmp_path: Path):
         from acta.filesystem.security import validate_path
 
@@ -1070,7 +1070,7 @@ class TestWorkspaceIsolation:
 class TestSessionIsolation:
     """Test 38: session isolation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_session_isolation(self):
         from sessions.engine import SessionEngine
         from sessions import ModelPolicy, TranscriptKind
@@ -1089,7 +1089,7 @@ class TestSessionIsolation:
 class TestMemoryIsolation:
     """Test 39: memory isolation."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_memory_isolation(self, tmp_path: Path):
         from acta.memory.repository import MemoryRepository
         from acta.memory.database import init_db
@@ -1115,7 +1115,7 @@ class TestMemoryIsolation:
 class TestPathTraversalSymlink:
     """Test 40: path traversal / symlink."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_path_traversal_blocked(self, tmp_path: Path):
         from acta.filesystem.security import validate_path
 
@@ -1156,7 +1156,7 @@ class TestSSRF:
 class TestRevokedCredentials:
     """Test 42: revoked / expired credentials."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_missing_api_key(self):
         from providers.router import Router, ProviderAuthError
         from providers.contracts import ModelInfo
@@ -1182,7 +1182,7 @@ class TestRevokedCredentials:
 class TestUncertainRecovery:
     """Test 43: uncertain side-effect recovery."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_recovery_after_failure(self):
         from agent.runtime import AgentLoop, LoopBudget, AgentLoopResult
         from providers.contracts import ModelInfo
@@ -1229,7 +1229,7 @@ class TestSecretRedaction:
 class TestFirstRunRestart:
     """Test 45: first-run → restart → production boot."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_first_run_startup(self, tmp_path: Path):
         """Simulate first-run → initial AgentLoop execution → restart → production mode."""
         from agent.runtime import AgentLoop, LoopBudget
@@ -1281,7 +1281,7 @@ class TestFirstRunRestart:
 class TestE2EConsistency:
     """Extra E2E: ensure all pieces connect end-to-end."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_full_provider_to_agentloop_chain(self):
         """Test 1-6 combined: full chain works for a provider."""
         from providers.contracts import ModelInfo
@@ -1301,7 +1301,7 @@ class TestE2EConsistency:
         assert result.ok is True
         assert result.final_answer is not None
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_tool_chain_e2e(self, tmp_workspace: Path):
         """E2E: model → tool call → execution → model → answer."""
         from providers.contracts import ModelInfo

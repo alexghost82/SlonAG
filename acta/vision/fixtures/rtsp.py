@@ -7,11 +7,6 @@ enabling deterministic E2E testing of the RTSP frame acquisition path.
 from __future__ import annotations
 
 import asyncio
-import struct
-import threading
-import time
-from pathlib import Path
-from typing import Any
 
 import cv2 as cv  # type: ignore[import-untyped]
 import numpy as np  # type: ignore[import-untyped]
@@ -145,7 +140,7 @@ class RTSPFixture:
                     writer.write(size + frame)
                     await writer.drain()
                 await asyncio.sleep(1.0 / self.fps)
-        except (asyncio.TimeoutError, ConnectionResetError):
+        except (TimeoutError, ConnectionResetError):
             pass
         finally:
             writer.close()

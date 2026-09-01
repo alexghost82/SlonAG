@@ -16,23 +16,23 @@ import config.secret_scan as m
 # ---------------------------------------------------------------------------
 
 # GCP key: AIza + 34 alphanumeric = 38 total
-_SENTINEL_GCP = "AIza" + "SyA1234567890abcdefghijklmnopqrstu"
+_SENTINEL_GCP = "AIzaSyA1234567890abcdefghijklmnopqrstuv"
 # OpenAI key: sk- + 26 alphanumeric = 29 total
-_SENTINEL_OPENAI = "sk-abcdefghijklmnopqrstuvwxyz012345"
+_SENTINEL_OPENAI = "sk-abcdefghij1234567890"
 # GitHub PAT: ghp_ + 20 alphanumeric = 24 total
-_SENTINEL_GITHUB = "ghp_abcdefghijklmnopqrstuvwx"
+_SENTINEL_GITHUB = "ghp_abcdefghijklmnop12345"
 # AWS key: AKIA + 16 uppercase alphanum = 20 total
 _SENTINEL_AWS = "AKIAIOSFODNN7EXAMPLE"
 # Bearer token: "Bearer " + 64 chars
-_SENTINEL_BEARER = "Bearer " + "eyJhbGciOiJIUzI1NiJ9.dGVzdC50b2tlbg.token_signature_forty_characters_or_more"
+_SENTINEL_BEARER = "Bearer abcdefghij1234567890ABCDEFGHIJ1234567890"
 # Slack token
-_SENTINEL_SLACK = "xoxb-123456789012-1234567890123-abcdefghijklmnopqrstuvwx"
+_SENTINEL_SLACK = "xoxb-abcdefghij1234567890"
 # Stripe key
-_SENTINEL_STRIPE = "sk_test_abcdefghijklmnopqrstuvwx"
+_SENTINEL_STRIPE = "sk_live_abcdefghij1234567890"
 # Anthropic key
-_SENTINEL_ANTHROPIC = "sk-ant-abcdefghijklmnopqrstuvwxyz0123456789"
+_SENTINEL_ANTHROPIC = "sk-ant-abcdefghij1234567890"
 # Password assignment
-_SENTINEL_ASSIGN = "api_key = abcdefghijklmnopqrstuvwxyz012345"
+_SENTINEL_ASSIGN = "api_key = my_fake_placeholder"
 
 # Safe values that must NOT trigger any pattern.
 _SAFE_NOT_REAL = [

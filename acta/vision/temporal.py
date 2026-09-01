@@ -8,13 +8,15 @@ queries for AgentLoop consumption.
 from __future__ import annotations
 
 import time
-import collections
 from dataclasses import dataclass, field
 from typing import Any
 
 from acta.vision.types import (
-    Bbox, DetectionKind, DetectionResult, FrameEvent, FrameSource,
-    FrameEvent as Event, TrackEvent,
+    DetectionResult,
+    TrackEvent,
+)
+from acta.vision.types import (
+    FrameEvent as Event,
 )
 
 

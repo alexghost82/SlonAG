@@ -6,24 +6,18 @@ Every operation is guarded by the security policy in ``security.py``.
 
 from __future__ import annotations
 
-import os
 import shutil
 import threading
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from acta.filesystem.security import (
-    MAX_FILE_SIZE,
     MAX_READ_BYTES,
-    MAX_WRITE_BYTES,
-    AllowlistRoots,
     Cancelled,
     PathDenied,
     SizeExceeded,
-    SymlinkEscape,
     TraversalDetected,
     _check_cancel,
     _is_forbidden_system_path,
@@ -66,11 +60,11 @@ class FileSystemResult:
     warnings: tuple[str, ...] = ()
 
     @classmethod
-    def _ok(cls, message: str = "", data: Any = None) -> "FileSystemResult":
+    def _ok(cls, message: str = "", data: Any = None) -> FileSystemResult:
         return cls(ok=True, code="ok", message=message, data=data)
 
     @classmethod
-    def err(cls, code: str, message: str) -> "FileSystemResult":
+    def err(cls, code: str, message: str) -> FileSystemResult:
         return cls(ok=False, code=code, message=message)
 
 
@@ -498,7 +492,7 @@ def copy(
     except FileExistsError:
         return FileSystemResult.err("exists", f"Destination exists: {dest}")
     except PermissionError:
-        return FileSystemResult.err("permission_denied", f"Permission denied.")
+        return FileSystemResult.err("permission_denied", "Permission denied.")
     except OSError as exc:
         return FileSystemResult.err("copy_error", f"Cannot copy: {exc}")
 
@@ -543,7 +537,7 @@ def move(
         shutil.move(str(src), str(dest))
         return FileSystemResult._ok(message=f"Moved: {src.name} → {dest.parent.name}/")
     except PermissionError:
-        return FileSystemResult.err("permission_denied", f"Permission denied.")
+        return FileSystemResult.err("permission_denied", "Permission denied.")
     except OSError as exc:
         return FileSystemResult.err("move_error", f"Cannot move: {exc}")
 
@@ -585,7 +579,7 @@ def rename(
         target.rename(new_path)
         return FileSystemResult._ok(message=f"Renamed: {target.name} → {new_name}")
     except PermissionError:
-        return FileSystemResult.err("permission_denied", f"Permission denied.")
+        return FileSystemResult.err("permission_denied", "Permission denied.")
     except OSError as exc:
         return FileSystemResult.err("rename_error", f"Cannot rename: {exc}")
 
@@ -630,7 +624,7 @@ def trash(
             target.unlink()
         return FileSystemResult._ok(message=f"Deleted: {target.name}")
     except PermissionError:
-        return FileSystemResult.err("permission_denied", f"Permission denied.")
+        return FileSystemResult.err("permission_denied", "Permission denied.")
     except OSError as exc:
         return FileSystemResult.err("trash_error", f"Cannot trash {target}: {exc}")
 
@@ -668,7 +662,7 @@ def delete(
             target.unlink()
         return FileSystemResult._ok(message=f"Permanently deleted: {target.name}")
     except PermissionError:
-        return FileSystemResult.err("permission_denied", f"Permission denied.")
+        return FileSystemResult.err("permission_denied", "Permission denied.")
     except OSError as exc:
         return FileSystemResult.err("delete_error", f"Cannot delete {target}: {exc}")
 

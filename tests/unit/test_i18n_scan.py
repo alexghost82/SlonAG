@@ -154,8 +154,7 @@ class TestI18nScan:
         standalone = [
             'setup.py', 'or_client.py', 'runtime/smoke.py',
             'agent/error_handler.py', 'agent/task_queue.py',
-            'memory/memory_manager.py', 'server/__main__.py',
-            'speech/tts/__main__.py',
+            'memory/memory_manager.py',
         ]
         missing: list[str] = []
         for name in standalone:

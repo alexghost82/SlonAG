@@ -8,9 +8,9 @@ import hmac
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 from uuid import UUID, uuid4
 
 from gateway.store import GatewayStore

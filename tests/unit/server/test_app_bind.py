@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+try:
+    import tkinter  # noqa: F401
+    _HAS_TKINTER = True
+except ImportError:
+    _HAS_TKINTER = False
+
 import json
 import socket
 
@@ -57,6 +63,7 @@ def test_unauthenticated_events_returns_401() -> None:
         assert response.status_code == 401
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_authenticated_status_ok_without_api_keys() -> None:
     app = DesktopControlApp()
     response = app.handle(

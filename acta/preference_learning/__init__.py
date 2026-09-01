@@ -7,21 +7,21 @@ and decision influence hooks.
 
 from __future__ import annotations
 
-from acta.preference_learning.types import (
-    ConfidenceDecayPolicy,
-    LearningSource,
-    LearnedItem,
-    PreferenceAction,
-    PreferenceType,
-    PriorityLevel,
-    PreferenceVersion,
-    RetrievalContext,
+from acta.preference_learning.engine import (
+    PreferenceEngine,
 )
 from acta.preference_learning.repository import (
     PreferenceRepository,
 )
-from acta.preference_learning.engine import (
-    PreferenceEngine,
+from acta.preference_learning.types import (
+    ConfidenceDecayPolicy,
+    LearnedItem,
+    LearningSource,
+    PreferenceAction,
+    PreferenceType,
+    PreferenceVersion,
+    PriorityLevel,
+    RetrievalContext,
 )
 
 __all__ = [

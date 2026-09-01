@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Collection
 
 from config.schema import MODEL_ROLE_KEYS
-
 from providers.contracts import ModelInfo
 from providers.errors import CapabilityError
 

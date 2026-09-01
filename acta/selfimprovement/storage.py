@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .types import AuditAction, AuditEntry, SelfImprovementRecord, SelfImprovementState
+from .types import AuditEntry, SelfImprovementRecord, SelfImprovementState
 
 
 def _path() -> Path:

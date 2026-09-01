@@ -11,8 +11,6 @@ Requires explicit ``--consent``. Does not download on import.
 
 from __future__ import annotations
 
-from i18n import t
-
 import argparse
 import sys
 from pathlib import Path

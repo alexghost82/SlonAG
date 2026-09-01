@@ -7,8 +7,12 @@ from collections.abc import Mapping
 from acta.safety.errors import ArgValidationError
 from acta.safety.registry import (
     effective_risk,
-    risk_for as registry_risk_for,
     tool_spec,
+)
+from acta.safety.registry import (
+    risk_for as registry_risk_for,
+)
+from acta.safety.registry import (
     validate_args as registry_validate_args,
 )
 from acta.safety.types import (

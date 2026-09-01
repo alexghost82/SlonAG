@@ -16,12 +16,9 @@ It enforces:
 
 from __future__ import annotations
 
-import os
 import threading
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 # ---------------------------------------------------------------------------
 # System paths that are always forbidden regardless of allowlist membership.

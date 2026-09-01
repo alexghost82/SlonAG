@@ -10,8 +10,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from acta.tools.contracts import ToolResult
 from acta.preference_learning.engine import PreferenceEngine
+from acta.tools.contracts import ToolResult
 
 
 def build_preference_tools(base_dir: Path) -> dict[str, dict[str, Any]]:
@@ -164,7 +164,7 @@ def _pref_inspect(engine: PreferenceEngine):
 
 def _pref_add(engine: PreferenceEngine):
     def handler(args: Mapping[str, object]) -> ToolResult:
-        from acta.preference_learning.types import PreferenceType, PreferenceAction, PriorityLevel, LearningSource
+        from acta.preference_learning.types import LearningSource, PreferenceAction, PreferenceType, PriorityLevel
         key = str(args.get("key", ""))
         value = str(args.get("value", ""))
         if not key or not value:

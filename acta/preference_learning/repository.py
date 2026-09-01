@@ -5,18 +5,16 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Any
 
 from acta.preference_learning.types import (
     ConfidenceDecayPolicy,
+    LearnedItem,
     LearningSource,
     PreferenceAction,
     PreferenceType,
-    PriorityLevel,
-    LearnedItem,
     PreferenceVersion,
+    PriorityLevel,
     RetrievalContext,
-    _now,
 )
 
 
@@ -307,7 +305,7 @@ class PreferenceRepository:
             contradiction_evidence = json.loads(d.get("contradiction_evidence", "[]"))
         except (json.JSONDecodeError, TypeError):
             contradiction_evidence = []
-        
+
         # Load full version history from DB
         try:
             versions_list = json.loads(d.get("versions_history", "[]"))

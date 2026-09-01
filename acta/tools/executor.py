@@ -7,14 +7,13 @@ import inspect
 import queue
 import threading
 import time
-from dataclasses import replace
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 
-from acta.safety import DecisionKind, SafetyDecision, SafetyPolicy, UntrustedSource
+from acta.safety import DecisionKind, SafetyPolicy, UntrustedSource
 from acta.tools.contracts import ToolResult, ToolSpec
 from acta.tools.registry import ToolRegistry
-
 
 _CONFIRMATION_KINDS = frozenset(
     {DecisionKind.CONFIRM, DecisionKind.EXACT_CONFIRM, DecisionKind.BIOMETRIC}
@@ -323,7 +322,7 @@ class ToolExecutor:
                 outcome = await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
             else:
                 outcome = raw_result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             warning = (
                 "The handler did not finish before the deadline; an already running "
                 "legacy operation may continue."
@@ -415,7 +414,7 @@ class ToolExecutor:
                     results.put(asyncio.run(_async_call()))
                 else:
                     results.put(raw_result)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 results.put(_TIMED_OUT)
             except Exception as exc:
                 results.put(

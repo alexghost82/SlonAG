@@ -7,13 +7,13 @@ through an injected ``key_provider`` callable — this package never opens
 
 from __future__ import annotations
 
-from i18n import t
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from acta.bridge.control_plane import ControlPlaneUnavailable, DesktopControlPlane
+from i18n import t
 
 KeyProvider = Callable[[str], str | None]
 

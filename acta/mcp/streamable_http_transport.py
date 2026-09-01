@@ -6,12 +6,13 @@ a transport compatible with the existing McpClient interface.
 
 from __future__ import annotations
 
-from i18n import t
 import asyncio
 import json
 import logging
 import uuid
 from typing import Any
+
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,9 @@ class McpStreamableHttpTransport:
             raise RuntimeError("Транспорт уже остановлен")
 
         # Lazy import to avoid circular imports during pytest collection
-        from mcp.client.streamable_http import streamable_http_client
         import httpx
+
+        from mcp.client.streamable_http import streamable_http_client
 
         http_client = httpx.AsyncClient(
             timeout=self._make_timeout(),
@@ -195,7 +197,7 @@ class McpStreamableHttpTransport:
                 resp.raise_for_status()
                 result = resp.json()
                 return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(request_id, None)
             raise
         except asyncio.CancelledError:

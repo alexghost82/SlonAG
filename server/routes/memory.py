@@ -5,7 +5,7 @@ Never reads or writes legacy ``memory/*.json`` files.
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 from urllib.parse import unquote
 
 from server.routes._common import (

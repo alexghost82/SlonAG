@@ -16,8 +16,6 @@ Pairing and auth remain mandatory. TLS is optional (personal LAN).
 
 from __future__ import annotations
 
-from i18n import t
-
 import argparse
 import signal
 import sys
@@ -131,9 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     gateway_instance_id = str(uuid4())
     try:
         if args.gateway_lan:
+            from acta.bridge import build_runtime_stack
             from config.secrets import get_secret
             from gateway.bootstrap import build_gateway
-            from acta.bridge import build_runtime_stack
 
             root = (args.repo_root or Path.cwd()).resolve()
             stack = build_runtime_stack(repo_root=root, key_provider=get_secret)

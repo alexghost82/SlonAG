@@ -14,6 +14,12 @@ Key principles
 
 from __future__ import annotations
 
+from .confidence import ConfidenceEngine
+from .executor import WorkflowExecutor
+from .normalizer import Normalizer
+from .observer import ActionObserver
+from .service import WorkflowService
+from .store import WorkflowStore
 from .types import (
     ActionSequence,
     ActionSequenceEvent,
@@ -23,12 +29,6 @@ from .types import (
     WorkflowStep,
     WorkflowTemplate,
 )
-from .observer import ActionObserver
-from .normalizer import Normalizer
-from .confidence import ConfidenceEngine
-from .store import WorkflowStore
-from .executor import WorkflowExecutor
-from .service import WorkflowService
 
 __all__ = [
     "ActionObserver",

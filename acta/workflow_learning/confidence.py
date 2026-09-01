@@ -10,9 +10,8 @@ Confidence is a float in [0.0, 1.0] based on:
 from __future__ import annotations
 
 import math
-from typing import Any
 
-from acta.workflow_learning.types import WorkflowCandidate, WorkflowStep
+from acta.workflow_learning.types import WorkflowCandidate
 
 
 class ConfidenceEngine:

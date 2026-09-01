@@ -9,9 +9,8 @@ from collections import Counter
 from .collector import MetricsCollector
 from .types import (
     EvidenceType,
-    ImprovementCategory,
     ImprovementCandidate,
-    MetricKind,
+    ImprovementCategory,
     ObservationKind,
     RiskLevel,
 )
@@ -89,7 +88,7 @@ def _rule_high_failure_tools(collector: MetricsCollector) -> list[ImprovementCan
                 description=f"{tool_name} failed {stats['failure_rate']:.0%} of calls ({stats['failure_reasons']}).",
                 evidence=f"Statistical evidence from {stats['calls']} calls. Top failure reason: {top_reason}. Success rate: {success_rate:.0%}.",
                 evidence_type=EvidenceType.STATISTICAL,
-                expected_benefit=f"Reduce failures by identifying root cause and adjusting parameters.",
+                expected_benefit="Reduce failures by identifying root cause and adjusting parameters.",
                 risk=RiskLevel.LOW,
                 proposed_change={
                     "target": "routing_stats",

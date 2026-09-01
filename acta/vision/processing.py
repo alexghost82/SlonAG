@@ -7,7 +7,6 @@ gracefully disable capabilities when dependencies are missing.
 
 from __future__ import annotations
 
-import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -120,7 +119,6 @@ class OpenCVObjectDetector(DetectionBackend):
     @staticmethod
     def can_run() -> bool:
         try:
-            import cv2  # type: ignore
             return True
         except Exception:
             return False

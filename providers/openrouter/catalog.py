@@ -6,7 +6,6 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from providers.contracts import ModelInfo
-
 from providers.openrouter.errors import PROVIDER_ID
 
 

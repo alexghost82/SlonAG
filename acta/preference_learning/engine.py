@@ -10,27 +10,25 @@ Manages the full lifecycle:
 
 from __future__ import annotations
 
-import time
 import uuid as _uuid
-from collections.abc import Sequence
-from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from acta.preference_learning.repository import PreferenceRepository
 from acta.preference_learning.types import (
+    ConfidenceDecayPolicy,
     Evidence,
     LearnedItem,
     LearningSource,
     PreferenceAction,
     PreferenceType,
-    PriorityLevel,
     PreferenceVersion,
+    PriorityLevel,
     RetrievalContext,
-    ConfidenceDecayPolicy,
     _now,
 )
-from acta.preference_learning.repository import PreferenceRepository
 
 
 @dataclass
@@ -324,7 +322,7 @@ class PreferenceEngine:
     def decay_confidence(self) -> int:
         """Apply configured decay to all preferences and return count updated."""
         count = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for item in self.repo.list_items(include_deleted=True):
             active = item.active
             if active is None:
@@ -627,7 +625,7 @@ class PreferenceEngine:
             i.active.confidence,
             0 if i.active.type == PreferenceType.EXPLICIT else 1,
         ))
-        
+
         prune_count = len(active) - self.max_items
         pruned = []
         for i in range(prune_count):

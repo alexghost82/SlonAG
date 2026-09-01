@@ -1,5 +1,9 @@
 """SQLite memory store with propose-then-commit writes and secret rejection."""
 
+from acta.memory.context import (
+    MemoryContextAssembler,
+    build_system_prompt_with_memory,
+)
 from acta.memory.embeddings import Embedder, EmbeddingService
 from acta.memory.errors import (
     CODE_INVALID_MIGRATION,
@@ -28,10 +32,6 @@ from acta.memory.retriever import (
     ContextChunk,
     MemoryRetriever,
     RetrievalResult,
-)
-from acta.memory.context import (
-    MemoryContextAssembler,
-    build_system_prompt_with_memory,
 )
 
 __all__ = [

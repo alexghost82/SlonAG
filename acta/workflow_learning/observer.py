@@ -10,16 +10,14 @@ import hashlib
 import json
 import threading
 import time
-from collections import defaultdict
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from acta.workflow_learning.types import (
     ActionSequence,
     ActionSequenceEvent,
-    ParameterSlot,
     WorkflowCandidate,
     WorkflowState,
     WorkflowStep,

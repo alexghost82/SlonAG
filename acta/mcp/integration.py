@@ -10,22 +10,20 @@ MCP tools never bypass SlonAG security boundaries.
 
 from __future__ import annotations
 
-from i18n import t
-import asyncio
 import threading
-import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from acta.mcp.client import McpClient, McpCallResult
-from acta.mcp.types import McpServerConfig, McpToolSpec, McpTransportKind
-from acta.safety.policy import SafetyPolicy, authorize as safety_authorize
-from acta.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.mcp.client import McpCallResult, McpClient
+from acta.mcp.types import McpServerConfig, McpToolSpec
+from acta.safety.policy import SafetyPolicy
 from acta.safety.registry import register_mcp_tool
-from acta.tools.contracts import ArtifactRef, ToolResult
+from acta.safety.types import DecisionKind, RiskLevel, UntrustedSource
+from acta.tools.contracts import ToolResult
 from acta.tools.executor import ToolExecutor
 from acta.tools.registry import ToolRegistry
+from i18n import t
 
 
 @dataclass
@@ -265,17 +263,17 @@ class McpIntegration:
 
 
     @property
-    def resources(self) -> list["McpResource"]:
+    def resources(self) -> list[McpResource]:
         """Get discovered MCP resources."""
         return self.client.resources if self.client else []
 
     @property
-    def resource_templates(self) -> list["McpResourceTemplate"]:
+    def resource_templates(self) -> list[McpResourceTemplate]:
         """Get discovered MCP resource templates."""
         return self.client.resource_templates if self.client else []
 
     @property
-    def prompts(self) -> list["McpPrompt"]:
+    def prompts(self) -> list[McpPrompt]:
         """Get discovered MCP prompts."""
         return self.client.prompts if self.client else []
 

@@ -51,13 +51,13 @@ from acta.proactive.persistence import ProactivePersistence
 from acta.proactive.relevance import RelevanceFilter
 from acta.proactive.safe_actions import SafeActionExecutor
 from acta.proactive.types import (
+    SAFE_AUTO_ACTIONS,
     EventSource,
     ProactiveAction,
     ProactiveDecision,
     ProactiveDecisionKind,
     ProactiveEvent,
     RiskLevel,
-    SAFE_AUTO_ACTIONS,
 )
 
 __all__ = [

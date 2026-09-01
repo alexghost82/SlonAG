@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import time
 import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 from uuid import uuid4
 
-from gateway.artifacts import ArtifactTransferService
+from acta.automation.engine import AutomationEngine, TriggerType
 from gateway.approvals import DurableApprovalCoordinator
+from gateway.artifacts import ArtifactTransferService
 from gateway.auth import GatewayAuthService
 from gateway.contracts import GatewayEnvelope, utc_timestamp
 from gateway.router import (
@@ -22,7 +24,6 @@ from gateway.router import (
 )
 from gateway.store import GatewayStore
 from gateway.websocket import GatewayWebSocketRuntime
-from acta.automation.engine import AutomationEngine, AutomationRecord, TriggerType
 
 
 class SlonGateway:

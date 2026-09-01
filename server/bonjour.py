@@ -9,8 +9,9 @@ from __future__ import annotations
 import shutil
 import subprocess
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 SERVICE_TYPE = "_mark-control._tcp.local."
 SERVICE_NAME = "Slon Desktop Control"

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 
 def read_gateway_status(

@@ -6,8 +6,9 @@ API keys and other secrets must never appear in this schema or in
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 PRIVACY_PROFILES = frozenset({"fully_local", "local_with_tools", "cloud", "hybrid"})
 PROVIDER_IDS = frozenset(

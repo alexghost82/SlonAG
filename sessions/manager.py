@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import datetime, timezone
-from typing import Mapping
-import threading
 import builtins
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Mapping
+from dataclasses import replace
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sessions.contracts import (
@@ -233,7 +232,7 @@ class SessionManager:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 __all__ = [

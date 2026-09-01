@@ -6,9 +6,7 @@ while preserving session state and re-authenticating as needed.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 from acta.connectivity.types import (
@@ -42,7 +40,7 @@ class LANRemoteMigration:
     - Never sends raw media through Firebase — only control-plane messages.
     """
 
-    def __init__(self, session: "ConnectivitySession") -> None:
+    def __init__(self, session: ConnectivitySession) -> None:
         self._session = session
 
     # -- LAN -> Remote --

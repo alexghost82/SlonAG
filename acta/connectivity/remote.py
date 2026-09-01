@@ -19,8 +19,6 @@ import logging
 import time
 from typing import Any
 
-from acta.connectivity.types import TransportKind
-
 logger = logging.getLogger(__name__)
 
 
@@ -129,7 +127,7 @@ class RemoteAdapter:
                     return json.loads(raw)
                 return {"_raw_binary": raw}
             return None
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except Exception as exc:
             self._connected = False

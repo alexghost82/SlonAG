@@ -6,9 +6,9 @@ read ``api_keys.json``, or execute desktop tools.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Mapping
 
 from server.schemas import (
     CODE_IDEMPOTENCY_CONFLICT,

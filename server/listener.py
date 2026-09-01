@@ -8,16 +8,16 @@ protected routes. Optional TLS via ``tls_certfile`` / ``tls_keyfile``.
 
 from __future__ import annotations
 
-import base64
 import asyncio
+import base64
 import binascii
 import hashlib
 import ipaddress
 import json
 import secrets
+import select
 import ssl
 import struct
-import select
 import threading
 import time
 from collections.abc import Mapping
@@ -29,8 +29,10 @@ from urllib.parse import parse_qs, unquote, urlparse
 from acta.bridge.control_plane import ControlPlaneUnavailable
 from server.auth import (
     AuthError,
-    DeviceCredential as AuthDeviceCredential,
     TokenService,
+)
+from server.auth import (
+    DeviceCredential as AuthDeviceCredential,
 )
 from server.bind_policy import BindHostError, validate_bind_host
 from server.pairing import (
@@ -40,19 +42,19 @@ from server.pairing import (
     PairingService,
 )
 from server.routes import (
-    ApprovalStore,
     ApprovalsHandler,
+    ApprovalStore,
     ChatHandler,
     FilesHandler,
     IdempotencyStore,
     MemoryHandler,
     MemoryStore,
-    RuntimeMemoryStore,
-    ModelStore,
     ModelsHandler,
+    ModelStore,
+    RuntimeMemoryStore,
     ScreenHandler,
-    TaskStore,
     TasksHandler,
+    TaskStore,
     get_status,
     health_check,
 )
@@ -60,8 +62,8 @@ from server.routes._common import DevicePrincipal as RoutePrincipal
 from server.routes._common import RouteResponse
 from server.schemas import (
     API_VERSION_PREFIX,
-    CODE_MISSING_FIELD,
     CODE_INVALID_REQUEST,
+    CODE_MISSING_FIELD,
     CODE_NOT_FOUND,
     CODE_UNAUTHORIZED,
     ApiError,

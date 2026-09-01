@@ -8,8 +8,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from acta.memory.migrations.schema import SCHEMA_VERSION, apply_schema
-
 
 @dataclass
 class MemoryRow:
@@ -36,6 +34,7 @@ class MemoryDatabase:
     """Own a sqlite3 connection at an injected path. Never touches JSON files."""
 
     def __init__(self, path: Path) -> None:
+        from acta.memory.migrations.schema import apply_schema
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(self.path)
@@ -46,6 +45,7 @@ class MemoryDatabase:
         self._connection.close()
 
     def insert(self, row: MemoryRow) -> None:
+        from acta.memory.migrations.schema import apply_schema
         try:
             with self._connection:
                 self._connection.execute(

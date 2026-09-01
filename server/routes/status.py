@@ -7,7 +7,6 @@ Health provides readiness probes without authentication.
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 
 from server.routes._common import (

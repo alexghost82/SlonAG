@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-from i18n import t
-import asyncio
-import json
-import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from acta.mcp.transport import McpStdioTransport
 from acta.mcp.streamable_http_transport import McpStreamableHttpTransport
+from acta.mcp.transport import McpStdioTransport
 from acta.mcp.types import (
     McpPrompt,
     McpResource,
@@ -20,6 +16,7 @@ from acta.mcp.types import (
     McpToolSpec,
     McpTransportKind,
 )
+from i18n import t
 
 
 @dataclass
@@ -366,7 +363,7 @@ class McpClient:
                 content=content_str if content_str else None,
                 warnings=tuple(warnings),
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return McpCallResult(ok=False, error="Истекло время ожидания вызова MCP-инструмента")
         except RuntimeError as exc:
             error_msg = str(exc)

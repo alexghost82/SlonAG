@@ -76,7 +76,7 @@ class VisionConfig:
             caps.append("temporal")
         return caps
 
-    def with_source(self, source_type: str, **kwargs: Any) -> "VisionConfig":
+    def with_source(self, source_type: str, **kwargs: Any) -> VisionConfig:
         """Return a copy with source_config updated."""
         import copy
         c = copy.copy(self)

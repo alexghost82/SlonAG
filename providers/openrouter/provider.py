@@ -16,15 +16,15 @@ from providers.contracts import (
     ToolCall,
 )
 from providers.errors import ProviderAuthError, ProviderError
-from providers.openrouter.catalog import parse_models_payload
-from providers.openrouter.client import DEFAULT_API_URL, DEFAULT_TIMEOUT, OpenRouterClient, RequestFn
-from providers.openrouter.errors import PROVIDER_ID
 from providers.openai_compat import (
     ToolCallStreamAssembler,
     finish_reason,
     messages_payload,
     parse_tool_calls,
 )
+from providers.openrouter.catalog import parse_models_payload
+from providers.openrouter.client import DEFAULT_API_URL, DEFAULT_TIMEOUT, OpenRouterClient, RequestFn
+from providers.openrouter.errors import PROVIDER_ID
 
 
 class OpenRouterChatProvider:

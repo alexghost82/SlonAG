@@ -6,12 +6,7 @@ proactive decisions more than once per cooldown window.
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 
-from acta.proactive.errors import (
-    CODE_COOLDOWN_ACTIVE,
-    CooldownActiveError,
-)
 from acta.proactive.types import CooldownEntry
 
 

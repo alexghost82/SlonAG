@@ -14,7 +14,8 @@ from __future__ import annotations
 import asyncio
 import time
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from acta.vision.acquisition import (
     AcquisitionConfig,
@@ -29,7 +30,6 @@ from acta.vision.config import VisionConfig
 from acta.vision.processing import (
     DetectionBackend,
     build_object_detector,
-    build_ocr,
     build_person_detector,
     detect_capabilities,
 )
@@ -42,8 +42,6 @@ from acta.vision.queues import (
 from acta.vision.temporal import TemporalAnalyzer
 from acta.vision.tracking import ObjectTracker
 from acta.vision.types import (
-    Bbox,
-    DetectionKind,
     DetectionResult,
     Frame,
     FrameEvent,

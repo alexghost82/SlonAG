@@ -79,11 +79,11 @@ def _pair(auth: GatewayAuthService, private: Ed25519PrivateKey) -> str:
 def test_gateway_envelope_roundtrip_and_strict_validation() -> None:
     envelope = _envelope(value=1)
     assert GatewayEnvelope.from_json(envelope.to_json()) == envelope
-    with pytest.raises(GatewayProtocolError, match="fields"):
+    with pytest.raises(GatewayProtocolError, match="(?:fields|Поля)"):
         GatewayEnvelope.from_json(b'{"id":"x"}')
-    with pytest.raises(GatewayProtocolError, match="too large"):
+    with pytest.raises(GatewayProtocolError, match="(?i)(too large|слишком большой)"):
         GatewayEnvelope.from_json(b"x" * (MAX_ENVELOPE_BYTES + 1))
-    with pytest.raises(GatewayProtocolError, match="unsupported"):
+    with pytest.raises(GatewayProtocolError, match="(?i)(unsupported|Неподдерживаемый)"):
         _envelope("tool.execute")
 
 
@@ -94,15 +94,15 @@ def test_websocket_frame_codec_rejects_unmasked_malformed_and_oversized() -> Non
     frame = bytes([0x81, 0x80 | 126]) + len(payload).to_bytes(2, "big") + mask + masked
     assert decode_client_frame(frame).payload == payload
     assert encode_server_frame(payload).endswith(payload)
-    with pytest.raises(GatewayProtocolError, match="masked"):
+    with pytest.raises(GatewayProtocolError, match="(?:masked|замаскированы)"):
         decode_client_frame(bytes([0x81, 1]) + b"x")
     oversized = bytes([0x81, 0xFF]) + (MAX_ENVELOPE_BYTES + 1).to_bytes(8, "big")
-    with pytest.raises(GatewayProtocolError, match="too large"):
+    with pytest.raises(GatewayProtocolError, match="(?i)(too large|слишком большой)"):
         decode_client_frame(oversized)
     control = bytes([0x89, 0x80 | 126]) + (126).to_bytes(2, "big")
-    with pytest.raises(GatewayProtocolError, match="(?i)control frame"):
+    with pytest.raises(GatewayProtocolError, match="(?i)(control frame|Кадр управления)"):
         decode_client_frame(control)
-    with pytest.raises(GatewayProtocolError, match="(?i)control frame"):
+    with pytest.raises(GatewayProtocolError, match="(?i)(control frame|Кадр управления)"):
         encode_server_frame(b"x" * 126, opcode=0x9)
 
 
@@ -839,7 +839,7 @@ def test_gateway_schema_rejects_future_version(tmp_path: Path) -> None:
     db.execute("INSERT INTO gateway_schema VALUES (999)")
     db.commit()
     db.close()
-    with pytest.raises(GatewayStoreError, match="unsupported"):
+    with pytest.raises(GatewayStoreError, match="(?i)(unsupported|Неподдерживаемый)"):
         GatewayStore(path)
 
 

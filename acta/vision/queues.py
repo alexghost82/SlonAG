@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import collections
-import time
 from typing import Any
 
-from acta.vision.types import Frame, DetectionResult, FrameEvent
+from acta.vision.types import DetectionResult, Frame, FrameEvent
 
 
 class BoundedFrameQueue:

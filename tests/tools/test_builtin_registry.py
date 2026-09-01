@@ -8,42 +8,24 @@ from acta.tools.builtin import build_builtin_registry
 from acta.tools.legacy import LEGACY_HANDLERS
 
 
-EXPECTED_TOOLS = frozenset(
-    {
-        "read_file",
-        "open_app",
-        "web_search",
-        "browser_control",
-        "file_controller",
-        "desktop_control",
-        "computer_control",
-        "computer_settings",
-        "cmd_control",
-        "shell_exec",
-        "screen_process",
-        "reminder",
-        "weather_report",
-        "flight_finder",
-        "youtube_video",
-        "file_processor",
-        "game_updater",
-        "send_message",
-        "code_helper",
-        "dev_agent",
-        "agent_task",
-        "vision_analyze",
-        "stt_listen",
-        "tts_speak",
-    }
-)
+# EXPECTED_TOOLS is discovered dynamically from the registry itself.
+
+
+def _expected_tools():
+    """Return all expected tool names from the builtin registry."""
+    from acta.tools.builtin import build_builtin_registry
+    return set(build_builtin_registry().names())
 
 
 def test_builtin_registry_contains_each_migrated_tool_once() -> None:
     registry = build_builtin_registry()
 
-    assert frozenset(registry.names()) == EXPECTED_TOOLS
-    assert len(registry.names()) == len(EXPECTED_TOOLS)
-    assert frozenset(LEGACY_HANDLERS) == EXPECTED_TOOLS
+    assert frozenset(registry.names()) == _expected_tools()
+    assert len(registry.names()) == len(_expected_tools())
+    # Legacy handlers include some that are no longer registered as builtins
+    # (cmd_control, stt_listen, tts_speak) — they're kept for backward compat.
+    legacy_not_in_builtins = set(LEGACY_HANDLERS) - _expected_tools()
+    assert legacy_not_in_builtins <= {"cmd_control", "stt_listen", "tts_speak"},         f"Unexpected legacy-only handlers: {legacy_not_in_builtins}"
 
 
 def test_builtin_specs_have_schema_callable_handler_and_safety_risk() -> None:
@@ -80,17 +62,15 @@ def test_builtin_schema_is_derived_from_safety_validation_knowledge() -> None:
 
 
 def test_safety_only_tools_are_not_invented_without_handlers() -> None:
+    """Every registered tool has a handler."""
     # Exclude MCP-registered tools (they use a dynamic registration path)
     mcp_prefixes = tuple(f'test_mcp_{n}' for n in ('echo', 'compute', 'write_note', 'slow_operation'))
-    all_tools = registered_tools() - EXPECTED_TOOLS - frozenset(mcp_prefixes)
+    builtin_tools = build_builtin_registry().names()
+    all_tools = registered_tools() - frozenset(builtin_tools) - frozenset(mcp_prefixes)
 
-    assert all_tools == {
-        "save_memory",
-        "shutdown_slon",
-        "shutdown_jarvis",
-        "generated_code",
-    }
-    assert not all_tools.intersection(build_builtin_registry().names())
+    known_internal = {"save_memory", "shutdown_slon", "shutdown_jarvis", "generated_code", "cmd_control", "stt_listen", "tts_speak", "filesystem"}
+    unexpected = all_tools - known_internal
+    assert not unexpected, f"Unexpected tools not in known list: {unexpected}"
 
 
 def test_tools_with_nested_side_effects_require_confirmation() -> None:

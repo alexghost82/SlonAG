@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from i18n import t
 import struct
 from dataclasses import dataclass
 
 from gateway.contracts import MAX_ENVELOPE_BYTES, GatewayProtocolError
+from i18n import t
 
 
 @dataclass(frozen=True)

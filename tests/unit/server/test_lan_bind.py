@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+try:
+    import tkinter  # noqa: F401
+    _HAS_TKINTER = True
+except ImportError:
+    _HAS_TKINTER = False
+
 import pytest
 
 from server.app import DesktopControlApp
@@ -72,6 +78,7 @@ def test_app_rejects_wildcard_with_opt_in() -> None:
         DesktopControlApp(bind_host="0.0.0.0", allow_non_loopback=True)
 
 
+@pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_lan_bind_does_not_weaken_auth() -> None:
     """Same-LAN configuration still requires Authorization on protected routes."""
     app = DesktopControlApp(bind_host="10.0.0.8", allow_non_loopback=True)

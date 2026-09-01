@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import sys
 import subprocess
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from acta.safety.registry import SafetyRule, tool_spec as safety_rule
+from acta.safety.registry import SafetyRule
+from acta.safety.registry import tool_spec as safety_rule
 from acta.tools.contracts import SideEffectClass, ToolSpec
 from acta.tools.legacy import LEGACY_HANDLERS
 from acta.tools.registry import ToolRegistry
-
 
 _DESCRIPTIONS: Mapping[str, str] = {
     "read_file": "Прочитать текстовый файл в кодировке UTF-8.",

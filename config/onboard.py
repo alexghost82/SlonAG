@@ -19,32 +19,26 @@ import json
 import socket
 import sys
 from dataclasses import dataclass, field
-from typing import Any
 
+from config.catalog import get_model_info, model_capabilities_display
 from config.schema import (
-    PROVIDER_IDS,
-    LOCAL_PROVIDER_IDS,
-    PRIVACY_PROFILES,
-    NETWORK_MODES,
-    ROUTING_MODES,
-    MODEL_ROLE_KEYS,
     DEFAULT_LANGUAGE,
+    DEFAULT_NETWORK_MODE,
     DEFAULT_PRIVACY_PROFILE,
     DEFAULT_PROVIDER_ID,
-    DEFAULT_NETWORK_MODE,
     DEFAULT_ROUTING_MODE,
     DEFAULT_VOICE_STT_ENGINE,
     DEFAULT_VOICE_TTS_ENGINE,
-    OS_SYSTEMS,
+    LOCAL_PROVIDER_IDS,
+    NETWORK_MODES,
+    PRIVACY_PROFILES,
+    PROVIDER_IDS,
+    ROUTING_MODES,
     Settings,
-    SettingsValidationError,
-    validate_settings,
     default_settings,
 )
-from config.secrets import set_secret, KNOWN_SECRET_NAMES
+from config.secrets import set_secret
 from i18n import t
-from config.catalog import get_model_info, model_capabilities_display
-
 
 CLOUD_PROVIDER_IDS = frozenset(PROVIDER_IDS - LOCAL_PROVIDER_IDS)
 # ---------------------------------------------------------------------------
@@ -569,7 +563,7 @@ def test_tcp_connect(host: str, port: int, timeout: float = 2.0) -> ConnectionTe
         sock = socket.create_connection((host, port), timeout=timeout)
         sock.close()
         return ConnectionTestResult(label=label, ok=True, message=t("onboard.test_ok"))
-    except (socket.timeout, socket.error, ConnectionRefusedError, OSError):
+    except (TimeoutError, ConnectionRefusedError, OSError):
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_tcp_fail", host=host, port=port))
 
 def test_http_get(url: str, timeout: float = 3.0) -> ConnectionTestResult:

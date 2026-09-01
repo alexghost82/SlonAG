@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 from uuid import uuid4
 
 from gateway.contracts import GatewayEnvelope, GatewayProtocolError

@@ -7,11 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 import traceback
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from acta.vision.types import Frame, FrameSource
 
@@ -378,7 +377,7 @@ class RTSPSource(FrameSourceBase):
                 raw=raw,
                 stream_url=self.stream_url,
             )
-        except (asyncio.IncompleteReadError, ConnectionResetError, OSError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.IncompleteReadError, ConnectionResetError, OSError):
             self._tcp_connected = False
             self._lazy_connect_pending = False
             return None

@@ -23,21 +23,15 @@ capability as ``false`` and the result still completes without error.
 
 from __future__ import annotations
 
-import asyncio
-import time
 from typing import Any
 
 from acta.vision.config import VisionConfig
-from acta.vision.runtime import VisionRuntime, create_runtime
 from acta.vision.processing import detect_capabilities
-from acta.vision.tools import register_vision_tools, register_vision_capabilities
+from acta.vision.runtime import VisionRuntime, create_runtime
+from acta.vision.tools import register_vision_capabilities, register_vision_tools
 from acta.vision.types import (
-    DetectionKind,
-    DetectionResult,
     Frame,
     FrameEvent,
-    FrameSource,
-    TrackingState,
     VisionAnalysis,
     VisionRuntimeStatus,
 )
@@ -264,12 +258,12 @@ def wrap_untrusted_image_text(text: str) -> str:
 # LocalVisionProvider — security-gated, ephemeral-image vision analysis
 # ───────────────────────────────────────────────────────────────────────────
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from providers.errors import CapabilityError, ProviderError
 from providers.contracts import VisionRequest, VisionResponse
+from providers.errors import CapabilityError, ProviderError
 
 
 @dataclass(frozen=True)

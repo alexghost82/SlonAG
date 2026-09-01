@@ -10,7 +10,6 @@ import asyncio
 from typing import Protocol
 
 from providers.contracts import AudioStream, SpeechRequest
-
 from speech.tts.normalize import normalize_tts_text
 from speech.tts.sentences import split_sentences
 

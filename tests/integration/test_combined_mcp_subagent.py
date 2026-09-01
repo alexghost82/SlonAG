@@ -88,7 +88,7 @@ def _make_response(text: str, tool_calls=()) -> ChatResponse:  # type: ignore[as
 class TestCombinedSubagentMcp:
     """Full Parent -> Subagent -> MCP -> Tool -> Result -> Parent E2E."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_invokes_mcp_echo_tool(self) -> None:
         """Subagent asks model to call MCP echo tool, gets result back."""
         # Build shared registry with MCP tools
@@ -123,7 +123,7 @@ class TestCombinedSubagentMcp:
 
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_mcp_tool_through_agentloop(self) -> None:
         """AgentLoop with MCP tools in registry: model requests tool -> ToolExecutor -> MCP."""
         shared_registry = build_builtin_registry()
@@ -182,7 +182,7 @@ class TestCombinedSubagentMcp:
 
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_parent_agent_delegates_to_subagent_with_mcp(self) -> None:
         """Parent agent delegates to subagent; subagent uses MCP tool via AgentLoop."""
         shared_registry = build_builtin_registry()
@@ -249,7 +249,7 @@ class TestCombinedSubagentMcp:
         await runtime.cancel_all()
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_two_parallel_subagents_each_using_mcp(self) -> None:
         """Two parallel subagents each invoke MCP echo tool."""
         shared_registry = build_builtin_registry()
@@ -323,7 +323,7 @@ class TestCombinedSubagentMcp:
         await runtime.cancel_all()
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_combined_parent_subagent_mcp_e2e(self) -> None:
         """Full chain: parent -> subagent -> MCP echo tool -> result -> parent synthesis."""
         shared_registry = build_builtin_registry()
@@ -398,7 +398,7 @@ class TestCombinedSubagentMcp:
 class TestMcpSecurityIntegration:
     """MCP tools must not bypass SafetyPolicy, ToolExecutor, or Approval."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_side_effect_requires_approval(self) -> None:
         """write_note (side-effect MCP tool) should require approval."""
         shared_registry = build_builtin_registry()
@@ -436,7 +436,7 @@ class TestMcpSecurityIntegration:
 
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_mcp_read_tool_succeeds_without_approval(self) -> None:
         """MCP read tools (echo, compute) should succeed without approval."""
         shared_registry = build_builtin_registry()
@@ -475,7 +475,7 @@ class TestMcpSecurityIntegration:
 class TestCombinedFailurePropagation:
     """Failure cases in the combined chain."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_handles_mcp_failure(self) -> None:
         """When MCP tool fails, subagent gets error and reports it."""
         shared_registry = build_builtin_registry()
@@ -536,7 +536,7 @@ class TestCombinedFailurePropagation:
 class TestCombinedTimeout:
     """Combined timeout scenarios: Parent -> Subagent -> MCP timeout."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_handles_mcp_slow_operation_timeout(self) -> None:
         """Subagent invokes slow_operation MCP tool that exceeds timeout, returns error gracefully."""
         shared_registry = build_builtin_registry()
@@ -595,7 +595,7 @@ class TestCombinedTimeout:
         await runtime.cancel_all()
         await integration.stop()
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_agentloop_handles_mcp_timeout(self) -> None:
         """AgentLoop calls slow_operation MCP tool that exceeds tool_timeout, then recovers."""
         shared_registry = build_builtin_registry()
@@ -650,7 +650,7 @@ class TestCombinedTimeout:
 class TestCombinedCancellation:
     """Combined cancellation: parent cancellation propagating to children."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_parent_cancellation_propagates_to_subagent(self) -> None:
         """When parent cancels, subagent is cancelled."""
         shared_registry = build_builtin_registry()
@@ -719,7 +719,7 @@ class TestCombinedCancellation:
 class TestCombinedBudget:
     """Combined budget exhaustion scenarios."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_combined_budget_exhaustion(self) -> None:
         """Subagent hits max_tool_calls budget limit, loop terminates cleanly."""
         shared_registry = build_builtin_registry()
@@ -781,7 +781,7 @@ class TestCombinedBudget:
 class TestCombinedMaxDepth:
     """Combined max depth scenarios."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_combined_max_depth_limit(self) -> None:
         """Subagent at max delegation depth gets denied."""
         shared_registry = build_builtin_registry()
@@ -844,7 +844,7 @@ class TestCombinedMaxDepth:
 class TestCombinedForbiddenTool:
     """Combined forbidden tool scenarios."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_forbidden_mcp_tool(self) -> None:
         """Subagent tries to call a denied MCP tool."""
         shared_registry = build_builtin_registry()
@@ -903,7 +903,7 @@ class TestCombinedForbiddenTool:
 class TestCombinedLateCompletion:
     """Combined late completion: subagent completes after parent is done."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_late_subagent_completion(self) -> None:
         """Subagent that returns late (after parent context has moved on)."""
         shared_registry = build_builtin_registry()
@@ -953,7 +953,7 @@ class TestCombinedLateCompletion:
 class TestCombinedParentSynthesis:
     """Combined parent synthesis after subagent result."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_parent_synthesizes_subagent_mcp_result(self) -> None:
         """Parent receives subagent MCP result and synthesizes final Russian response."""
         shared_registry = build_builtin_registry()
@@ -1021,7 +1021,7 @@ class TestCombinedParentSynthesis:
 class TestCombinedResourcePrompt:
     """Resource and prompt discovery through agent chain."""
 
-    @pytest.acta.asyncio
+    @pytest.mark.asyncio
     async def test_subagent_can_discover_mcp_resources(self) -> None:
         """MCP integration discovers resources, templates, prompts, and reads them."""
         shared_registry = build_builtin_registry()

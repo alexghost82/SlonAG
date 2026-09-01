@@ -7,12 +7,15 @@ appearance/disappearance events, bounded history per track.
 from __future__ import annotations
 
 import time
-import uuid
 from typing import Any
 
 from acta.vision.types import (
-    Bbox, DetectionResult, DetectionKind, FrameEvent, TrackEvent,
-    TrackingState, TrajectoryPoint,
+    DetectionKind,
+    DetectionResult,
+    FrameEvent,
+    TrackEvent,
+    TrackingState,
+    TrajectoryPoint,
 )
 
 
