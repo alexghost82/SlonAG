@@ -28,6 +28,7 @@ class MemoryRow:
     session_id: str = ""
     confidence: float = 1.0
     recency_weight: float = 1.0
+    metadata: str = ""
 
 
 class MemoryDatabase:
@@ -37,8 +38,12 @@ class MemoryDatabase:
         from acta.memory.migrations.schema import apply_schema
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path)
+        self._connection = sqlite3.connect(self.path, timeout=5.0)
         self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute("PRAGMA busy_timeout=5000")
+        self._connection.execute("PRAGMA synchronous=NORMAL")
+        self._connection.execute("PRAGMA foreign_keys=ON")
         apply_schema(self._connection)
 
     def close(self) -> None:
@@ -53,8 +58,8 @@ class MemoryDatabase:
                     INSERT INTO memory_records
                         (id, content, type, key, value, source, dedup_hash, workspace,
                          user_id, session_id, confidence, recency_weight,
-                         created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         created_at, updated_at, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row.id,
@@ -71,6 +76,7 @@ class MemoryDatabase:
                         getattr(row, "recency_weight", 1.0),
                         row.created_at,
                         row.updated_at,
+                        getattr(row, "metadata", "") or "",
                     ),
                 )
         except sqlite3.OperationalError:
@@ -82,8 +88,8 @@ class MemoryDatabase:
                     INSERT INTO memory_records
                         (id, content, type, key, value, source, dedup_hash, workspace,
                          user_id, session_id, confidence, recency_weight,
-                         created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         created_at, updated_at, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row.id,
@@ -100,6 +106,7 @@ class MemoryDatabase:
                         getattr(row, "recency_weight", 1.0),
                         row.created_at,
                         row.updated_at,
+                        getattr(row, "metadata", "") or "",
                     ),
                 )
 
@@ -108,7 +115,7 @@ class MemoryDatabase:
             """
             SELECT id, content, type, key, value, source, dedup_hash, workspace,
                    user_id, session_id, confidence, recency_weight,
-                   created_at, updated_at
+                   created_at, updated_at, metadata
             FROM memory_records
             WHERE id = ?
             """,
@@ -125,7 +132,7 @@ class MemoryDatabase:
                 """
                 SELECT id, content, type, key, value, source, dedup_hash, workspace,
                        user_id, session_id, confidence, recency_weight,
-                       created_at, updated_at
+                       created_at, updated_at, metadata
                 FROM memory_records
                 ORDER BY created_at ASC, key ASC
                 """
@@ -135,7 +142,7 @@ class MemoryDatabase:
                 """
                 SELECT id, content, type, key, value, source, dedup_hash, workspace,
                        user_id, session_id, confidence, recency_weight,
-                       created_at, updated_at
+                       created_at, updated_at, metadata
                 FROM memory_records
                 WHERE type = ?
                 ORDER BY created_at ASC, key ASC
@@ -151,7 +158,7 @@ class MemoryDatabase:
                 UPDATE memory_records
                 SET content = ?, type = ?, key = ?, value = ?, source = ?, dedup_hash = ?,
                     workspace = ?, user_id = ?, session_id = ?,
-                    confidence = ?, recency_weight = ?, updated_at = ?
+                    confidence = ?, recency_weight = ?, updated_at = ?, metadata = ?
                 WHERE id = ?
                 """,
                 (
@@ -167,6 +174,7 @@ class MemoryDatabase:
                     getattr(row, "confidence", 1.0),
                     getattr(row, "recency_weight", 1.0),
                     row.updated_at,
+                    getattr(row, "metadata", "") or "",
                     row.id,
                 ),
             )
@@ -206,7 +214,7 @@ class MemoryDatabase:
             """
             SELECT r.id, r.content, r.type, r.key, r.value, r.source, r.dedup_hash,
                    r.workspace, r.user_id, r.session_id, r.confidence,
-                   r.recency_weight, r.created_at, r.updated_at, e.vector
+                   r.recency_weight, r.created_at, r.updated_at, r.metadata, e.vector
             FROM memory_records r
             JOIN memory_embeddings e ON r.id = e.record_id
             """
@@ -227,6 +235,14 @@ class MemoryDatabase:
         return results
 
 
+def _row_metadata(row: sqlite3.Row) -> str:
+    keys = row.keys()
+    if "metadata" not in keys:
+        return ""
+    raw = row["metadata"]
+    return str(raw) if raw else ""
+
+
 def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
     return MemoryRow(
         id=str(row["id"]),
@@ -243,6 +259,7 @@ def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
         session_id=str(row["session_id"] or ""),
         confidence=float(row["confidence"] or 1.0),
         recency_weight=float(row["recency_weight"] or 1.0),
+        metadata=_row_metadata(row),
     )
 
 

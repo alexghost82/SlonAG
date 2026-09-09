@@ -13,6 +13,7 @@ from acta.memory.database import MemoryDatabase, MemoryRow
 from acta.memory.embeddings import Embedder, EmbeddingService
 from acta.memory.errors import (
     CODE_INVALID_RECORD,
+    CODE_NOT_FOUND,
     CODE_UNKNOWN_PROPOSAL,
     CODE_UNKNOWN_TYPE,
     MemoryStoreError,
@@ -26,6 +27,40 @@ class RecordType(StrEnum):
     CONFIRMED_FACTS = "confirmed_facts"
     SUMMARIES = "summaries"
     ACTION_HISTORY = "action_history"
+
+
+class MemoryScope(StrEnum):
+    PERSONAL = "personal"
+    SESSION = "session"
+    WORKING = "working"
+
+
+class MemoryProvenance(StrEnum):
+    USER_EXPLICIT = "user_explicit"
+    USER_INFERRED = "user_inferred"
+    TOOL_OBSERVATION = "tool_observation"
+    SYSTEM_FACT = "system_fact"
+    IMPORTED = "imported"
+    ASSISTANT_UNVERIFIED = "assistant_unverified"
+
+
+def can_promote_to_personal(
+    provenance: MemoryProvenance | str,
+    confidence: float,
+) -> bool:
+    """ASSISTANT_UNVERIFIED and inferences never become trusted personal facts."""
+    value = MemoryProvenance(provenance)
+    if value in {
+        MemoryProvenance.ASSISTANT_UNVERIFIED,
+        MemoryProvenance.USER_INFERRED,
+        MemoryProvenance.TOOL_OBSERVATION,
+    }:
+        return False
+    return confidence >= 0.8 and value in {
+        MemoryProvenance.USER_EXPLICIT,
+        MemoryProvenance.SYSTEM_FACT,
+        MemoryProvenance.IMPORTED,
+    }
 
 
 @dataclass(frozen=True)
@@ -46,6 +81,10 @@ class MemoryRecord:
     session_id: str = ""
     confidence: float = 1.0
     recency_weight: float = 1.0
+    provenance: str = MemoryProvenance.ASSISTANT_UNVERIFIED
+    scope: str = MemoryScope.WORKING
+    ttl_seconds: int | None = None
+    superseded_by: str = ""
 
 
 @dataclass(frozen=True)
@@ -62,6 +101,10 @@ class Proposal:
     user_id: str = ""
     session_id: str = ""
     confidence: float = 1.0
+    provenance: str = MemoryProvenance.ASSISTANT_UNVERIFIED
+    scope: str = MemoryScope.WORKING
+    ttl_seconds: int | None = None
+    superseded_by: str = ""
 
 
 class MemoryStore:
@@ -128,6 +171,12 @@ class MemoryStore:
         conf = confidence if confidence is not None else record.confidence
         # Generate dedup hash
         dedup_hash = _make_hash(value.strip())
+        scope = record.scope or MemoryScope.WORKING
+        provenance = record.provenance or MemoryProvenance.ASSISTANT_UNVERIFIED
+        if scope == MemoryScope.PERSONAL and not can_promote_to_personal(
+            provenance, conf
+        ):
+            scope = MemoryScope.WORKING
         proposal = Proposal(
             id=uuid4().hex,
             type=record_type,
@@ -138,6 +187,10 @@ class MemoryStore:
             user_id=uid,
             session_id=sid,
             confidence=conf,
+            provenance=str(provenance),
+            scope=str(scope),
+            ttl_seconds=record.ttl_seconds,
+            superseded_by=record.superseded_by,
         )
         self._pending[proposal.id] = proposal
         # Check for existing duplicate within the same scope
@@ -199,6 +252,10 @@ class MemoryStore:
             session_id=current_proposal.session_id,
             confidence=current_proposal.confidence,
             recency_weight=1.0,
+            provenance=current_proposal.provenance,
+            scope=current_proposal.scope,
+            ttl_seconds=current_proposal.ttl_seconds,
+            superseded_by=current_proposal.superseded_by,
         )
         try:
             self._db().insert(_to_row(record))
@@ -214,6 +271,21 @@ class MemoryStore:
             pass
         del self._pending[proposal_id]
         return record
+
+    def promote_to_personal(self, record_id: str) -> MemoryRecord:
+        """Promote a stored record to personal scope. Unverified facts are rejected."""
+        record = self.get(record_id)
+        if record is None:
+            raise MemoryStoreError(CODE_NOT_FOUND)
+        if not can_promote_to_personal(record.provenance, record.confidence):
+            raise MemoryStoreError(CODE_INVALID_RECORD)
+        updated = replace(
+            record,
+            scope=MemoryScope.PERSONAL,
+            updated_at=_now(),
+        )
+        self._db().update(_to_row(updated))
+        return updated
 
     def list(
         self,
@@ -466,6 +538,7 @@ class MemoryStore:
 # ── helpers ───────────────────────────────────────────────────────────
 
 import hashlib
+import json
 
 
 @dataclass(frozen=True)
@@ -508,6 +581,26 @@ def _value_match(a: str, b: str, *, threshold: float = 0.9) -> bool:
     return overlap >= threshold
 
 
+def _record_metadata(record: MemoryRecord) -> str:
+    payload = {
+        "provenance": record.provenance or MemoryProvenance.ASSISTANT_UNVERIFIED,
+        "scope": record.scope or MemoryScope.WORKING,
+        "ttl_seconds": record.ttl_seconds,
+        "superseded_by": record.superseded_by,
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _parse_metadata(raw: str) -> dict[str, object]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _to_row(record: MemoryRecord) -> MemoryRow:
     return MemoryRow(
         id=record.id,
@@ -523,10 +616,14 @@ def _to_row(record: MemoryRecord) -> MemoryRow:
         session_id=record.session_id,
         confidence=record.confidence,
         recency_weight=record.recency_weight,
+        metadata=_record_metadata(record),
     )
 
 
 def _from_row(row: MemoryRow) -> MemoryRecord:
+    meta = _parse_metadata(getattr(row, "metadata", "") or "")
+    ttl_raw = meta.get("ttl_seconds")
+    ttl_seconds = int(ttl_raw) if isinstance(ttl_raw, int) else None
     return MemoryRecord(
         id=row.id,
         type=_coerce_type(row.type),
@@ -541,7 +638,12 @@ def _from_row(row: MemoryRow) -> MemoryRecord:
         session_id=getattr(row, "session_id", ""),
         confidence=getattr(row, "confidence", 1.0),
         recency_weight=getattr(row, "recency_weight", 1.0),
+        provenance=str(meta.get("provenance") or MemoryProvenance.ASSISTANT_UNVERIFIED),
+        scope=str(meta.get("scope") or MemoryScope.WORKING),
+        ttl_seconds=ttl_seconds,
+        superseded_by=str(meta.get("superseded_by") or ""),
     )
+
 
 def _record_to_dict(record: MemoryRecord) -> dict[str, object]:
     """Convert a MemoryRecord to a plain dict for export."""
@@ -559,16 +661,23 @@ def _record_to_dict(record: MemoryRecord) -> dict[str, object]:
         "session_id": record.session_id,
         "confidence": record.confidence,
         "recency_weight": record.recency_weight,
+        "provenance": record.provenance,
+        "scope": record.scope,
+        "ttl_seconds": record.ttl_seconds,
+        "superseded_by": record.superseded_by,
     }
 
 
 
 __all__ = [
+    "MemoryProvenance",
     "MemoryRecord",
+    "MemoryScope",
     "MemoryStore",
     "MigrationStats",
     "Proposal",
     "RecordType",
+    "can_promote_to_personal",
 ]
 
 

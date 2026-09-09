@@ -9,9 +9,12 @@ from pathlib import Path
 from providers.gemini.live import create_live_client, types
 from providers.contracts import ModelInfo
 from ui import SlonUI, JarvisUI
+from acta.memory import commit_extracted_facts, format_store_for_prompt
 from memory.memory_manager import (
-    load_memory, update_memory, format_memory_for_prompt,
-    should_extract_memory, extract_memory
+    format_memory_for_prompt,
+    load_memory,
+    should_extract_memory,
+    extract_memory,
 )
 from config.settings import load_settings
 from config.schema import Settings
@@ -126,7 +129,12 @@ def _load_system_prompt() -> str:
     
 _last_memory_input = ""
 
-def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str = "") -> None:
+def _update_memory_async(
+    user_text: str,
+    slon_text: str = "",
+    jarvis_text: str = "",
+    store=None,
+) -> None:
     global _last_memory_input
 
     assistant_text = (slon_text or jarvis_text or "").strip()
@@ -141,7 +149,8 @@ def _update_memory_async(user_text: str, slon_text: str = "", jarvis_text: str =
             return
         data = extract_memory(user_text, assistant_text, api_key)
         if data:
-            update_memory(data)
+            if store is not None:
+                commit_extracted_facts(store, data)
             logger.info("[Memory] %s", t("bridge.memory_loaded", keys=list(data.keys())))
     except Exception as exc:
         if "429" not in str(exc):
@@ -313,8 +322,8 @@ class SlonLive:
     def _build_config(self) -> types.LiveConnectConfig:
         from datetime import datetime
 
-        memory     = load_memory()
-        mem_str    = format_memory_for_prompt(memory)
+        store = getattr(self.runtime_stack, "memory", None)
+        mem_str = format_store_for_prompt(store) if store is not None else format_memory_for_prompt(load_memory())
         sys_prompt = _load_system_prompt()
 
         now      = datetime.now()
@@ -528,7 +537,9 @@ class SlonLive:
             set_speaking=self.set_speaking,
             execute_tool=self._execute_tool,
             execute_tools=self._execute_tools,
-            update_memory=_update_memory_async,
+            update_memory=lambda user, slon="", jarvis="": _update_memory_async(
+                user, slon, jarvis, store=getattr(self.runtime_stack, "memory", None)
+            ),
             latency_trace=self.latency_trace,
             emit_event=self._emit_event,
             on_turn_started=self._start_live_turn,

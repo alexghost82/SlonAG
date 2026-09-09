@@ -119,7 +119,13 @@ def build_runtime_stack(
             else root / "memory" / "mark_memory.sqlite3"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        return MemoryStore(path)
+        store = MemoryStore(path)
+        legacy = root / "memory" / "long_term.json"
+        if legacy.exists() and not store.list():
+            from acta.memory.migrations import migrate_json
+
+            migrate_json(legacy, store)
+        return store
 
     def _safety() -> Any:
         from acta.safety import SafetyPolicy

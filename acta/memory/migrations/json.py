@@ -12,7 +12,9 @@ from acta.memory.errors import (
     MemoryStoreError,
 )
 from acta.memory.repository import (
+    MemoryProvenance,
     MemoryRecord,
+    MemoryScope,
     MemoryStore,
     MigrationStats,
     RecordType,
@@ -53,6 +55,8 @@ def migrate_json(
                         key=key,
                         value=value,
                         source=f"legacy_json:{category}",
+                        provenance=MemoryProvenance.IMPORTED,
+                        scope=MemoryScope.PERSONAL,
                     ),
                     workspace="default",
                     user_id="default",

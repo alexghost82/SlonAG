@@ -40,7 +40,7 @@ Result vocabulary: `PASS` / `FAIL` / `NOT_RUN` / `SKIPPED` / `BLOCKED` / `N/A`.
 | SLON-011 execute_plan | PASS | Existing tests construct AgentExecutor (legacy allowed) | NOT_RUN | N/A | N/A | N/A | STATIC | R2 |
 | SLON-012/013/014/016 SDK bypass | PASS — ripgrep imports | No architecture AST suite (`tests/architecture/` missing) | NOT_RUN | N/A | N/A | N/A | STATIC | R3 |
 | SLON-015/022 SlonLive | PASS — `main.py` genai | NOT_RUN | NOT_RUN | NOT_RUN | N/A | NOT_RUN live mic | PARTIAL by decision | R3/R7 |
-| SLON-017/018/029 memory dual + DBs | PASS — two packages + `git ls-files` sqlite | acta/memory unit tests exist; live path still JSON | NOT_RUN live wire | N/A | N/A | N/A | STATIC + existing acta/memory units | R4 |
+| SLON-017/018/029 memory dual + DBs | PASS — untracked sqlite; provenance in repository | PASS — `tests/unit/memory` 70 passed; provenance + migrate | NOT_RUN live hardware | N/A | N/A | N/A | UNIT PASS R4; Live hardware NOT_RUN | R10 leftover JSON module |
 | SLON-019 gitignore | PASS after R0 edit | N/A | N/A | N/A | N/A | N/A | R0 STATIC fix | R4 untrack |
 | SLON-020 voice_* drop | PASS — validate_settings omits fields | NOT_RUN round-trip assert | N/A | N/A | N/A | N/A | STATIC | R9 |
 | SLON-021/036 lint exclusions + CI red | PASS — pyproject + local ruff/mypy FAIL | N/A | N/A | N/A | N/A | N/A | STATIC FAIL recorded | R10 |

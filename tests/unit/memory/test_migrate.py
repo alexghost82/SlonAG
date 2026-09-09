@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from acta.memory import MemoryStore, RecordType, migrate_json
+from acta.memory import MemoryProvenance, MemoryScope, MemoryStore, RecordType, migrate_json
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "legacy_memory.json"
 
@@ -62,3 +62,5 @@ def test_migrate_json_function_accepts_dict(store: MemoryStore) -> None:
     assert by_key["job"].value == "engineer"
     assert by_key["garden"].type is RecordType.PROJECTS
     assert by_key["garden"].source == "legacy_json:projects"
+    assert by_key["job"].provenance == MemoryProvenance.IMPORTED
+    assert by_key["job"].scope == MemoryScope.PERSONAL

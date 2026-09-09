@@ -3,6 +3,9 @@
 from acta.memory.context import (
     MemoryContextAssembler,
     build_system_prompt_with_memory,
+    commit_extracted_facts,
+    format_store_for_prompt,
+    is_record_active,
 )
 from acta.memory.embeddings import Embedder, EmbeddingService
 from acta.memory.errors import (
@@ -22,11 +25,14 @@ from acta.memory.migrations import LEGACY_TYPE_MAP, migrate_json
 from acta.memory.migrations.schema import SCHEMA_VERSION, apply_schema
 from acta.memory.policy import MemoryPolicy
 from acta.memory.repository import (
+    MemoryProvenance,
     MemoryRecord,
+    MemoryScope,
     MemoryStore,
     MigrationStats,
     Proposal,
     RecordType,
+    can_promote_to_personal,
 )
 from acta.memory.retriever import (
     ContextChunk,
@@ -50,7 +56,9 @@ __all__ = [
     "EmbeddingService",
     "MemoryPolicy",
     "MemoryPolicyError",
+    "MemoryProvenance",
     "MemoryRecord",
+    "MemoryScope",
     "MemoryStore",
     "MemoryStoreError",
     "MemoryContextAssembler",
@@ -59,8 +67,12 @@ __all__ = [
     "Proposal",
     "RecordType",
     "RetrievalResult",
+    "can_promote_to_personal",
     "ContextChunk",
     "build_system_prompt_with_memory",
+    "commit_extracted_facts",
+    "format_store_for_prompt",
+    "is_record_active",
     "memory_message",
     "migrate_json",
 ]
