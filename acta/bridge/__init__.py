@@ -30,6 +30,7 @@ class RuntimeStack:
     tool_registry: Any | None = None
     tool_executor: Any | None = None
     session_manager: Any | None = None
+    job_engine: Any | None = None
     network: Any | None = None
     tts_ready: bool = False
     tts_message: str = ""
@@ -173,6 +174,17 @@ def build_runtime_stack(
 
     session_manager = _try("sessions", _sessions, status)
 
+    def _jobs() -> Any:
+        from runtime.jobs import JobEngine
+
+        path = root / "memory" / "slon_jobs.sqlite3"
+        engine = JobEngine(path)
+        recovered = engine.recover_running()
+        status.append(f"jobs: recovered={len(recovered)}")
+        return engine
+
+    job_engine = _try("jobs", _jobs, status)
+
     tts_ready = False
     tts_message = "tts: not probed"
     try:
@@ -213,6 +225,7 @@ def build_runtime_stack(
         tool_registry=tool_registry,
         tool_executor=tool_executor,
         session_manager=session_manager,
+        job_engine=job_engine,
         network=network,
         tts_ready=tts_ready,
         tts_message=tts_message,

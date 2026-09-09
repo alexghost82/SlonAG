@@ -37,6 +37,33 @@ def test_failing_runtime_event_sink_is_isolated() -> None:
     assert [event.kind for event in received] == [RuntimeEventKind.CANCELLED]
 
 
+def test_event_has_id_correlation_and_replay() -> None:
+    bus = RuntimeEventBus(history_limit=2)
+    first = bus.emit(
+        RuntimeEventKind.JOB_PROGRESS,
+        job_id="job-1",
+        correlation_id="corr-1",
+        source="jobs",
+    )
+    second = bus.emit(RuntimeEventKind.ERROR, code="boom")
+    bus.emit(RuntimeEventKind.THINKING)
+    assert first.event_id
+    assert first.event_type == "job_progress"
+    assert first.schema_version == 1
+    assert first.timestamp
+    replayed = bus.replay(after_sequence=first.sequence)
+    assert [event.kind for event in replayed] == [
+        RuntimeEventKind.ERROR,
+        RuntimeEventKind.THINKING,
+    ]
+    assert second.code == "boom"
+    # backpressure: history keeps only the last 2
+    assert [event.kind for event in bus.replay(after_sequence=0)] == [
+        RuntimeEventKind.ERROR,
+        RuntimeEventKind.THINKING,
+    ]
+
+
 def test_ui_runtime_event_sink_adapts_state_and_control_plane() -> None:
     states = []
     published = []

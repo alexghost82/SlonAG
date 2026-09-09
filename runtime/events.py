@@ -1,13 +1,23 @@
-"""Payload-free realtime events shared by runtime and UI adapters."""
+"""Canonical runtime event bus shared by runtime and UI adapters.
+
+Do not create a second bus. Tool argument/result payloads stay off the
+legacy UI fields; optional ``payload`` is for typed control-plane data.
+"""
 
 from __future__ import annotations
 
 import itertools
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
+from uuid import uuid4
+
+
+SCHEMA_VERSION = 1
+HISTORY_LIMIT = 256
 
 
 class RuntimeEventKind(StrEnum):
@@ -18,6 +28,11 @@ class RuntimeEventKind(StrEnum):
     TOOL_FINISHED = "tool_finished"
     SPEAKING = "speaking"
     CANCELLED = "cancelled"
+    JOB_PROGRESS = "job_progress"
+    ERROR = "error"
+    SESSION_CHANGED = "session_changed"
+    APPROVAL_REQUIRED = "approval_required"
+    ASSISTANT_TEXT = "assistant_text"
 
 
 @dataclass(frozen=True)
@@ -32,24 +47,49 @@ class RuntimeEvent:
     tool_name: str | None = None
     progress: float | None = None
     code: str | None = None
+    event_id: str = ""
+    source: str = "runtime"
+    job_id: str | None = None
+    correlation_id: str | None = None
+    schema_version: int = SCHEMA_VERSION
+    timestamp: str = ""
+    payload: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.sequence < 1:
             raise ValueError("event sequence must be positive")
         if self.progress is not None and not 0.0 <= self.progress <= 1.0:
             raise ValueError("event progress must be between zero and one")
+        if not self.event_id:
+            object.__setattr__(self, "event_id", uuid4().hex)
+        if not self.timestamp:
+            object.__setattr__(
+                self,
+                "timestamp",
+                datetime.now(UTC).replace(microsecond=0).isoformat(),
+            )
+
+    @property
+    def event_type(self) -> str:
+        return self.kind.value
 
 
 EventSink = Callable[[RuntimeEvent], object]
 
 
 class RuntimeEventBus:
-    """Thread-safe, non-owning fan-out with isolated subscribers."""
+    """Thread-safe fan-out: ordered sequence, isolated subscribers, replay.
 
-    def __init__(self) -> None:
+    Delivery is at-most-once for live sinks. Replay is explicit via
+    ``replay(after_sequence=)``. History is a bounded ring (backpressure).
+    """
+
+    def __init__(self, *, history_limit: int = HISTORY_LIMIT) -> None:
         self._lock = threading.Lock()
         self._sequence = itertools.count(1)
         self._sinks: list[EventSink] = []
+        self._history: list[RuntimeEvent] = []
+        self._history_limit = max(1, int(history_limit))
 
     def subscribe(self, sink: EventSink) -> Callable[[], None]:
         with self._lock:
@@ -68,8 +108,11 @@ class RuntimeEventBus:
                 kind=kind,
                 sequence=next(self._sequence),
                 monotonic_at=time.monotonic(),
-                **metadata,
+                **metadata,  # type: ignore[arg-type]
             )
+            self._history.append(event)
+            if len(self._history) > self._history_limit:
+                self._history = self._history[-self._history_limit :]
             sinks = tuple(self._sinks)
         for sink in sinks:
             try:
@@ -77,6 +120,12 @@ class RuntimeEventBus:
             except Exception:
                 continue
         return event
+
+    def replay(self, *, after_sequence: int = 0) -> tuple[RuntimeEvent, ...]:
+        with self._lock:
+            return tuple(
+                event for event in self._history if event.sequence > after_sequence
+            )
 
 
 class UIRuntimeEventSink:
@@ -111,8 +160,21 @@ class UIRuntimeEventSink:
                     "tool_name": event.tool_name,
                     "progress": event.progress,
                     "code": event.code,
+                    "event_id": event.event_id,
+                    "source": event.source,
+                    "job_id": event.job_id,
+                    "correlation_id": event.correlation_id,
+                    "schema_version": event.schema_version,
+                    "timestamp": event.timestamp,
                 },
             )
 
 
-__all__ = ["RuntimeEvent", "RuntimeEventBus", "RuntimeEventKind", "UIRuntimeEventSink"]
+__all__ = [
+    "HISTORY_LIMIT",
+    "SCHEMA_VERSION",
+    "RuntimeEvent",
+    "RuntimeEventBus",
+    "RuntimeEventKind",
+    "UIRuntimeEventSink",
+]

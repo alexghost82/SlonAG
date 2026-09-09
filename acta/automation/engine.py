@@ -1,4 +1,7 @@
-"""Persistent automation engine -- production grade.
+"""Persistent automation *scheduler* -- production grade.
+
+Durable one-shot execution belongs in ``runtime.jobs.JobEngine``.
+This module owns triggers, cron, and missed-schedule catch-up only.
 
 Features:
 - One-shot, recurring, cron triggers
