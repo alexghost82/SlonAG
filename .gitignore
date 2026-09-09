@@ -60,6 +60,11 @@ sk-ant-*
 # User memory and local data
 memory/*.json
 memory/*.db
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+memory/gateway_artifacts/
+ui/memory/
 
 # Local LLM weight directories at repo root only (not ios/MarkRemote/.../Models)
 /models/
