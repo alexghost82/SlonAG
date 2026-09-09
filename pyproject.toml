@@ -40,7 +40,8 @@ target-version = "py311"
 line-length = 120
 include = ["tests/**/*.py", "acta/**/*.py", "providers/**/*.py", "speech/**/*.py",
            "server/**/*.py", "gateway/**/*.py", "policies/**/*.py",
-           "localization/**/*.py", "config/**/*.py", "sessions/**/*.py"]
+           "localization/**/*.py", "config/**/*.py", "sessions/**/*.py",
+           "runtime/jobs.py", "runtime/metrics.py", "runtime/commands.py"]
 exclude = ["actions/**", "agent/**", "or_client.py", "memory/**"]
 
 [tool.ruff.lint]
