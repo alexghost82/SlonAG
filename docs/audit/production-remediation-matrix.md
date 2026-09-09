@@ -10,7 +10,7 @@ Columns: ID, Severity, Subsystem, File, Symbol, Status, Evidence, Root Cause, Re
 
 Do **not** mark Completion Status `DONE` until the owning wave DoD is met.
 
-**Wave progress:** R0–R7 committed. R8 — MCP cannot auto-approve; FS symlink walk fixed on macOS; web content marked UNTRUSTED.
+**Wave progress:** R0–R10 committed. R11 qualification: **NOT_PRODUCTION_READY**. See `docs/audit/SLON_PRODUCTION_READINESS_REPORT.md`.
 
 ---
 
