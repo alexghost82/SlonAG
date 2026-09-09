@@ -10,7 +10,7 @@ Columns: ID, Severity, Subsystem, File, Symbol, Status, Evidence, Root Cause, Re
 
 Do **not** mark Completion Status `DONE` until the owning wave DoD is met.
 
-**Wave progress:** R0 `95f2f74`. R1 `d104c1c`. R2 COMPLETE — SLON-010/011/026/038 (queued/text AgentLoop; production `AgentExecutor(` count is 0). SlonLive exception remains until R7.
+**Wave progress:** R0 `95f2f74`. R1 `d104c1c`. R2 `1813960`. R3 COMPLETE — SDK imports confined to `providers/**` (+ onboard wizard). SlonLive still Gemini transport until R7.
 
 ---
 

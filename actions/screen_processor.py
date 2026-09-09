@@ -25,8 +25,8 @@ try:
 except ImportError:
     _PIL_OK = False
 
-from google import genai
-from google.genai import types
+from providers.gemini.live import genai
+from providers.gemini.live import types
 
 def get_base_dir():
     if getattr(sys, "frozen", False):

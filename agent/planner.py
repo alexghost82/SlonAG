@@ -82,7 +82,7 @@ def create_plan(
     *,
     registry: ToolRegistry | None = None,
 ) -> dict:
-    import google.generativeai as genai
+    from providers.gemini import generative as genai
 
     genai.configure(api_key=_get_api_key())
     model = genai.GenerativeModel(
@@ -152,7 +152,7 @@ def replan(
     *,
     registry: ToolRegistry | None = None,
 ) -> dict:
-    import google.generativeai as genai
+    from providers.gemini import generative as genai
 
     genai.configure(api_key=_get_api_key())
     model = genai.GenerativeModel(

@@ -6,8 +6,7 @@ import logging
 import sys
 from pathlib import Path
 
-from google import genai
-from google.genai import types
+from providers.gemini.live import create_live_client, types
 from providers.contracts import ModelInfo
 from ui import SlonUI, JarvisUI
 from memory.memory_manager import (
@@ -629,7 +628,7 @@ class SlonLive:
     async def run(self):
         if self._closed:
             raise RuntimeError("logical session is closed")
-        client = genai.Client(
+        client = create_live_client(
             api_key=_get_api_key(),
             http_options={"api_version": "v1beta"},
         )

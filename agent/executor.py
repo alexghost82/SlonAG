@@ -77,7 +77,7 @@ def _inject_context(
 
 def _detect_language(text: str) -> str:
     try:
-        import google.generativeai as genai
+        from providers.gemini import generative as genai
 
         genai.configure(api_key=_get_api_key())
         model = genai.GenerativeModel("gemini-2.5-flash-lite")
@@ -96,7 +96,7 @@ def _translate_to_goal_language(content: str, goal: str) -> str:
     if not goal:
         return content
     try:
-        import google.generativeai as genai
+        from providers.gemini import generative as genai
 
         genai.configure(api_key=_get_api_key())
         model = genai.GenerativeModel("gemini-2.5-flash")
@@ -364,7 +364,7 @@ class AgentExecutor:
             f"All done, sir. Completed {len(completed_steps)} steps for: {goal[:60]}."
         )
         try:
-            import google.generativeai as genai
+            from providers.gemini import generative as genai
 
             genai.configure(api_key=_get_api_key())
             model = genai.GenerativeModel(model_name="gemini-2.5-flash-lite")

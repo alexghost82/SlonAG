@@ -25,7 +25,7 @@ def _get_api_key() -> str:
 
 
 def _gemini_search(query: str) -> str:
-    from google import genai
+    from providers.gemini.live import genai
 
     client   = genai.Client(api_key=_get_api_key())
     response = client.models.generate_content(
@@ -124,7 +124,7 @@ def web_search(
     print(f"[WebSearch] 🔍 query_length={len(query)} mode={mode}")
 # replace: result = _gemini_search(query) block with:
     try:
-        from or_client import client
+        from providers.text_ops import client
         result = client.chat(
             query,
             system="You are a web search assistant. Answer factually and concisely."

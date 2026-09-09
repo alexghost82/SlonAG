@@ -87,9 +87,10 @@ def test_create_plan_includes_new_registry_tool_without_prompt_edit(
         configure=lambda **kwargs: captured.update(configure=kwargs),
         GenerativeModel=FakeModel,
     )
-    fake_google = SimpleNamespace(generativeai=fake_genai, __path__=[])
-    monkeypatch.setitem(sys.modules, "google", fake_google)
-    monkeypatch.setitem(sys.modules, "google.generativeai", fake_genai)
+    import providers.gemini.generative as generative_mod
+
+    monkeypatch.setattr(generative_mod, "configure", fake_genai.configure)
+    monkeypatch.setattr(generative_mod, "GenerativeModel", FakeModel)
     monkeypatch.setattr(planner, "_get_api_key", lambda: "offline-test-key")
 
     result = planner.create_plan("test", registry=registry)

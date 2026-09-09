@@ -45,7 +45,7 @@ def _get_api_key() -> str:
 
 
 def _get_gemini(model: str = GEMINI_MODEL):
-    import google.generativeai as genai
+    from providers.gemini import generative as genai
     genai.configure(api_key=_get_api_key())
     return genai.GenerativeModel(model)
 
@@ -463,8 +463,8 @@ def _screen_debug_action(description, file_path, player, speak=None) -> str:
             print(f"[Code] ⚠️ Could not read file: {err}")
 
     try:
-        from google import genai
-        from google.genai import types
+        from providers.gemini.live import genai
+        from providers.gemini.live import types
 
         client = genai.Client(api_key=_get_api_key())
 

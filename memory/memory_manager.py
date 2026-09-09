@@ -163,7 +163,7 @@ def should_extract_memory(user_text: str, slon_text: str = "", api_key: str = ""
     if _memory_cloud_forbidden():
         return False
     try:
-        from or_client import client
+        from providers.text_ops import client
 
         assistant_msg = slon_text or jarvis_text
         combined = f"User: {user_text[:300]}\nAssistant: {assistant_msg[:1000]}"
@@ -188,7 +188,7 @@ def extract_memory(user_text: str, slon_text: str = "", api_key: str = "", jarvi
     if _memory_cloud_forbidden():
         return {}
     try:
-        from or_client import client
+        from providers.text_ops import client
 
         assistant_msg = slon_text or jarvis_text
         combined = f"User: {user_text[:600]}\nAssistant: {assistant_msg[:300]}"
