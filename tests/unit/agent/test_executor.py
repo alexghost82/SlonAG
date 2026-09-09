@@ -310,13 +310,17 @@ async def test_execute_agent_loop_convenience_function() -> None:
 
 
 def test_execute_plan_convenience_function(monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import MagicMock
     import agent.executor as executor_mod
+    from agent.runtime import AgentLoopResult
 
-    mock_exec = MagicMock()
-    mock_exec.execute.return_value = "Plan completed"
-    monkeypatch.setattr(executor_mod, "AgentExecutor", lambda *args, **kwargs: mock_exec)
+    class FakeLoop:
+        async def run(self, user_goal: str, **_kwargs: object) -> AgentLoopResult:
+            assert user_goal == "legacy goal"
+            return AgentLoopResult(ok=True, final_answer="Plan completed")
+
+    monkeypatch.setattr(
+        executor_mod, "create_queued_agent_loop", lambda **_kwargs: FakeLoop()
+    )
 
     result = executor_mod.execute_plan("legacy goal")
     assert result == "Plan completed"
-    mock_exec.execute.assert_called_once_with("legacy goal", speak=None, cancel_flag=None)

@@ -309,31 +309,16 @@ async def test_offline_agent_budget_enforcement_timeout():
 
 
 def test_offline_agent_legacy_execute_plan_intact(monkeypatch: pytest.MonkeyPatch):
-    """Verify legacy execute_plan and AgentExecutor work offline."""
-    import agent.planner as planner_mod
+    """execute_plan is a queued AgentLoop helper, not AgentExecutor."""
+    from agent.runtime import AgentLoopResult
 
-    def mock_create_plan(goal: str, context: str = "", registry=None):
-        return {
-            "goal": goal,
-            "steps": [
-                {
-                    "step": 1,
-                    "tool": "web_search",
-                    "description": f"Search for {goal}",
-                    "parameters": {"query": goal},
-                    "critical": True,
-                }
-            ],
-        }
+    class FakeLoop:
+        async def run(self, user_goal: str, **_kwargs: object) -> AgentLoopResult:
+            return AgentLoopResult(ok=True, final_answer="Plan executed successfully.")
 
-    monkeypatch.setattr(planner_mod, "create_plan", mock_create_plan)
-
-    def mock_call_tool(self, tool: str, params: dict, speak=None, *, intent=""):
-        return "Search result output"
-
-    monkeypatch.setattr(AgentExecutor, "_call_tool", mock_call_tool)
     monkeypatch.setattr(
-        AgentExecutor, "_summarize", lambda self, g, steps, speak: "Plan executed successfully."
+        "agent.executor.create_queued_agent_loop",
+        lambda **_kwargs: FakeLoop(),
     )
 
     res = execute_plan("Legacy offline task")

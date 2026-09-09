@@ -213,6 +213,46 @@ def test_agent_loop_dataclasses():
 
 
 @pytest.mark.asyncio
+async def test_agent_loop_counts_each_tool_call():
+    responses = [
+        ChatResponse(
+            text="two tools",
+            provider_id="test",
+            model_id="test",
+            tool_calls=(
+                ToolCall(id="a", name="read_file", arguments={"path": "a"}),
+                ToolCall(id="b", name="read_file", arguments={"path": "b"}),
+            ),
+        ),
+        ChatResponse(text="done", provider_id="test", model_id="test"),
+    ]
+
+    mock_provider = MagicMock()
+    mock_provider.chat = AsyncMock(side_effect=lambda *_a, **_k: responses.pop(0))
+
+    loop = AgentLoop(
+        provider=mock_provider,
+        tool_executor=lambda *_a, **_k: ToolResult(ok=True, code="ok", message="ok"),
+        model=MODEL,
+    )
+    result = await loop.run("go")
+    assert result.ok is True
+    assert loop.budget.tool_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_provider_retry_budget():
+    mock_provider = MagicMock()
+    mock_provider.chat = AsyncMock(side_effect=ConnectionError("down"))
+    budget = LoopBudget(max_provider_retries=2, retry_backoff_seconds=0.0)
+    loop = AgentLoop(provider=mock_provider, model=MODEL, budget=budget)
+    result = await loop.run("go")
+    assert result.ok is False
+    assert "retry budget" in result.reason.lower()
+    assert mock_provider.chat.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_agent_loop_single_turn_text_response():
     """Verify AgentLoop completes on first turn when model returns text only."""
     mock_provider = MagicMock()

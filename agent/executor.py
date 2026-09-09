@@ -388,6 +388,43 @@ class AgentExecutor:
             return fallback
 
 
+def _default_queued_model() -> ModelInfo:
+    return ModelInfo(
+        provider_id="offline",
+        model_id="queued-agent",
+        display_name="Queued AgentLoop",
+        text=True,
+        tool_calling=True,
+    )
+
+
+def create_queued_agent_loop(
+    *,
+    cancel_event: threading.Event | None = None,
+    budget: LoopBudget | None = None,
+    stack: Any = None,
+    model: ModelInfo | None = None,
+) -> AgentLoop:
+    """Build AgentLoop via RuntimeStack when available. Never AgentExecutor."""
+    selected = model or _default_queued_model()
+    if stack is None:
+        from acta.bridge import build_runtime_stack
+
+        stack = build_runtime_stack()
+    try:
+        return stack.create_agent_loop(
+            model=selected, budget=budget, cancel_event=cancel_event
+        )
+    except RuntimeError:
+        return AgentLoop(
+            model=selected,
+            provider=getattr(stack, "router", None),
+            tool_executor=getattr(stack, "tool_executor", None),
+            budget=budget,
+            cancel_event=cancel_event,
+        )
+
+
 async def execute_agent_loop(
     user_goal: str,
     *,
@@ -412,6 +449,12 @@ def execute_plan(
     speak: Callable | None = None,
     cancel_flag: threading.Event | None = None,
 ) -> str:
-    """Legacy plan-step execution helper function using AgentExecutor."""
-    executor = AgentExecutor()
-    return executor.execute(goal, speak=speak, cancel_flag=cancel_flag)
+    """Queued/text helper: run AgentLoop. Does not construct AgentExecutor."""
+    import asyncio
+
+    loop = create_queued_agent_loop(cancel_event=cancel_flag)
+    result = asyncio.run(loop.run(user_goal=goal))
+    text = result.final_answer or result.reason or ""
+    if speak and text:
+        speak(text)
+    return text

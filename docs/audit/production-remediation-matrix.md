@@ -10,7 +10,7 @@ Columns: ID, Severity, Subsystem, File, Symbol, Status, Evidence, Root Cause, Re
 
 Do **not** mark Completion Status `DONE` until the owning wave DoD is met.
 
-**Wave progress:** R0 COMPLETE (`95f2f74`). R1 COMPLETE — SLON-001…009, SLON-027 (harness + memory fail-closed), SLON-028 done. SLON-014/016 cloud SDK bypass remains for R3 (`or_client` still exists; extract is no-op in offline/local_only).
+**Wave progress:** R0 `95f2f74`. R1 `d104c1c`. R2 COMPLETE — SLON-010/011/026/038 (queued/text AgentLoop; production `AgentExecutor(` count is 0). SlonLive exception remains until R7.
 
 ---
 

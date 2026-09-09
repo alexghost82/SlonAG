@@ -37,8 +37,11 @@ class LoopBudget:
     max_tool_calls: int = 15
     max_turns: int = 10
     timeout_seconds: float = 120.0
+    max_provider_retries: int = 3
+    retry_backoff_seconds: float = 0.25
     tool_call_count: int = 0
     turn_count: int = 0
+    provider_retry_count: int = 0
     start_time: float = field(default_factory=time.time)
 
     def is_exceeded(self) -> tuple[bool, str | None]:
@@ -275,12 +278,19 @@ class AgentLoop:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                # Transient error — skip this turn and retry on next turn
-                # (e.g., temporary provider outage, rate limit, etc.)
                 trace.mark("provider_request_failed")
                 import logging
                 logging.getLogger(__name__).warning("Provider call failed, will retry: %s", exc)
-                self.budget.turn_count -= 1  # don't count the failed turn
+                self.budget.provider_retry_count += 1
+                if self.budget.provider_retry_count >= self.budget.max_provider_retries:
+                    return AgentLoopResult(
+                        False,
+                        steps=steps,
+                        reason=f"Provider retry budget exceeded ({self.budget.max_provider_retries})",
+                    )
+                delay = self.budget.retry_backoff_seconds * self.budget.provider_retry_count
+                if delay > 0:
+                    await asyncio.sleep(delay)
                 continue
             trace.mark("provider_first_response")
 
@@ -298,7 +308,7 @@ class AgentLoop:
                 )
 
             if tool_calls:
-                self.budget.tool_call_count += 1
+                self.budget.tool_call_count += len(tool_calls)
 
                 # Record for loop detection
                 for tc in tool_calls:
