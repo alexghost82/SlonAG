@@ -140,6 +140,28 @@ class DesktopControlPlane:
         state["system_metrics"] = metrics
         return state
 
+    def dispatch(self, command: object) -> object:
+        """Dispatch a typed ``UiCommand`` or a raw action name."""
+        kind = getattr(command, "kind", None)
+        if kind is not None:
+            action = str(getattr(kind, "value", kind))
+            payload = dict(getattr(command, "payload", {}) or {})
+            if action == "send_message":
+                text = str(payload.get("text") or payload.get("message") or "")
+                return self.submit_text(text)
+            if action in {"approve", "deny"}:
+                return self.request_approval(
+                    str(payload.get("tool_name") or ""),
+                    dict(payload.get("arguments") or {}),
+                    source=str(payload.get("source") or "ui"),
+                    reason=action,
+                    tool_call_id=payload.get("tool_call_id")
+                    if isinstance(payload.get("tool_call_id"), str)
+                    else None,
+                )
+            return self.perform(action)
+        return self.perform(str(command))
+
     def perform(self, action: str) -> object:
         normalized = action.strip().lower()
         with self._lock:
