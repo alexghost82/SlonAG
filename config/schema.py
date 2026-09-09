@@ -200,14 +200,10 @@ class Settings:
             payload["os_system"] = self.os_system
         if self.camera_index is not None:
             payload["camera_index"] = self.camera_index
-        if self.voice_stt_engine != DEFAULT_VOICE_STT_ENGINE:
-            payload["voice_stt_engine"] = self.voice_stt_engine
-        if self.voice_tts_engine != DEFAULT_VOICE_TTS_ENGINE:
-            payload["voice_tts_engine"] = self.voice_tts_engine
-        if self.voice_mic_device is not None:
-            payload["voice_mic_device"] = self.voice_mic_device
-        if self.voice_speaker_device is not None:
-            payload["voice_speaker_device"] = self.voice_speaker_device
+        payload["voice_stt_engine"] = self.voice_stt_engine
+        payload["voice_tts_engine"] = self.voice_tts_engine
+        payload["voice_mic_device"] = self.voice_mic_device
+        payload["voice_speaker_device"] = self.voice_speaker_device
         return payload
 
 def default_settings() -> Settings:
@@ -249,6 +245,14 @@ def validate_settings(data: object) -> Settings:
     provider_settings = _validate_provider_settings(data.get("provider_settings"))
     os_system = _optional_os_overlay(data)
     camera_index = _optional_non_negative_int(data, "camera_index")
+    voice_stt_engine = _optional_non_empty_str(
+        data, "voice_stt_engine", DEFAULT_VOICE_STT_ENGINE
+    )
+    voice_tts_engine = _optional_non_empty_str(
+        data, "voice_tts_engine", DEFAULT_VOICE_TTS_ENGINE
+    )
+    voice_mic_device = _optional_nullable_str(data, "voice_mic_device")
+    voice_speaker_device = _optional_nullable_str(data, "voice_speaker_device")
 
     return Settings(
         privacy_profile=privacy_profile,
@@ -262,6 +266,10 @@ def validate_settings(data: object) -> Settings:
         provider_settings=provider_settings,
         os_system=os_system,
         camera_index=camera_index,
+        voice_stt_engine=voice_stt_engine,
+        voice_tts_engine=voice_tts_engine,
+        voice_mic_device=voice_mic_device,
+        voice_speaker_device=voice_speaker_device,
     )
 
 
@@ -304,6 +312,19 @@ def _optional_non_empty_str(
         raise SettingsValidationError(f"{field_name} must be a string")
     if not value.strip():
         raise SettingsValidationError(f"{field_name} must be a non-empty string")
+    return value
+
+
+def _optional_nullable_str(
+    data: Mapping[str, Any], field_name: str
+) -> str | None:
+    if field_name not in data:
+        return None
+    value = data[field_name]
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise SettingsValidationError(f"{field_name} must be a string or null")
     return value
 
 

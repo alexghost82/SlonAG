@@ -246,6 +246,20 @@ def test_openai_compat_provider_settings():
     assert s.provider_settings["openai_compat"].base_url == "http://10.0.0.1:9000/v1"
 
 
+def test_voice_fields_survive_round_trip() -> None:
+    from config.schema import Settings
+
+    settings = Settings(
+        voice_stt_engine="whisper_cpp",
+        voice_tts_engine="say",
+        voice_mic_device="Built-in Mic",
+        voice_speaker_device="Built-in Output",
+    )
+    restored = validate_settings(settings.to_dict())
+    assert restored == settings
+    assert default_settings() == validate_settings(default_settings().to_dict())
+
+
 def test_full_round_trip_with_all_new_fields():
     raw = {
         "provider_id": "openai",
