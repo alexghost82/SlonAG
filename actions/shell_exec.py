@@ -37,6 +37,7 @@ import shlex
 import subprocess
 import sys
 import logging
+import tempfile
 import threading
 import unicodedata
 from dataclasses import dataclass
@@ -325,29 +326,50 @@ def _block_injection(cmd: str, action_type: str) -> bool:
 
     return False
 
-def _safe_cwd(cwd_arg: str | None, current_cwd: str) -> Path:
-    """Resolve ``cwd`` with safety constraints.
+def _approved_cwd_roots() -> tuple[Path, ...]:
+    """Resolved directories a model-supplied cwd may live under."""
+    roots = [Path.home().resolve()]
+    tmp = Path(tempfile.gettempdir()).resolve()
+    roots.append(tmp)
+    if sys.platform != "win32":
+        roots.append(Path("/tmp").resolve())
+        private_tmp = Path("/private/tmp")
+        if private_tmp.exists():
+            roots.append(private_tmp.resolve())
+    # Dedup while preserving order
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for root in roots:
+        if root not in seen:
+            seen.add(root)
+            unique.append(root)
+    return tuple(unique)
 
-    Allowed:
-    * ``None`` / empty → current working directory
-    * Paths under ``$HOME``
-    * Paths under ``/tmp``
+
+def _is_under_approved_root(path: Path, roots: tuple[Path, ...]) -> bool:
+    for root in roots:
+        try:
+            if path.is_relative_to(root):
+                return True
+        except (ValueError, OSError):
+            continue
+    return False
+
+
+def _safe_cwd(cwd_arg: str | None, current_cwd: str) -> Path:
+    """Resolve ``cwd`` with ``Path.resolve()`` + ``is_relative_to``.
+
+    Empty cwd uses the process current directory (already granted).
+    A model-supplied path must resolve inside an approved root. Prefix
+    string checks and "any existing directory" fallbacks are forbidden.
     """
     if cwd_arg is None or not cwd_arg.strip():
-        return Path(current_cwd).resolve()
+        return Path(current_cwd).resolve() if current_cwd else Path.cwd().resolve()
     path = Path(cwd_arg).expanduser().resolve()
-
-    home = Path.home().resolve()
-    if str(path).startswith(str(home)):
+    if not path.is_dir():
+        raise ArgValidationError(TOOL_NAME, _t("shell_exec.invalid_cwd"))
+    if _is_under_approved_root(path, _approved_cwd_roots()):
         return path
-
-    if str(path).startswith("/tmp"):
-        return path
-
-    # Verify existence (user may specify an existing project path).
-    if path.is_dir():
-        return path
-
     raise ArgValidationError(TOOL_NAME, _t("shell_exec.invalid_cwd"))
 
 
@@ -475,6 +497,7 @@ async def _run_subprocess_async(
     with _active_lock:
         _active_procs.add(proc)
 
+    timed_out = False
     try:
         stdin_input: bytes | None = stdin_data.encode("utf-8") if stdin_data else None
         try:
@@ -484,16 +507,12 @@ async def _run_subprocess_async(
             stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
             stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
         except subprocess.TimeoutExpired:
-            if kill_tree:
-                _kill_tree(proc)
-            try:
-                stdout_bytes, stderr_bytes = proc.communicate()
-                stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
-                stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-            except Exception:
-                stdout_data, stderr_data = "", ""
+            timed_out = True
+            stdout_bytes, stderr_bytes = _drain_after_timeout(proc, kill_tree=kill_tree)
+            stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
 
-        exit_code = proc.returncode
+        exit_code = proc.returncode if proc.returncode is not None else -1
     finally:
         with _active_lock:
             _active_procs.discard(proc)
@@ -511,7 +530,7 @@ async def _run_subprocess_async(
         stdout=stdout_data or "",
         stderr=stderr_data or "",
         exit_code=exit_code,
-        timed_out=False,
+        timed_out=timed_out,
         cwd=str(cwd),
         timeout_seconds=timeout_f,
         killed_by_tree=_was_killed(proc),
@@ -525,6 +544,24 @@ def _communicate(
     Returns raw bytes; caller decodes to str.
     """
     return proc.communicate(input=stdin_data, timeout=timeout_f)
+
+
+def _drain_after_timeout(
+    proc: subprocess.Popen[Any], *, kill_tree: bool, drain_timeout: float = 0.4
+) -> tuple[bytes, bytes]:
+    """Reap pipes after a timeout without hanging when ``kill_tree`` is false."""
+    if kill_tree:
+        _kill_tree(proc)
+    try:
+        return proc.communicate(timeout=drain_timeout)
+    except subprocess.TimeoutExpired:
+        for pipe in (proc.stdin, proc.stdout, proc.stderr):
+            if pipe is not None:
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
+        return b"", b""
 
 
 def _run_subprocess_sync(
@@ -562,6 +599,7 @@ def _run_subprocess_sync(
     with _active_lock:
         _active_procs.add(proc)
 
+    timed_out = False
     try:
         stdin_input: bytes | None = stdin_data.encode("utf-8") if stdin_data else None
         try:
@@ -571,16 +609,12 @@ def _run_subprocess_sync(
             stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
             stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
         except subprocess.TimeoutExpired:
-            if kill_tree:
-                _kill_tree(proc)
-            try:
-                stdout_bytes, stderr_bytes = proc.communicate()
-                stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
-                stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-            except Exception:
-                stdout_data, stderr_data = "", ""
+            timed_out = True
+            stdout_bytes, stderr_bytes = _drain_after_timeout(proc, kill_tree=kill_tree)
+            stdout_data = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            stderr_data = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
 
-        exit_code = proc.returncode
+        exit_code = proc.returncode if proc.returncode is not None else -1
     finally:
         with _active_lock:
             _active_procs.discard(proc)
@@ -598,7 +632,7 @@ def _run_subprocess_sync(
         stdout=stdout_data or "",
         stderr=stderr_data or "",
         exit_code=exit_code,
-        timed_out=False,
+        timed_out=timed_out,
         cwd=str(cwd),
         timeout_seconds=timeout_f,
         killed_by_tree=_was_killed(proc),
@@ -793,24 +827,13 @@ def shell_exec(
                 message="Ошибка подтверждения пользователем.",
             )
 
-    # Execute: try async loop first, fall back to sync for tests
-    try:
-        loop = asyncio.get_running_loop()
-        # We're in an async context; run the coroutine
-        result = loop.run_until_complete(
-            _run_subprocess_async(
-                cmd_args, cwd, env_allowlist,
-                timeout_f, stdin_data,
-                stdout_max, stderr_max, kill_tree,
-            )
-        )
-    except RuntimeError:
-        # No event loop — sync context (tests, direct calls)
-        result = _run_subprocess_sync(
-            cmd_args, cwd, env_allowlist,
-            timeout_f, stdin_data,
-            stdout_max, stderr_max, kill_tree,
-        )
+    # Never call loop.run_until_complete on a running loop. Sync communicate
+    # is safe when ToolExecutor scheduled this handler via to_thread.
+    result = _run_subprocess_sync(
+        cmd_args, cwd, env_allowlist,
+        timeout_f, stdin_data,
+        stdout_max, stderr_max, kill_tree,
+    )
 
     # Build message
     output_parts: list[str] = []
@@ -821,6 +844,21 @@ def shell_exec(
         output_parts.append("stderr:")
         output_parts.append(result.stderr.rstrip())
     output = "\n".join(output_parts) if output_parts else "(нет вывода)"
+
+    if result.timed_out:
+        return ToolResult(
+            ok=False,
+            code="timeout",
+            message=output,
+            data={
+                "command": result.command,
+                "exit_code": result.exit_code,
+                "timed_out": True,
+                "cwd": result.cwd,
+                "timeout_seconds": result.timeout_seconds,
+                "killed_by_tree": result.killed_by_tree,
+            },
+        )
 
     return ToolResult(
         ok=result.exit_code == 0,

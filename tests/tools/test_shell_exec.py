@@ -102,11 +102,12 @@ def test_shell_exec_timeout() -> None:
         current_cwd=str(Path.cwd()),
     )
     assert result.ok is False
-    assert result.code == "nonzero_exit"
+    assert result.code == "timeout"
     data = result.data
     if isinstance(data, dict):
         # Timeout is clamped to min 1.0s
         assert data.get("timeout_seconds") >= 1.0
+        assert data.get("timed_out") is True
 
 
 # ---------------------------------------------------------------------------
@@ -129,8 +130,10 @@ def test_shell_exec_timeout_kills_tree() -> None:
         current_cwd=str(Path.cwd()),
     )
     assert result.ok is False
+    assert result.code == "timeout"
     data = result.data
     if isinstance(data, dict):
+        assert data.get("timed_out") is True
         assert data.get("killed_by_tree") is True
 
 

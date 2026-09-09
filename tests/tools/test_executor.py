@@ -386,3 +386,122 @@ def test_minimal_legacy_normalization(
         "web_search", {"value": "x"}, source=UntrustedSource.USER
     )
     assert result.ok and result.message == message and result.data == data
+
+
+@pytest.mark.asyncio
+async def test_execute_async_success_is_not_retryable() -> None:
+    executor = build_executor(lambda arguments: arguments, RecordingPolicy())
+    result = await executor.execute_async(
+        "web_search", {"value": "x"}, source=UntrustedSource.USER
+    )
+    assert result.ok is True
+    assert result.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_execute_async_non_idempotent_failure_is_not_retryable() -> None:
+    def handler(_arguments: Mapping[str, object]) -> None:
+        raise ConnectionError("transient")
+
+    executor = build_executor(handler, RecordingPolicy(), idempotent=False)
+    result = await executor.execute_async(
+        "web_search", {"value": "x"}, source=UntrustedSource.USER
+    )
+    assert result.ok is False
+    assert result.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_execute_async_idempotent_timeout_is_retryable() -> None:
+    def handler(_arguments: Mapping[str, object]) -> None:
+        time.sleep(0.2)
+
+    executor = build_executor(handler, RecordingPolicy(), timeout=0.01, idempotent=True)
+    result = await executor.execute_async(
+        "web_search", {"value": "x"}, source=UntrustedSource.USER
+    )
+    assert result.code == "timeout"
+    assert result.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_execute_many_async_side_effects_are_sequential() -> None:
+    registry = ToolRegistry()
+    active = 0
+    max_active = 0
+
+    def handler(arguments):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        time.sleep(0.02)
+        active -= 1
+        return arguments
+
+    registry.register(
+        ToolSpec(
+            name="write",
+            description="write",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=handler,
+            risk=RiskLevel.CONFIRM,
+        )
+    )
+    executor = ToolExecutor(registry, RecordingPolicy())  # type: ignore[arg-type]
+    await executor.execute_many_async(
+        (("write", {"value": 1}), ("write", {"value": 2})),
+        source=UntrustedSource.USER,
+    )
+    assert max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_many_async_duplicate_calls_are_serialized() -> None:
+    registry = ToolRegistry()
+    active = 0
+    max_active = 0
+
+    def handler(arguments):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        time.sleep(0.02)
+        active -= 1
+        return arguments
+
+    registry.register(
+        ToolSpec(
+            name="read",
+            description="read",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=handler,
+            risk=RiskLevel.READ,
+            read_only=True,
+            idempotent=True,
+            side_effects=False,
+            parallel_safe=True,
+        )
+    )
+    executor = ToolExecutor(registry, RecordingPolicy())  # type: ignore[arg-type]
+    await executor.execute_many_async(
+        (("read", {"value": 1}), ("read", {"value": 1})),
+        source=UntrustedSource.USER,
+    )
+    assert max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_handler_does_not_use_run_until_complete() -> None:
+    calls = {"n": 0}
+
+    def handler(arguments):
+        calls["n"] += 1
+        return arguments
+
+    result = await build_executor(handler, RecordingPolicy()).execute_async(
+        "web_search", {"value": "x"}, source=UntrustedSource.USER
+    )
+    assert result.ok is True
+    assert calls["n"] == 1

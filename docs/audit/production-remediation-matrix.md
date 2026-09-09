@@ -8,7 +8,9 @@
 
 Columns: ID, Severity, Subsystem, File, Symbol, Status, Evidence, Root Cause, Required Fix, Dependencies, Acceptance Test, Runtime Verification, Completion Status.
 
-Do **not** mark Completion Status `DONE` until the owning wave DoD is met. R0 only inventories.
+Do **not** mark Completion Status `DONE` until the owning wave DoD is met.
+
+**Wave progress:** R0 COMPLETE (`95f2f74`). R1 COMPLETE — SLON-001…009, SLON-027 (harness + memory fail-closed), SLON-028 done. SLON-014/016 cloud SDK bypass remains for R3 (`or_client` still exists; extract is no-op in offline/local_only).
 
 ---
 

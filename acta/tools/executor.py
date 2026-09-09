@@ -12,12 +12,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 from acta.safety import DecisionKind, SafetyPolicy, UntrustedSource
-from acta.tools.contracts import ToolResult, ToolSpec
+from acta.tools.contracts import CancellationClass, ToolResult, ToolSpec
 from acta.tools.registry import ToolRegistry
 
 _CONFIRMATION_KINDS = frozenset(
     {DecisionKind.CONFIRM, DecisionKind.EXACT_CONFIRM, DecisionKind.BIOMETRIC}
 )
+_TRANSIENT_EXCEPTIONS = (ConnectionError, TimeoutError)
+_TRANSIENT_CODES = frozenset({"timeout", "connection_error"})
 
 
 class ToolExecutor:
@@ -119,10 +121,7 @@ class ToolExecutor:
         handler_started_at = time.monotonic()
         outcome = self._invoke(spec.handler, checked, spec.timeout_seconds)
         if outcome is _TIMED_OUT:
-            warning = (
-                "The handler did not finish before the deadline; an already running "
-                "legacy operation may continue."
-            )
+            warning = _timeout_warning(spec)
             return ToolResult(
                 ok=False,
                 code="timeout",
@@ -171,28 +170,7 @@ class ToolExecutor:
         if not calls:
             return ()
         normalized_calls = tuple(self._normalize_call(call) for call in calls)
-        specs: list[ToolSpec | None] = []
-        for _tool_call_id, name, _arguments in normalized_calls:
-            try:
-                specs.append(self._registry.get(name))
-            except Exception:
-                specs.append(None)
-        safely_parallel = all(
-            spec is not None
-            and spec.parallel_safe
-            and spec.read_only
-            and spec.idempotent
-            and not spec.side_effects
-            for spec in specs
-        )
-        # Duplicate calls are conservatively serialized: they may contend for
-        # the same remote or local resource even when the operation is a read.
-        identities = [
-            (name, repr(sorted(arguments.items())))
-            for _tool_call_id, name, arguments in normalized_calls
-        ]
-        independent = len(set(identities)) == len(identities)
-        if not safely_parallel or not independent:
+        if not self._calls_are_parallel_safe(normalized_calls):
             return tuple(
                 self.execute(
                     name, arguments, source=source, intent=intent,
@@ -223,6 +201,36 @@ class ToolExecutor:
             return None, name, arguments
         tool_call_id, name, arguments = call
         return tool_call_id, name, arguments
+
+    def _calls_are_parallel_safe(
+        self,
+        normalized_calls: Sequence[tuple[str | None, str, Mapping[str, object]]],
+    ) -> bool:
+        """Same gate for sync and async batches.
+
+        Parallel only when every spec is parallel_safe, read_only, idempotent,
+        side-effect free, and the calls are independent (no duplicate identity).
+        """
+        specs: list[ToolSpec | None] = []
+        for _tool_call_id, name, _arguments in normalized_calls:
+            try:
+                specs.append(self._registry.get(name))
+            except Exception:
+                specs.append(None)
+        safely_parallel = all(
+            spec is not None
+            and spec.parallel_safe
+            and spec.read_only
+            and spec.idempotent
+            and not spec.side_effects
+            for spec in specs
+        )
+        identities = [
+            (name, repr(sorted(arguments.items())))
+            for _tool_call_id, name, arguments in normalized_calls
+        ]
+        independent = len(set(identities)) == len(identities)
+        return bool(safely_parallel and independent)
 
     async def execute_async(
         self,
@@ -307,31 +315,13 @@ class ToolExecutor:
 
         handler_started_at = time.monotonic()
         try:
-            # Detect handler signature: MCP tools use **kwargs, builtin use single dict arg
-            sig = inspect.signature(spec.handler)
-            has_var_keyword = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD
-                for p in sig.parameters.values()
-            )
-            if has_var_keyword:
-                raw_result = spec.handler(**arguments)
-            else:
-                raw_result = spec.handler(arguments)
-            # Await if the handler is a coroutine
-            if inspect.iscoroutine(raw_result):
-                outcome = await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
-            else:
-                outcome = raw_result
+            outcome = await _invoke_handler_async(spec, arguments)
         except TimeoutError:
-            warning = (
-                "The handler did not finish before the deadline; an already running "
-                "legacy operation may continue."
-            )
             return ToolResult(
                 ok=False,
                 code="timeout",
                 message="Tool execution timed out.",
-                warnings=(warning,),
+                warnings=(_timeout_warning(spec),),
                 started_at=started_at,
                 finished_at=time.monotonic(),
                 approval_started_at=approval_started_at,
@@ -339,7 +329,7 @@ class ToolExecutor:
                 handler_started_at=handler_started_at,
                 retryable=spec.idempotent,
             )
-        except Exception:
+        except Exception as exc:
             return ToolResult(
                 ok=False,
                 code="handler_error",
@@ -349,18 +339,18 @@ class ToolExecutor:
                 approval_started_at=approval_started_at,
                 approval_finished_at=approval_finished_at,
                 handler_started_at=handler_started_at,
-                retryable=False,
+                retryable=_retryable_failure(spec, exc=exc),
             )
 
+        normalized = self._normalize(outcome, started_at)
         return replace(
-            self._normalize(outcome, started_at),
+            normalized,
             started_at=started_at,
             approval_started_at=approval_started_at,
             approval_finished_at=approval_finished_at,
             handler_started_at=handler_started_at,
-            retryable=True,
+            retryable=_retryable_from_result(spec, normalized),
         )
-
 
     async def execute_many_async(
         self,
@@ -373,11 +363,7 @@ class ToolExecutor:
         intent: str = "",
         cancel_event: threading.Event | None = None,
     ) -> tuple[ToolResult, ...]:
-        """Async batch execute for async-capable executors (e.g., MCP tools).
-
-        Runs each call through execute_async so async handlers (MCP tools)
-        are properly awaited in the event loop thread.
-        """
+        """Async batch execute using the same parallel policy as ``execute_many``."""
         if not calls:
             return ()
         normalized = tuple(self._normalize_call(call) for call in calls)
@@ -390,6 +376,10 @@ class ToolExecutor:
                 cancel_event=cancel_event, tool_call_id=tool_call_id,
             )
 
+        if not self._calls_are_parallel_safe(normalized):
+            return tuple([
+                await _run_one(tid, name, args) for tid, name, args in normalized
+            ])
         results = await asyncio.gather(
             *(_run_one(tid, name, args) for tid, name, args in normalized)
         )
@@ -418,9 +408,7 @@ class ToolExecutor:
                 results.put(_TIMED_OUT)
             except Exception as exc:
                 results.put(
-                    _HandlerFailure(
-                        retryable=isinstance(exc, (ConnectionError, TimeoutError))
-                    )
+                    _HandlerFailure(retryable=isinstance(exc, _TRANSIENT_EXCEPTIONS))
                 )
 
         worker = threading.Thread(target=run, name="slon-tool-handler", daemon=True)
@@ -495,6 +483,64 @@ class _HandlerFailure:
 
 
 _TIMED_OUT = object()
+
+
+def _timeout_warning(spec: ToolSpec) -> str:
+    if spec.cancellation_class is CancellationClass.KILLABLE:
+        return "The handler timed out; killable work should have been terminated."
+    if spec.cancellation_class is CancellationClass.COOPERATIVE:
+        return (
+            "The handler timed out; cooperative cancellation was requested but "
+            "the handler may still be unwinding."
+        )
+    return (
+        "The handler did not finish before the deadline; an already running "
+        "legacy operation may continue."
+    )
+
+
+def _retryable_failure(
+    spec: ToolSpec, *, exc: BaseException | None = None, code: str | None = None
+) -> bool:
+    if not spec.idempotent:
+        return False
+    if exc is not None:
+        return isinstance(exc, _TRANSIENT_EXCEPTIONS)
+    if code is not None:
+        return code in _TRANSIENT_CODES
+    return False
+
+
+def _retryable_from_result(spec: ToolSpec, result: ToolResult) -> bool:
+    if result.ok:
+        return False
+    return _retryable_failure(spec, code=result.code) or (
+        bool(result.retryable) and spec.idempotent and result.code in _TRANSIENT_CODES
+    )
+
+
+async def _invoke_handler_async(spec: ToolSpec, arguments: Mapping[str, object]) -> object:
+    """Run a handler without blocking the event loop on sync callables."""
+    sig = inspect.signature(spec.handler)
+    has_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    )
+
+    def _call() -> object:
+        if has_var_keyword:
+            return spec.handler(**arguments)
+        return spec.handler(arguments)
+
+    if inspect.iscoroutinefunction(spec.handler):
+        raw_result = _call()
+        return await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
+
+    raw_result = await asyncio.wait_for(
+        asyncio.to_thread(_call), timeout=spec.timeout_seconds
+    )
+    if inspect.iscoroutine(raw_result):
+        return await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
+    return raw_result
 
 
 __all__ = ["ToolExecutor"]

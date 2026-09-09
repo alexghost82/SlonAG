@@ -9,7 +9,7 @@ from pathlib import Path
 
 from acta.safety.registry import SafetyRule
 from acta.safety.registry import tool_spec as safety_rule
-from acta.tools.contracts import SideEffectClass, ToolSpec
+from acta.tools.contracts import CancellationClass, SideEffectClass, ToolSpec
 from acta.tools.legacy import LEGACY_HANDLERS
 from acta.tools.registry import ToolRegistry
 
@@ -172,6 +172,12 @@ def build_builtin_registry() -> ToolRegistry:
                     else SideEffectClass.REVERSIBLE
                 ),
                 parallel_safe=rule.risk.value == 0,
+                cancellable=name == "shell_exec",
+                cancellation_class=(
+                    CancellationClass.KILLABLE
+                    if name == "shell_exec"
+                    else CancellationClass.UNSAFE
+                ),
                 capabilities=capabilities,
             )
         )

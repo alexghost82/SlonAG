@@ -203,79 +203,24 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
 
 
 
-# Wave 22: shell_exec — bounded subprocess executor (async, uses subprocess.run)
-async def shell_exec_handler(
+def _map_legacy_shell_args(args: Mapping[str, object]) -> dict[str, object]:
+    """Accept legacy ``cmd`` while forwarding the hardened argv contract."""
+    mapped = dict(args)
+    if "command" not in mapped and mapped.get("cmd") is not None:
+        mapped["command"] = mapped.pop("cmd")
+    return mapped
+
+
+def shell_exec_handler(
     args: Mapping[str, object],
     *,
     _speak: Callable[..., object] | None = None,
     _player: object | None = None,
 ) -> ToolResult:
-    """Async shell executor using asyncio.create_subprocess_shell.
+    """Production shell_exec — hardened argv executor, never a shell subprocess."""
+    from actions.shell_exec import shell_exec
 
-    Accepts legacy ``cmd`` key and canonical ``command``/``arguments`` keys.
-    """
-    cmd: str | None = args.get("cmd")
-    if cmd is None:
-        cmd = args.get("command")
-    if cmd is None:
-        arguments = args.get("arguments")
-        if isinstance(arguments, list):
-            cmd = " ".join(str(a) for a in arguments)
-        elif isinstance(arguments, str):
-            cmd = arguments
-    if cmd is None or not isinstance(cmd, str):
-        return ToolResult(
-            ok=False, code="missing_field",
-            message="command or cmd is required.",
-        )
-
-    timeout: float = float(args.get("timeout", 30.0))
-    timeout = max(1.0, min(timeout, 300.0))
-
-    try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            limit=1024 * 1024,
-        )
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return ToolResult(
-                ok=False, code="timeout",
-                message=f"Command exceeded {timeout}s timeout.",
-            )
-
-        stdout = stdout_bytes.decode("utf-8", errors="replace")
-        stderr = stderr_bytes.decode("utf-8", errors="replace")
-        ok = proc.returncode == 0
-        return ToolResult(
-            ok=ok,
-            code="ok" if ok else "nonzero_exit",
-            data={
-                "returncode": proc.returncode,
-                "stdout": stdout or "",
-                "stderr": stderr or "",
-            },
-            message=stdout.strip() if stdout else "",
-        )
-    except subprocess.TimeoutExpired:
-        return ToolResult(
-            ok=False, code="timeout",
-            message=f"Command exceeded {timeout}s timeout.",
-        )
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        return ToolResult(
-            ok=False, code="handler_failed",
-            message=str(exc),
-        )
+    return shell_exec(_map_legacy_shell_args(args), player=_player)
 
 shell_exec_handler.__name__ = "shell_exec_handler"
 shell_exec_handler._accepts_legacy_context = True  # type: ignore[attr-defined]
@@ -620,7 +565,7 @@ LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {
     "send_message": legacy_handler_factory(send_message_handler),
     "code_helper": legacy_handler_factory(code_helper_handler),
     "dev_agent": legacy_handler_factory(dev_agent_handler),
-    "shell_exec": shell_exec_handler,  # Wave 22: canonical shell executor (async)
+    "shell_exec": shell_exec_handler,
     "agent_task": legacy_handler_factory(agent_task_handler),
     "vision_analyze": legacy_handler_factory(vision_analyze),
     "stt_listen": legacy_handler_factory(stt_listen),

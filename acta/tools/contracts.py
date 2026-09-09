@@ -19,6 +19,19 @@ class SideEffectClass(StrEnum):
     IRREVERSIBLE = "irreversible"
 
 
+class CancellationClass(StrEnum):
+    """How a timed-out or cancelled handler may be stopped.
+
+    cooperative — handler inspects cancel/timeout and exits itself.
+    killable — runtime may terminate the work (process tree, task cancel).
+    unsafe — leftover work may continue; callers must classify the result.
+    """
+
+    COOPERATIVE = "cooperative"
+    KILLABLE = "killable"
+    UNSAFE = "unsafe"
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     """Static metadata and handler for one canonical tool."""
@@ -36,6 +49,7 @@ class ToolSpec:
     side_effect_class: SideEffectClass | None = None
     parallel_safe: bool = False
     cancellable: bool = False
+    cancellation_class: CancellationClass = CancellationClass.UNSAFE
     capabilities: frozenset[str] = frozenset()
     scopes: frozenset[str] = frozenset()
 
@@ -90,4 +104,10 @@ class ToolResult:
     retryable: bool = False
 
 
-__all__ = ["ArtifactRef", "SideEffectClass", "ToolResult", "ToolSpec"]
+__all__ = [
+    "ArtifactRef",
+    "CancellationClass",
+    "SideEffectClass",
+    "ToolResult",
+    "ToolSpec",
+]
