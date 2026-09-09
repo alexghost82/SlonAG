@@ -164,23 +164,19 @@ class McpIntegration:
             )
 
         if decision.kind in (DecisionKind.CONFIRM, DecisionKind.EXACT_CONFIRM):
-            if self.approval_required:
-                return ToolResult(
-                    ok=False,
-                    code="approval_required",
-                    message=f"Требуется согласование для инструмента '{qualified_name}'. "
-                            f"Уровень риска: {decision.risk.name}",
-                    data={
-                        "approval_required": True,
-                        "tool_name": qualified_name,
-                        "arguments": arguments,
-                        "risk": decision.risk.name,
-                        "tool_call_id": tool_call_id,
-                    },
-                )
-            # In automated / subagent context, auto-approve non-biometric
-            if decision.risk < RiskLevel.BIOMETRIC:
-                pass  # Allow through
+            return ToolResult(
+                ok=False,
+                code="approval_required",
+                message=f"Требуется согласование для инструмента '{qualified_name}'. "
+                        f"Уровень риска: {decision.risk.name}",
+                data={
+                    "approval_required": True,
+                    "tool_name": qualified_name,
+                    "arguments": arguments,
+                    "risk": decision.risk.name,
+                    "tool_call_id": tool_call_id,
+                },
+            )
 
         # Check cancellation
         if self._cancelled.is_set():
@@ -192,14 +188,13 @@ class McpIntegration:
 
         try:
             result = await self.client.invoke_tool(qualified_name, arguments)
-
+            content = _bounded_mcp_text(result.content)
+            error = _bounded_mcp_text(result.error)
             return ToolResult(
                 ok=result.ok,
                 code="ok" if result.ok else "mcp_error",
-                message=result.content if result.content else (
-                    result.error or "Нет содержимого"
-                ),
-                data=result.content or result.error or "Нет содержимого",
+                message=content if content else (error or "Нет содержимого"),
+                data=content or error or "Нет содержимого",
                 warnings=result.warnings,
             )
         except Exception as exc:
@@ -295,7 +290,7 @@ def _build_mcp_tool_spec(mcp_spec: McpToolSpec, integration: McpIntegration) -> 
 
     return ToolSpec(
         name=mcp_spec.name,
-        description=mcp_spec.description,
+        description=_untrusted_mcp_description(mcp_spec.description),
         input_schema=mcp_spec.input_schema,
         output_schema={"type": "object", "properties": {
             "ok": {"type": "boolean"},
@@ -311,3 +306,23 @@ def _build_mcp_tool_spec(mcp_spec: McpToolSpec, integration: McpIntegration) -> 
         capabilities={"mcp", "remote"},
         scopes={integration.config.name},
     )
+
+
+_MAX_MCP_TEXT = 8000
+_UNTRUSTED_MCP_PREFIX = "[UNTRUSTED MCP DESCRIPTION] "
+
+
+def _untrusted_mcp_description(raw: str | None) -> str:
+    text = (raw or "").replace("\x00", "").strip()
+    if len(text) > 500:
+        text = text[:500]
+    return _UNTRUSTED_MCP_PREFIX + text
+
+
+def _bounded_mcp_text(raw: object) -> str:
+    if raw is None:
+        return ""
+    text = str(raw).replace("\x00", "")
+    if len(text) > _MAX_MCP_TEXT:
+        return text[:_MAX_MCP_TEXT] + "…"
+    return text

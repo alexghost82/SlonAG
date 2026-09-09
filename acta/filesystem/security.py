@@ -213,10 +213,7 @@ def _check_symlink_chain(target: Path, roots: tuple[Path, ...]) -> None:
         current = current / part
         if current.is_symlink():
             real = current.resolve()
-            # Check if the symlink target is within any root
-            if not any(
-                _safe_relative(real, r) is not None for r in roots
-            ):
+            if not _symlink_target_allowed(real, roots):
                 raise SymlinkEscape(
                     f"Symlink at {current} points outside allowlist ({real})."
                 )
@@ -225,9 +222,33 @@ def _check_symlink_chain(target: Path, roots: tuple[Path, ...]) -> None:
 def _safe_relative(resolved: Path, root: Path) -> str | None:
     """Return the relative part or None if not under root."""
     try:
-        return resolved.relative_to(root).as_posix()
-    except ValueError:
+        resolved_r = resolved.resolve()
+        root_r = root.resolve()
+        if not resolved_r.is_relative_to(root_r):
+            return None
+        return resolved_r.relative_to(root_r).as_posix()
+    except (OSError, ValueError):
         return None
+
+
+def _symlink_target_allowed(target: Path, roots: tuple[Path, ...]) -> bool:
+    """True if the symlink target is inside a root or is an ancestor of a root.
+
+    macOS maps ``/var`` → ``/private/var``. That is not an escape when the
+    workspace itself lives under the resolved prefix.
+    """
+    try:
+        real = target.resolve()
+    except OSError:
+        return False
+    for root in roots:
+        try:
+            root_r = root.resolve()
+        except OSError:
+            continue
+        if real.is_relative_to(root_r) or root_r.is_relative_to(real):
+            return True
+    return False
 
 
 def validate_path(
@@ -300,9 +321,7 @@ def validate_path(
                 current = current / part
                 if current.exists() and current.is_symlink():
                     real = current.resolve()
-                    if not any(
-                        _safe_relative(real, r) is not None for r in roots
-                    ):
+                    if not _symlink_target_allowed(real, roots):
                         raise SymlinkEscape(
                             f"Symlink at {current} points outside allowlist ({real})."
                         )
@@ -325,9 +344,7 @@ def validate_path(
                     current = current / part
                     if current.exists() and current.is_symlink():
                         real = current.resolve()
-                        if not any(
-                            _safe_relative(real, r) is not None for r in roots
-                        ):
+                        if not _symlink_target_allowed(real, roots):
                             raise SymlinkEscape(
                                 f"Symlink at {current} points outside allowlist ({real})."
                             )
