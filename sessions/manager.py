@@ -197,6 +197,33 @@ class SessionManager:
             effective_model_id=model_id, updated_at=now,
         )
 
+    def expire_idle(
+        self,
+        *,
+        workspace_id: str,
+        max_idle_seconds: float,
+        now: datetime | None = None,
+    ) -> int:
+        """Close ACTIVE sessions whose updated_at is older than max_idle_seconds."""
+        if max_idle_seconds <= 0:
+            raise ValueError("max_idle_seconds must be positive")
+        stamp = now or datetime.now(UTC)
+        closed = 0
+        for session in self.list(workspace_id=workspace_id):
+            if session.status is not SessionStatus.ACTIVE:
+                continue
+            try:
+                updated = datetime.fromisoformat(session.updated_at)
+            except ValueError:
+                continue
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=UTC)
+            idle = (stamp - updated).total_seconds()
+            if idle >= max_idle_seconds:
+                self.close(session.id, workspace_id=workspace_id)
+                closed += 1
+        return closed
+
     def recover(self) -> int:
         """Mark uncertain work interrupted; never replay provider/tools."""
         return self.store.recover_interrupted(_now())
