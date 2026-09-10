@@ -4,15 +4,33 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["create_live_client"]
+__all__ = ["create_live_client", "types"]
+
+
+class _LazyTypes:
+    """Import `google.genai.types` on first attribute access, not at import time."""
+
+    _mod: Any = None
+
+    def _load(self) -> Any:
+        if self._mod is None:
+            from google.genai import types as real
+
+            self._mod = real
+        return self._mod
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._load(), name)
+
+
+types = _LazyTypes()
 
 
 def __getattr__(name: str) -> Any:
-    if name in {"genai", "types"}:
+    if name == "genai":
         from google import genai
-        from google.genai import types
 
-        return genai if name == "genai" else types
+        return genai
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

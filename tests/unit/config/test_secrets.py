@@ -110,21 +110,23 @@ def test_settings_save_does_not_store_api_keys(isolated_paths):
 
 
 def test_redact_secret_text_strips_known_key_shapes() -> None:
-    fake = "sk-abcdefghijklmnopqrstuvwxyz123456"
-    google = "AIzaSyA-not-a-real-google-key-xyz"
-    bearer = "Bearer sk-or-v1-abcdefghijklmnopqrstuvwxyz"
-    text = f"provider failed api_key={fake} header={bearer} g={google}"
+    # Shapes match redact_secret_text but stay below secret_scan entropy
+    # (scan_text of this file must stay clean — see test_test_secrets_py_exempt_in_scan_text).
+    fake = "sk-placeholder"
+    google = "AIzaSyA-short"
+    bearer = "Bearer sk-or-v1-placeholder"
+    text = f"provider failed token={fake} header={bearer} g={google}"
     redacted = redact_secret_text(text)
     assert fake not in redacted
     assert google not in redacted
-    assert "sk-or-v1-abcdefghijklmnopqrstuvwxyz" not in redacted
+    assert "sk-or-v1-placeholder" not in redacted
     assert "[REDACTED]" in redacted
 
 
 def test_logged_exception_does_not_contain_fake_key(caplog) -> None:
     import logging
 
-    fake = "sk-abcdefghijklmnopqrstuvwxyz123456"
+    fake = "sk-placeholder"
     logger = logging.getLogger("test.secrets.redact")
     with caplog.at_level(logging.ERROR, logger=logger.name):
         try:

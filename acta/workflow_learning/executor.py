@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -168,26 +168,28 @@ class WorkflowExecutor:
         )
 
         for idx, sd in enumerate(template.step_descriptors):
-            # Build args from template with parameter substitution
-            step_args = _substitute_template(sd.arg_template, parameters)
+            # Templates historically store dicts; StepDescriptor is the typed form.
+            tool_name = sd["tool_name"] if isinstance(sd, Mapping) else sd.tool_name
+            arg_template = sd["arg_template"] if isinstance(sd, Mapping) else sd.arg_template
+            step_args = _substitute_template(arg_template, parameters)
             if step_args is None:
-                result.mark_failed(f"Step {idx + 1} ({sd.tool_name}): missing required parameter.")
+                result.mark_failed(f"Step {idx + 1} ({tool_name}): missing required parameter.")
                 result.finished_at = time.time()
                 return result
 
             # Safety authorization
             try:
-                validated = self._policy.validate_args(sd.tool_name, step_args)
+                validated = self._policy.validate_args(tool_name, step_args)
             except Exception:
-                result.mark_failed(f"Step {idx + 1} ({sd.tool_name}): validation error.")
+                result.mark_failed(f"Step {idx + 1} ({tool_name}): validation error.")
                 result.finished_at = time.time()
                 return result
 
-            decision = self._policy.authorize(sd.tool_name, validated, source=source, intent=intent)
+            decision = self._policy.authorize(tool_name, validated, source=source, intent=intent)
 
             approval = ApprovalResult(
                 step_index=idx,
-                tool_name=sd.tool_name,
+                tool_name=tool_name,
                 allowed=decision.kind not in (DecisionKind.DENY,),
                 reason=decision.reason,
                 risk=decision.risk.value,
@@ -195,13 +197,13 @@ class WorkflowExecutor:
 
             if decision.kind == DecisionKind.DENY:
                 result.approval_results.append(approval)
-                result.mark_failed(f"Step {idx + 1} ({sd.tool_name}): denied by safety policy: {decision.reason}")
+                result.mark_failed(f"Step {idx + 1} ({tool_name}): denied by safety policy: {decision.reason}")
                 result.finished_at = time.time()
                 return result
 
             result.approval_results.append(approval)
 
-            step_result = self._execute_step(sd.tool_name, validated, None)
+            step_result = self._execute_step(tool_name, validated, None)
             step_result.step_index = idx
             result.step_results.append(step_result)
 
