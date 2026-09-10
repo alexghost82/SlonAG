@@ -235,7 +235,7 @@ class AgentLoop:
                     ok=False,
                     final_answer=None,
                     steps=steps,
-                    reason=reason or "Budget exceeded",
+                    reason=_budget_exit_reason(steps, reason),
                 )
 
             # Check steering queue at start of turn
@@ -267,7 +267,13 @@ class AgentLoop:
 
             if self.budget.turn_count >= self.budget.max_turns:
                 inc("agent_failures_total")
-                return AgentLoopResult(False, steps=steps, reason=f"Max turns ({self.budget.max_turns}) reached")
+                return AgentLoopResult(
+                    False,
+                    steps=steps,
+                    reason=_budget_exit_reason(
+                        steps, f"Max turns ({self.budget.max_turns}) reached"
+                    ),
+                )
             self.budget.turn_count += 1
             inc("agent_loop_turns")
 
@@ -329,7 +335,7 @@ class AgentLoop:
                     return AgentLoopResult(
                         ok=False,
                         steps=steps,
-                        reason=reason or "Budget exceeded",
+                        reason=_budget_exit_reason(steps, reason),
                     )
 
                 # Check loop before executing
@@ -495,7 +501,9 @@ class AgentLoop:
                     ok=False,
                     final_answer=str(response_text) if response_text else None,
                     steps=steps,
-                    reason=f"Max turns ({self.budget.max_turns}) reached",
+                    reason=_budget_exit_reason(
+                        steps, f"Max turns ({self.budget.max_turns}) reached"
+                    ),
                 )
 
             # Append observations back to messages for the next model turn
@@ -607,6 +615,28 @@ class AgentLoop:
         if not isinstance(tool_call, ToolCall):
             raise TypeError("provider tool calls must use canonical ToolCall")
         return tool_call.id, tool_call.name, dict(tool_call.arguments)
+
+
+def _timeout_reason_from_steps(steps: list[AgentLoopStepResult]) -> str | None:
+    """If the last executed tool timed out (no later recovery), surface that."""
+    for step in reversed(steps):
+        obs = step.observation
+        if obs is None:
+            continue
+        if obs.ok:
+            return None
+        if obs.kind == ObservationKind.TIMEOUT:
+            err = obs.error or "Timeout"
+            return err if "timeout" in err.lower() else f"Timeout: {err}"
+        if obs.error and "timeout" in obs.error.lower():
+            return obs.error
+        return None
+    return None
+
+
+def _budget_exit_reason(steps: list[AgentLoopStepResult], budget_reason: str | None) -> str:
+    """Prefer an unrecovered tool timeout over the budget stop reason."""
+    return _timeout_reason_from_steps(steps) or (budget_reason or "Budget exceeded")
 
 
 def _duplicate_tool_call_ids(tool_calls: Sequence[ToolCall]) -> tuple[str, ...]:

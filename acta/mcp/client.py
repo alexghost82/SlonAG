@@ -29,6 +29,7 @@ class McpCallResult:
     resources: list[dict[str, Any]] = field(default_factory=list)
     prompts: list[dict[str, Any]] = field(default_factory=list)
     warnings: tuple[str, ...] = ()
+    code: str | None = None
 
 
 class McpClient:
@@ -363,7 +364,11 @@ class McpClient:
                 warnings=tuple(warnings),
             )
         except TimeoutError:
-            return McpCallResult(ok=False, error="Истекло время ожидания вызова MCP-инструмента")
+            return McpCallResult(
+                ok=False,
+                error="Истекло время ожидания вызова MCP-инструмента",
+                code="timeout",
+            )
         except RuntimeError as exc:
             error_msg = str(exc)
             if "not connected" in error_msg.lower() or "closed" in error_msg.lower():

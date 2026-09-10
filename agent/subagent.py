@@ -251,10 +251,29 @@ class SubagentRuntime:
             )
 
             result = await loop.run(user_goal=task)
+            timeout_error = None
+            if not result.ok:
+                if "timeout" in result.reason.lower():
+                    timeout_error = result.reason
+                else:
+                    for step in result.steps:
+                        obs = step.observation
+                        if obs is None:
+                            continue
+                        if obs.kind == ObservationKind.TIMEOUT:
+                            err = obs.error or result.reason
+                            timeout_error = (
+                                err if "timeout" in err.lower() else f"Timeout: {err}"
+                            )
+                            break
+                        if obs.error and "timeout" in obs.error.lower():
+                            timeout_error = obs.error
+                            break
 
             return SubagentResult(
                 ok=result.ok,
                 answer=result.final_answer,
+                error=timeout_error,
                 steps=[{
                     "turn": s.turn_index,
                     "tool": s.tool_name,
@@ -262,7 +281,7 @@ class SubagentRuntime:
                 tool_calls=budget.tool_call_count,
                 provider_id=model_info.provider_id,
                 model_id=model_info.model_id,
-                reason=result.reason,
+                reason=timeout_error or result.reason,
             )
         except asyncio.CancelledError:
             return SubagentResult(

@@ -194,12 +194,31 @@ class McpIntegration:
             result = await self.client.invoke_tool(qualified_name, arguments)
             content = _bounded_mcp_text(result.content)
             error = _bounded_mcp_text(result.error)
+            if result.ok:
+                code = "ok"
+                message = content if content else (error or "Нет содержимого")
+            elif result.code == "timeout":
+                code = "timeout"
+                message = (
+                    error
+                    if error and "timeout" in error.lower()
+                    else (f"MCP tool call timed out. {error}".strip() if error else "MCP tool call timed out.")
+                )
+            else:
+                code = result.code or "mcp_error"
+                message = content if content else (error or "Нет содержимого")
             return ToolResult(
                 ok=result.ok,
-                code="ok" if result.ok else "mcp_error",
-                message=content if content else (error or "Нет содержимого"),
+                code=code,
+                message=message,
                 data=content or error or "Нет содержимого",
                 warnings=result.warnings,
+            )
+        except TimeoutError:
+            return ToolResult(
+                ok=False,
+                code="timeout",
+                message="MCP tool call timed out.",
             )
         except Exception as exc:
             return ToolResult(

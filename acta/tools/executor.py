@@ -57,10 +57,10 @@ class ToolExecutor:
         if cancel_event is not None and cancel_event.is_set():
             return self._error("cancelled", "Tool execution was cancelled.", started_at)
 
-        try:
-            spec = self._registry.get(name)
-        except Exception:
+        spec = _resolve_spec(self._registry, name)
+        if spec is None:
             return self._error("unknown_tool", "Unknown tool.", started_at)
+        name = spec.name
 
         try:
             checked = self._safety_policy.validate_args(name, arguments)
@@ -233,10 +233,10 @@ class ToolExecutor:
         if cancel_event is not None and cancel_event.is_set():
             return self._error("cancelled", "Tool execution was cancelled.", started_at)
 
-        try:
-            spec = self._registry.get(name)
-        except Exception:
+        spec = _resolve_spec(self._registry, name)
+        if spec is None:
             return self._error("unknown_tool", "Unknown tool.", started_at)
+        name = spec.name
 
         try:
             checked = self._safety_policy.validate_args(name, arguments)
@@ -447,6 +447,22 @@ class _HandlerFailure:
 
 
 _TIMED_OUT = object()
+
+
+def _resolve_spec(registry: ToolRegistry, name: str) -> ToolSpec | None:
+    """Return the spec for ``name``, or a unique MCP tool whose name ends with it."""
+    try:
+        return registry.get(name)
+    except Exception:
+        pass
+    mcp_specs = [spec for spec in registry.list() if "mcp" in spec.capabilities]
+    parts = [part for part in name.split("_") if part]
+    for start in range(len(parts)):
+        suffix = "_".join(parts[start:])
+        matches = [spec for spec in mcp_specs if spec.name == suffix or spec.name.endswith(f"_{suffix}")]
+        if len(matches) == 1:
+            return matches[0]
+    return None
 
 
 def _timeout_warning(spec: ToolSpec) -> str:
