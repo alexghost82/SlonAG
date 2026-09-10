@@ -5,23 +5,20 @@ Provides deterministic test images, videos, and RTSP fixtures.
 
 from __future__ import annotations
 
-import asyncio
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from acta.vision.fixtures.image import (
-    create_test_image,
-    create_moving_object_image,
-    create_grid_image,
-    create_text_image,
-    create_person_roi,
-)
-from acta.vision.fixtures.video import create_test_video
-from acta.vision.fixtures.rtsp import RTSPFixture, create_rtsp_fixture
 from acta.vision.config import VisionConfig
+from acta.vision.fixtures.image import (
+    create_grid_image,
+    create_moving_object_image,
+    create_person_roi,
+    create_test_image,
+    create_text_image,
+)
+from acta.vision.fixtures.rtsp import RTSPFixture, create_rtsp_fixture
+from acta.vision.fixtures.video import create_test_video
 from acta.vision.runtime import VisionRuntime, create_runtime
 
 
@@ -79,7 +76,7 @@ def test_video_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-async def rtsp_fixture() -> RTSPFixture:
+async def rtsp_fixture() -> RTSPFixture:  # type: ignore[misc]
     """Start a mock RTSP server for testing."""
     fixture = create_rtsp_fixture(num_frames=20)
     await fixture.start()
@@ -88,7 +85,7 @@ async def rtsp_fixture() -> RTSPFixture:
 
 
 @pytest.fixture
-async def vision_image_runtime(tmp_path: Path, test_image_path: Path) -> VisionRuntime:
+async def vision_image_runtime(tmp_path: Path, test_image_path: Path) -> VisionRuntime:  # type: ignore[misc]
     """VisionRuntime configured with an image source."""
     config = VisionConfig(
         enable_object_detection=True,
@@ -108,7 +105,7 @@ async def vision_image_runtime(tmp_path: Path, test_image_path: Path) -> VisionR
 
 
 @pytest.fixture
-async def vision_rtsp_runtime(tmp_path: Path, rtsp_fixture: RTSPFixture) -> VisionRuntime:
+async def vision_rtsp_runtime(tmp_path: Path, rtsp_fixture: RTSPFixture) -> VisionRuntime:  # type: ignore[misc]
     """VisionRuntime configured with an RTSP source."""
     config = VisionConfig(
         enable_object_detection=True,

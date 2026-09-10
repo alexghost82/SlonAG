@@ -5,21 +5,26 @@ import base64
 import os
 import socket
 import sqlite3
-import time
 import threading
+import time
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from gateway.artifacts import ArtifactTransferError, ArtifactTransferService
+from acta.bridge import RuntimeStack
+from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.tools import ToolRegistry
+from acta.tools.contracts import ToolSpec
 from gateway.approvals import DurableApprovalCoordinator
+from gateway.artifacts import ArtifactTransferError, ArtifactTransferService
 from gateway.auth import GatewayAuthError, GatewayAuthService
 from gateway.contracts import (
+    MAX_ENVELOPE_BYTES,
     GatewayEnvelope,
     GatewayProtocolError,
-    MAX_ENVELOPE_BYTES,
     utc_timestamp,
 )
 from gateway.framing import decode_client_frame, encode_server_frame
@@ -33,23 +38,24 @@ from gateway.service import SlonGateway
 from gateway.status import read_gateway_status
 from gateway.store import GatewayStore, GatewayStoreError
 from gateway.websocket import GatewayWebSocketRuntime
-from acta.bridge import RuntimeStack
-from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
-from acta.tools import ToolRegistry
-from acta.tools.contracts import ToolSpec
 from providers.contracts import (
     ChatResponse,
     ModelInfo,
     ToolCall,
     ToolResultMessage,
 )
-from sessions import ModelPolicy, SessionManager, SessionStore
-from server.listener import DesktopControlListener
 from server.__main__ import main as server_main
+from server.listener import DesktopControlListener
+from sessions import ModelPolicy, SessionManager, SessionStore
 
 
 def _store(tmp_path: Path) -> GatewayStore:
     return GatewayStore(tmp_path / "gateway.sqlite3")
+
+
+def _row(row: Mapping[str, object] | None) -> Mapping[str, object]:
+    assert row is not None
+    return row
 
 
 def _envelope(kind: str = "system.health", **payload) -> GatewayEnvelope:
@@ -64,9 +70,7 @@ def _envelope(kind: str = "system.health", **payload) -> GatewayEnvelope:
 
 
 def _pair(auth: GatewayAuthService, private: Ed25519PrivateKey) -> str:
-    public = private.public_key().public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    )
+    public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     started = auth.start_pairing()
     return auth.complete_pairing(
         code=started.code,
@@ -118,10 +122,7 @@ def test_pinned_pairing_proof_rotation_revocation_and_restart(tmp_path: Path) ->
         nonce=challenge.nonce,
         signature=base64.b64encode(signature).decode(),
     )
-    assert (
-        auth.authenticate({"Authorization": f"Bearer {tokens.access_token}"}).device_id
-        == device_id
-    )
+    assert auth.authenticate({"Authorization": f"Bearer {tokens.access_token}"}).device_id == device_id
     rotated = auth.refresh(tokens.refresh_token)
     with pytest.raises(Exception):
         auth.refresh(tokens.refresh_token)
@@ -131,7 +132,7 @@ def test_pinned_pairing_proof_rotation_revocation_and_restart(tmp_path: Path) ->
         auth.authenticate({"Authorization": f"Bearer {rotated.access_token}"})
     store.close()
     reopened = _store(tmp_path)
-    assert reopened.device(device_id)["active"] == 0
+    assert _row(reopened.device(device_id))["active"] == 0
 
 
 def test_pinned_key_mismatch_and_challenge_replay_fail_closed(tmp_path: Path) -> None:
@@ -162,7 +163,8 @@ def test_refresh_rotation_and_access_replay_survive_restart(tmp_path: Path) -> N
     device_id = _pair(auth, private)
     challenge = auth.challenge(device_id)
     tokens = auth.exchange_proof(
-        device_id=device_id, nonce=challenge.nonce,
+        device_id=device_id,
+        nonce=challenge.nonce,
         signature=base64.b64encode(private.sign(challenge.nonce.encode())).decode(),
     )
     headers = {"Authorization": f"Bearer {tokens.access_token}"}
@@ -186,26 +188,28 @@ async def test_long_lived_websocket_loses_authority_when_access_expires(
     now = [100.0]
     store = _store(tmp_path)
     auth = GatewayAuthService(
-        store=store, signing_key=b"expiry-key", clock=lambda: now[0],
+        store=store,
+        signing_key=b"expiry-key",
+        clock=lambda: now[0],
         access_ttl_seconds=2,
     )
     private = Ed25519PrivateKey.generate()
     device_id = _pair(auth, private)
     challenge = auth.challenge(device_id)
     tokens = auth.exchange_proof(
-        device_id=device_id, nonce=challenge.nonce,
+        device_id=device_id,
+        nonce=challenge.nonce,
         signature=base64.b64encode(private.sign(challenge.nonce.encode())).decode(),
     )
     headers = {"Authorization": f"Bearer {tokens.access_token}"}
     auth.authenticate_connection(headers)
     runtime = GatewayWebSocketRuntime(
-        store=store, router=GatewayRouter(),
-        is_active=lambda device: bool(store.device(device)["active"]),
+        store=store,
+        router=GatewayRouter(),
+        is_active=lambda device: bool(_row(store.device(device))["active"]),
         workspace_for=auth.workspace_for,
     )
-    connection = await runtime.connect(
-        device_id=device_id, validate_auth=lambda: auth.validate_connection(headers)
-    )
+    connection = await runtime.connect(device_id=device_id, validate_auth=lambda: auth.validate_connection(headers))
     now[0] = 103.0
     with pytest.raises(GatewayProtocolError, match="authorization expired"):
         connection.drain()
@@ -214,9 +218,7 @@ async def test_long_lived_websocket_loses_authority_when_access_expires(
 
 def test_gateway_lan_cli_is_explicit_and_tls_only() -> None:
     assert server_main(["--gateway-lan"]) == 2
-    assert server_main([
-        "--gateway-lan", "--allow-non-loopback", "--host", "192.168.1.20"
-    ]) == 2
+    assert server_main(["--gateway-lan", "--allow-non-loopback", "--host", "192.168.1.20"]) == 2
     assert server_main(["--gateway-pair"]) == 2
 
 
@@ -230,9 +232,7 @@ async def test_gateway_exposes_factual_node_and_automation_inventory(tmp_path: P
     context = GatewayContext("device", "workspace", "connection")
     nodes = await gateway.router.dispatch(context, _envelope("node.list"))
     automations = await gateway.router.dispatch(context, _envelope("automation.list"))
-    assert nodes.payload == {
-        "nodes": [{"id": "local-runtime", "kind": "desktop", "online": True}]
-    }
+    assert nodes.payload == {"nodes": [{"id": "local-runtime", "kind": "desktop", "online": True}]}
     assert automations.payload == {"automations": []}
     gateway.close()
 
@@ -255,8 +255,8 @@ async def test_websocket_replay_cursor_ping_and_workspace_isolation(
     runtime = GatewayWebSocketRuntime(
         store=store,
         router=router,
-        is_active=lambda value: bool(store.device(value)["active"]),
-        workspace_for=lambda value: str(store.device(value)["workspace_id"]),
+        is_active=lambda value: bool(_row(store.device(value))["active"]),
+        workspace_for=lambda value: str(_row(store.device(value))["workspace_id"]),
     )
     event = _envelope("system.runtime_event", state="thinking")
     sequence = await runtime.publish("wa", event)
@@ -277,10 +277,16 @@ async def test_websocket_replay_cursor_ping_and_workspace_isolation(
     await a.receive(ack.to_json())
     assert store.cursor("a", "events") == sequence
     with pytest.raises(GatewayProtocolError, match="not delivered"):
-        await a.receive(GatewayEnvelope(
-            "future", "system.ack", utc_timestamp(), None, "future-request",
-            {"sequence": sequence + 1},
-        ).to_json())
+        await a.receive(
+            GatewayEnvelope(
+                "future",
+                "system.ack",
+                utc_timestamp(),
+                None,
+                "future-request",
+                {"sequence": sequence + 1},
+            ).to_json()
+        )
     connection_id = a.context.connection_id
     a.close()
     assert connection_id not in runtime._connections
@@ -362,8 +368,8 @@ async def test_revocation_invalidates_existing_connection(tmp_path: Path) -> Non
     runtime = GatewayWebSocketRuntime(
         store=store,
         router=GatewayRouter(),
-        is_active=lambda device: bool(store.device(device)["active"]),
-        workspace_for=lambda device: str(store.device(device)["workspace_id"]),
+        is_active=lambda device: bool(_row(store.device(device))["active"]),
+        workspace_for=lambda device: str(_row(store.device(device))["workspace_id"]),
     )
     connection = await runtime.connect(device_id="a")
     store.revoke_device("a", revoked_at=time.time())
@@ -429,9 +435,7 @@ def test_session_routes_enforce_server_owned_workspace(tmp_path: Path) -> None:
     )
     router = GatewayRouter()
     bind_session_routes(router, sessions)
-    request = GatewayEnvelope(
-        "get", "session.get", utc_timestamp(), session.id, None, {}
-    )
+    request = GatewayEnvelope("get", "session.get", utc_timestamp(), session.id, None, {})
     with pytest.raises(Exception):
         asyncio.run(router.dispatch(GatewayContext("b", "workspace-b", "c"), request))
 
@@ -488,13 +492,19 @@ def test_signed_artifact_limits_owner_expiry_tamper_and_download(
     )
     with pytest.raises(ArtifactTransferError, match="owner"):
         service.issue_download(
-            artifact_id=str(saved["artifact_id"]), device_id="b",
-            workspace_id="wb", mime_type="text/plain", max_bytes=5,
+            artifact_id=str(saved["artifact_id"]),
+            device_id="b",
+            workspace_id="wb",
+            mime_type="text/plain",
+            max_bytes=5,
         )
     with pytest.raises(ArtifactTransferError, match="identifier"):
         service.issue_download(
-            artifact_id="../secret", device_id="a", workspace_id="wa",
-            mime_type="text/plain", max_bytes=5,
+            artifact_id="../secret",
+            device_id="a",
+            workspace_id="wa",
+            mime_type="text/plain",
+            max_bytes=5,
         )
     download = service.issue_download(
         artifact_id=str(saved["artifact_id"]),
@@ -503,9 +513,7 @@ def test_signed_artifact_limits_owner_expiry_tamper_and_download(
         mime_type="text/plain",
         max_bytes=5,
     )
-    assert service.download(
-        ticket=download.ticket, device_id="a", workspace_id="wa"
-    ) == (b"hello", "text/plain")
+    assert service.download(ticket=download.ticket, device_id="a", workspace_id="wa") == (b"hello", "text/plain")
     with pytest.raises(ArtifactTransferError, match="already used|invalid"):
         service.download(ticket=download.ticket, device_id="a", workspace_id="wa")
     expired = service.issue(
@@ -547,9 +555,7 @@ def test_restart_marks_pending_gateway_work_uncertain(tmp_path: Path) -> None:
         payload={},
         now=1,
     )
-    assert store.reserve_request(
-        device_id="a", workspace_id="wa", request_id="r", now=1
-    )
+    assert store.reserve_request(device_id="a", workspace_id="wa", request_id="r", now=1)
     assert store.recover_uncertain(2) == 1
     assert store.operations(workspace_id="wa", kind="job")[0]["status"] == "interrupted"
     with pytest.raises(GatewayStoreError, match="uncertain"):
@@ -563,34 +569,49 @@ def test_durable_approval_is_scoped_terminal_and_not_resumed_after_restart(
     store = GatewayStore(path)
     coordinator = DurableApprovalCoordinator(store)
     request = coordinator.request(
-        workspace_id="a", tool_name="open_app", reason="confirm",
-        timeout=30, session_id="session", run_id="run", tool_call_id="call",
+        workspace_id="a",
+        tool_name="open_app",
+        reason="confirm",
+        timeout=30,
+        session_id="session",
+        run_id="run",
+        tool_call_id="call",
     )
     assert not coordinator.decide(
-        approval_id=request.approval_id, workspace_id="b", allow=True,
+        approval_id=request.approval_id,
+        workspace_id="b",
+        allow=True,
         device_id="foreign",
     )
     assert coordinator.decide(
-        approval_id=request.approval_id, workspace_id="a", allow=False,
+        approval_id=request.approval_id,
+        workspace_id="a",
+        allow=False,
         device_id="device",
     )
     assert not coordinator.decide(
-        approval_id=request.approval_id, workspace_id="a", allow=True,
+        approval_id=request.approval_id,
+        workspace_id="a",
+        allow=True,
         device_id="device",
     )
     assert not coordinator.wait(request, timeout=0)
     pending = coordinator.request(
-        workspace_id="a", tool_name="open_app", reason="confirm", timeout=30,
+        workspace_id="a",
+        tool_name="open_app",
+        reason="confirm",
+        timeout=30,
         tool_call_id="pending-call",
     )
     store.close()
     reopened = GatewayStore(path)
     reopened.recover_uncertain(time.time())
-    row = next(item for item in reopened.approvals(workspace_id="a")
-               if item["approval_id"] == pending.approval_id)
+    row = next(item for item in reopened.approvals(workspace_id="a") if item["approval_id"] == pending.approval_id)
     assert row["status"] == "interrupted"
     assert not DurableApprovalCoordinator(reopened).decide(
-        approval_id=pending.approval_id, workspace_id="a", allow=True,
+        approval_id=pending.approval_id,
+        workspace_id="a",
+        allow=True,
         device_id="device",
     )
 
@@ -601,47 +622,71 @@ def test_approval_expiry_cancellation_shutdown_and_job_cas_are_fail_closed(
     store = _store(tmp_path)
     coordinator = DurableApprovalCoordinator(store)
     expired = coordinator.request(
-        workspace_id="workspace", tool_name="write", reason="confirm",
-        timeout=0.01, session_id="session", run_id="run",
+        workspace_id="workspace",
+        tool_name="write",
+        reason="confirm",
+        timeout=0.01,
+        session_id="session",
+        run_id="run",
         tool_call_id="expired-call",
     )
     time.sleep(0.02)
     assert not coordinator.wait(expired, timeout=0)
-    assert store.approval(expired.approval_id)["status"] == "expired"
+    assert _row(store.approval(expired.approval_id))["status"] == "expired"
     assert not coordinator.decide(
-        approval_id=expired.approval_id, workspace_id="workspace", allow=True,
+        approval_id=expired.approval_id,
+        workspace_id="workspace",
+        allow=True,
         device_id="device",
     )
 
     cancelled = coordinator.request(
-        workspace_id="workspace", tool_name="write", reason="confirm", timeout=30,
-        session_id="session", run_id="run", tool_call_id="cancelled-call",
+        workspace_id="workspace",
+        tool_name="write",
+        reason="confirm",
+        timeout=30,
+        session_id="session",
+        run_id="run",
+        tool_call_id="cancelled-call",
     )
     coordinator.cancel(cancelled.approval_id, workspace_id="workspace")
     assert not coordinator.wait(cancelled, timeout=0)
-    assert store.approval(cancelled.approval_id)["status"] == "cancelled"
+    assert _row(store.approval(cancelled.approval_id))["status"] == "cancelled"
 
     shutdown = coordinator.request(
-        workspace_id="workspace", tool_name="write", reason="confirm", timeout=30,
-        session_id="session", run_id="run", tool_call_id="shutdown-call",
+        workspace_id="workspace",
+        tool_name="write",
+        reason="confirm",
+        timeout=30,
+        session_id="session",
+        run_id="run",
+        tool_call_id="shutdown-call",
     )
     coordinator.close()
     assert not coordinator.wait(shutdown, timeout=0)
-    assert store.approval(shutdown.approval_id)["status"] == "cancelled"
+    assert _row(store.approval(shutdown.approval_id))["status"] == "cancelled"
 
     store.trust_device(
-        device_id="device", device_name="phone",
+        device_id="device",
+        device_name="phone",
         public_key=base64.b64encode(b"x" * 32).decode(),
-        key_fingerprint="job-device", workspace_id="workspace", created_at=1,
+        key_fingerprint="job-device",
+        workspace_id="workspace",
+        created_at=1,
     )
     store.put_operation(
-        operation_id="job", kind="job", device_id="device",
-        workspace_id="workspace", session_id="session", status="running",
-        payload={"request_id": "request"}, now=1,
+        operation_id="job",
+        kind="job",
+        device_id="device",
+        workspace_id="workspace",
+        session_id="session",
+        status="running",
+        payload={"request_id": "request"},
+        now=1,
     )
     assert store.update_operation("job", "cancelled", 2)
     assert not store.update_operation("job", "completed", 3)
-    assert store.operation("job", workspace_id="workspace")["status"] == "cancelled"
+    assert _row(store.operation("job", workspace_id="workspace"))["status"] == "cancelled"
     assert store.operation("job", workspace_id="foreign") is None
 
 
@@ -650,45 +695,61 @@ def test_legacy_desktop_waiter_delegates_to_durable_gateway_approval(
 ) -> None:
     gateway = SlonGateway(
         database_path=tmp_path / "shared-approval.sqlite3",
-        artifact_root=tmp_path / "artifacts", signing_key=b"approval-key",
+        artifact_root=tmp_path / "artifacts",
+        signing_key=b"approval-key",
     )
     gateway.store.trust_device(
-        device_id="device", device_name="phone",
+        device_id="device",
+        device_name="phone",
         public_key=base64.b64encode(b"x" * 32).decode(),
-        key_fingerprint="device", workspace_id="desktop", created_at=time.time(),
+        key_fingerprint="device",
+        workspace_id="desktop",
+        created_at=time.time(),
     )
     listener = DesktopControlListener(gateway=gateway)
     outcome: list[bool] = []
-    worker = threading.Thread(target=lambda: outcome.append(
-        listener._request_tool_approval(
-            "open_app", {}, "user", "confirm", "desktop-call"
+    worker = threading.Thread(
+        target=lambda: outcome.append(
+            listener._request_tool_approval("open_app", {}, "user", "confirm", "desktop-call")
         )
-    ))
+    )
     worker.start()
     deadline = time.time() + 2
-    approvals = []
+    approvals: list[Mapping[str, object]] = []
     while time.time() < deadline and not approvals:
         approvals = gateway.store.approvals(workspace_id="desktop")
         time.sleep(0.01)
     approval_id = str(approvals[0]["approval_id"])
-    response = asyncio.run(gateway.router.dispatch(
-        GatewayContext("device", "desktop", "connection"),
-        GatewayEnvelope(
-            "decision", "approval.decide", utc_timestamp(), None, "decision-1",
-            {"approval_id": approval_id, "decision": "allow"},
-        ),
-    ))
+    response = asyncio.run(
+        gateway.router.dispatch(
+            GatewayContext("device", "desktop", "connection"),
+            GatewayEnvelope(
+                "decision",
+                "approval.decide",
+                utc_timestamp(),
+                None,
+                "decision-1",
+                {"approval_id": approval_id, "decision": "allow"},
+            ),
+        )
+    )
     worker.join(timeout=2)
     assert response.type == "approval.decided"
     assert outcome == [True]
     with pytest.raises(GatewayProtocolError, match="unavailable"):
-        asyncio.run(gateway.router.dispatch(
-            GatewayContext("device", "desktop", "connection"),
-            GatewayEnvelope(
-                "duplicate", "approval.decide", utc_timestamp(), None, "decision-2",
-                {"approval_id": approval_id, "decision": "allow"},
-            ),
-        ))
+        asyncio.run(
+            gateway.router.dispatch(
+                GatewayContext("device", "desktop", "connection"),
+                GatewayEnvelope(
+                    "duplicate",
+                    "approval.decide",
+                    utc_timestamp(),
+                    None,
+                    "decision-2",
+                    {"approval_id": approval_id, "decision": "allow"},
+                ),
+            )
+        )
     gateway.close()
 
 
@@ -696,14 +757,23 @@ def test_gateway_runtime_status_detects_stale_process(tmp_path: Path) -> None:
     path = tmp_path / "status.sqlite3"
     store = GatewayStore(path)
     store.update_runtime_status(
-        instance_id="instance", state="running", heartbeat_at=time.time() - 30,
-        bind_host="192.168.1.20", tls_active=True,
+        instance_id="instance",
+        state="running",
+        heartbeat_at=time.time() - 30,
+        bind_host="192.168.1.20",
+        tls_active=True,
     )
     status = read_gateway_status(path, stale_after_seconds=5)
     assert status["state"] == "unavailable"
     assert set(status) == {
-        "singleton", "instance_id", "state", "heartbeat_at", "bind_host",
-        "tls_active", "connected_devices", "error_code",
+        "singleton",
+        "instance_id",
+        "state",
+        "heartbeat_at",
+        "bind_host",
+        "tls_active",
+        "connected_devices",
+        "error_code",
     }
     assert not ({"token", "secret", "pairing_code", "private_key"} & set(status))
 
@@ -713,22 +783,26 @@ async def test_same_websocket_agent_run_approval_and_completion_are_correlated(
     tmp_path: Path,
 ) -> None:
     manager = SessionManager(SessionStore(tmp_path / "sessions.sqlite3"))
-    model = ModelInfo(
-        "test", "model", "Test", text=True, tool_calling=True
-    )
+    model = ModelInfo("test", "model", "Test", text=True, tool_calling=True)
     session = manager.create(
-        title="Gateway", agent_id="agent",
-        model_policy=ModelPolicy("test", "model"), workspace_id="workspace-a",
+        title="Gateway",
+        agent_id="agent",
+        model_policy=ModelPolicy("test", "model"),
+        workspace_id="workspace-a",
     )
     handler_calls: list[dict[str, object]] = []
     chat_messages: list[list[str]] = []
     registry = ToolRegistry()
-    registry.register(ToolSpec(
-        name="side_effect", description="effect",
-        input_schema={"type": "object"}, output_schema=None,
-        handler=lambda arguments: handler_calls.append(dict(arguments)) or "done",
-        risk=RiskLevel.CONFIRM,
-    ))
+    registry.register(
+        ToolSpec(
+            name="side_effect",
+            description="effect",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda arguments: (handler_calls.append(dict(arguments)), "done")[1],  # type: ignore[func-returns-value]
+            risk=RiskLevel.CONFIRM,
+        )
+    )
 
     class ConfirmPolicy:
         def validate_args(self, _name, arguments):
@@ -736,8 +810,13 @@ async def test_same_websocket_agent_run_approval_and_completion_are_correlated(
 
         def authorize(self, name, arguments, **_kwargs):
             return SafetyDecision(
-                DecisionKind.CONFIRM, name, RiskLevel.CONFIRM,
-                UntrustedSource.USER, "effect", dict(arguments), "confirm",
+                DecisionKind.CONFIRM,
+                name,
+                RiskLevel.CONFIRM,
+                UntrustedSource.USER,
+                "effect",
+                dict(arguments),
+                "confirm",
             )
 
     class Router:
@@ -749,28 +828,42 @@ async def test_same_websocket_agent_run_approval_and_completion_are_correlated(
             if any(isinstance(item, ToolResultMessage) for item in request.messages):
                 return ChatResponse("complete", "test", "model")
             return ChatResponse(
-                "", "test", "model",
+                "",
+                "test",
+                "model",
                 (ToolCall("provider-call-42", "side_effect", {"value": 42}),),
             )
 
     stack = RuntimeStack(
-        provider_id="test", network_mode="offline", router=Router(),
-        safety=ConfirmPolicy(), tool_registry=registry,
+        provider_id="test",
+        network_mode="offline",
+        router=Router(),
+        safety=ConfirmPolicy(),
+        tool_registry=registry,
         session_manager=manager,
     )
     gateway = SlonGateway(
         database_path=tmp_path / "gateway.sqlite3",
-        artifact_root=tmp_path / "artifacts", signing_key=b"test-signing-key",
-        session_manager=manager, runtime_stack=stack,
+        artifact_root=tmp_path / "artifacts",
+        signing_key=b"test-signing-key",
+        session_manager=manager,
+        runtime_stack=stack,
     )
     gateway.store.trust_device(
-        device_id="device", device_name="phone",
+        device_id="device",
+        device_name="phone",
         public_key=base64.b64encode(b"x" * 32).decode(),
-        key_fingerprint="device", workspace_id="workspace-a", created_at=time.time(),
+        key_fingerprint="device",
+        workspace_id="workspace-a",
+        created_at=time.time(),
     )
     connection = await gateway.websocket.connect(device_id="device")
     run = GatewayEnvelope(
-        "run-event", "agent.run", utc_timestamp(), session.id, "run-request",
+        "run-event",
+        "agent.run",
+        utc_timestamp(),
+        session.id,
+        "run-request",
         {"goal": "perform effect"},
     )
     accepted = await connection.receive(run.to_json())
@@ -796,10 +889,16 @@ async def test_same_websocket_agent_run_approval_and_completion_are_correlated(
     assert stored["run_id"] == job_id
     assert stored["tool_call_id"] == "provider-call-42"
 
-    decided = await connection.receive(GatewayEnvelope(
-        "decision-event", "approval.decide", utc_timestamp(), session.id,
-        "decision-request", {"approval_id": approval_id, "decision": "allow"},
-    ).to_json())
+    decided = await connection.receive(
+        GatewayEnvelope(
+            "decision-event",
+            "approval.decide",
+            utc_timestamp(),
+            session.id,
+            "decision-request",
+            {"approval_id": approval_id, "decision": "allow"},
+        ).to_json()
+    )
     assert decided.type == "approval.decided"
     assert decided.payload["tool_call_id"] == "provider-call-42"
 
@@ -812,14 +911,10 @@ async def test_same_websocket_agent_run_approval_and_completion_are_correlated(
         if completed is None:
             await asyncio.sleep(0.01)
     assert completed is not None, {
-        "operation": gateway.store.operation(
-            str(job_id), workspace_id="workspace-a"
-        ),
+        "operation": gateway.store.operation(str(job_id), workspace_id="workspace-a"),
         "approval": gateway.store.approval(str(approval_id)),
         "handler_calls": handler_calls,
-        "transcript": manager.get(
-            session.id, workspace_id="workspace-a"
-        ).transcript,
+        "transcript": manager.get(session.id, workspace_id="workspace-a").transcript,
     }
     assert completed.session_id == session.id
     assert completed.payload["job_id"] == job_id
@@ -872,9 +967,7 @@ def test_real_gateway_websocket_duplex_health_roundtrip(tmp_path: Path) -> None:
     )
     private = Ed25519PrivateKey.generate()
     public = base64.b64encode(
-        private.public_key().public_bytes(
-            serialization.Encoding.Raw, serialization.PublicFormat.Raw
-        )
+        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     ).decode()
     # Pairing is initiated on the trusted desktop surface; the network API
     # accepts the human-transferred one-time code but never returns that code.
@@ -893,9 +986,9 @@ def test_real_gateway_websocket_duplex_health_roundtrip(tmp_path: Path) -> None:
         "/v1/gateway/auth/challenge",
         body={"device_id": complete.body["device_id"]},
     )
-    signature = base64.b64encode(
-        private.sign(challenge.body["nonce"].encode())
-    ).decode()
+    nonce = challenge.body["nonce"]
+    assert isinstance(nonce, str)
+    signature = base64.b64encode(private.sign(nonce.encode())).decode()
     token = listener.handle(
         "POST",
         "/v1/gateway/auth/proof",
@@ -922,9 +1015,7 @@ def test_real_gateway_websocket_duplex_health_roundtrip(tmp_path: Path) -> None:
         payload = _envelope("system.health").to_json()
         mask = b"abcd"
         masked = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
-        frame = (
-            bytes([0x81, 0x80 | 126]) + len(payload).to_bytes(2, "big") + mask + masked
-        )
+        frame = bytes([0x81, 0x80 | 126]) + len(payload).to_bytes(2, "big") + mask + masked
         sock.sendall(frame)
         response = sock.recv(4096)
         assert b"system.health_status" in response

@@ -191,9 +191,7 @@ def create_policy(name: str, **kwargs: Any) -> FallbackPolicy:
         confirmation = kwargs.get("requires_confirmation", True)
         if not isinstance(confirmation, bool):
             raise ProviderError("requires_confirmation must be a bool")
-        return PreselectedCloudFallbackPolicy(
-            cloud_id, requires_confirmation=confirmation
-        )
+        return PreselectedCloudFallbackPolicy(cloud_id, requires_confirmation=confirmation)
     if normalized == POLICY_COST_OR_SPEED:
         target = kwargs.get("target_provider_id")
         if target is not None and not isinstance(target, str):

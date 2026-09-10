@@ -54,8 +54,9 @@ def _host_blocked(
     host: str | ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> bool:
     """Return True when *host* is a forbidden destination."""
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address | None
     if isinstance(host, ipaddress.IPv4Address | ipaddress.IPv6Address):
-        address = host  # type: ignore[assignment]
+        address = host
     else:
         if host in _BLOCKED_HOSTS:
             return True
@@ -86,9 +87,7 @@ def _parse_ip(
     """
     # --- Octal-style dotted IPv4: 0177.0.0.1 → 127.0.0.1 ---
     dotted = _DOTTED_IPV4.fullmatch(host)
-    if dotted is not None and any(
-        len(part) > 1 and part.startswith("0") for part in dotted.groups()
-    ):
+    if dotted is not None and any(len(part) > 1 and part.startswith("0") for part in dotted.groups()):
         return ipaddress.ip_address("127.0.0.1")
 
     # --- Pure decimal integer IPv4 (big-endian): 127.0.0.1 → 2130706433 ---
@@ -138,7 +137,6 @@ def is_safe_url(url: str) -> bool:
         return True
     except UnsafeUrlError:
         return False
-
 
 
 # Alias for external consumers

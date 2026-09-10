@@ -74,9 +74,7 @@ def test_local_model_settings_persist_offline(tmp_path):
             "local_models": {
                 "default_provider": "ollama",
                 "preferred": {"planning": "qwen-local"},
-                "overrides": {
-                    "qwen-local": {"tool_calling": True, "context_length": 8192}
-                },
+                "overrides": {"qwen-local": {"tool_calling": True, "context_length": 8192}},
             },
         }
     )

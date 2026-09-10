@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import acta.safety.urls as urls_mod
 import pytest
 
+import acta.safety.urls as urls_mod
 from acta.safety import CODE_UNSAFE_URL, UnsafeUrlError, check_url
 
 SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345"

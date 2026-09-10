@@ -47,12 +47,11 @@ def create_test_image(
     rect_h = kwargs.get("rect_h", height // 2)
 
     _ensure_dependencies()
-    import numpy as np  # type: ignore
+    import numpy as np
 
     img = np.full((height, width, 3), [bg_b, bg_g, bg_r], dtype=np.uint8)  # BGR
-    cv = __import__("cv2")  # type: ignore
-    cv.rectangle(img, (rect_x, rect_y), (rect_x + rect_w, rect_y + rect_h),
-                 (fg_b, fg_g, fg_r), 2)
+    cv = __import__("cv2")
+    cv.rectangle(img, (rect_x, rect_y), (rect_x + rect_w, rect_y + rect_h), (fg_b, fg_g, fg_r), 2)
 
     success, buf = cv.imencode(".png", img)
     if not success:
@@ -87,13 +86,17 @@ def create_moving_object_image(
     """
     if positions is None:
         positions = [
-            (50, 50), (150, 100), (250, 150),
-            (350, 200), (450, 250), (550, 300),
+            (50, 50),
+            (150, 100),
+            (250, 150),
+            (350, 200),
+            (450, 250),
+            (550, 300),
         ]
 
     _ensure_dependencies()
-    import cv2 as cv  # type: ignore
-    import numpy as np  # type: ignore
+    import cv2 as cv
+    import numpy as np
 
     frames: list[bytes] = []
     for px, py in positions:
@@ -124,12 +127,16 @@ def create_grid_image(
     Useful for testing multiple-object detection in a single frame.
     """
     colors = colors or [
-        (220, 50, 50), (50, 220, 50), (50, 50, 220),
-        (220, 220, 50), (220, 50, 220), (50, 220, 220),
+        (220, 50, 50),
+        (50, 220, 50),
+        (50, 50, 220),
+        (220, 220, 50),
+        (220, 50, 220),
+        (50, 220, 220),
     ]
     _ensure_dependencies()
-    import cv2 as cv  # type: ignore
-    import numpy as np  # type: ignore
+    import cv2 as cv
+    import numpy as np
 
     img = np.full((height, width, 3), [10, 10, 10], dtype=np.uint8)
     cell_w = width // cols
@@ -166,8 +173,8 @@ def create_text_image(
 ) -> bytes:
     """Create an image with test text for OCR testing."""
     _ensure_dependencies()
-    import cv2 as cv  # type: ignore
-    import numpy as np  # type: ignore
+    import cv2 as cv
+    import numpy as np
 
     img = np.full((height, width, 3), [255, 255, 255], dtype=np.uint8)
     cv.putText(img, text, (50, 200), cv.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 3)
@@ -193,8 +200,8 @@ def create_person_roi(
     Useful for testing the OpenCV person detector with a known object.
     """
     _ensure_dependencies()
-    import cv2 as cv  # type: ignore
-    import numpy as np  # type: ignore
+    import cv2 as cv
+    import numpy as np
 
     img = np.full((height, width, 3), [30, 60, 120], dtype=np.uint8)
     # Draw a person-sized rectangle (typical aspect ratio ~1:3)
@@ -219,7 +226,4 @@ def _ensure_dependencies() -> None:
         import cv2  # noqa: F401
         import numpy  # noqa: F401
     except ImportError as e:
-        raise ImportError(
-            "Vision fixtures require cv2 and numpy. Install with: "
-            "pip install opencv-python numpy"
-        ) from e
+        raise ImportError("Vision fixtures require cv2 and numpy. Install with: pip install opencv-python numpy") from e

@@ -1,8 +1,7 @@
 """Unit tests for agent/observation.py."""
 
-import pytest
-from agent.observation import Observation, ObservationKind
 from acta.tools.contracts import ArtifactRef, ToolResult
+from agent.observation import Observation, ObservationKind
 
 
 def test_observation_kind_enum_members():

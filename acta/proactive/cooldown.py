@@ -3,6 +3,7 @@
 Per-source cooldown ensures the same event source_type cannot trigger
 proactive decisions more than once per cooldown window.
 """
+
 from __future__ import annotations
 
 import time
@@ -71,7 +72,4 @@ class CooldownManager:
     def active_sources(self) -> list[str]:
         """Source types still on cooldown."""
         now = time.time()
-        return [
-            st for st, e in self._entries.items()
-            if now < e.next_allowed
-        ]
+        return [st for st, e in self._entries.items() if now < e.next_allowed]

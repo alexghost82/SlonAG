@@ -21,7 +21,7 @@ def _manager(tmp_path: Path) -> SessionManager:
     return SessionManager(SessionStore(tmp_path / "sessions.sqlite3"))
 
 
-def _create(manager: SessionManager, workspace: str = "desk") :
+def _create(manager: SessionManager, workspace: str = "desk"):
     return manager.create(
         title="Chat",
         agent_id="slon",
@@ -94,7 +94,7 @@ def test_duplicate_tool_events_are_idempotent(tmp_path: Path) -> None:
     assert len(entries) == 1
     assert entries[0].data == {"argv": ["true"]}
     rebuilt = messages_from_entries(entries)
-    assert rebuilt[0].tool_calls[0].id == "call-1"  # type: ignore[attr-defined]
+    assert rebuilt[0].tool_calls[0].id == "call-1"  # type: ignore[union-attr]
 
 
 def test_disconnect_during_tool_cancels_and_run_can_finish(tmp_path: Path) -> None:
@@ -123,9 +123,7 @@ def test_expire_idle_closes_stale_but_keeps_fresh(tmp_path: Path) -> None:
     assert closed == 1
     assert manager.get(stale.id, workspace_id="desk").status is SessionStatus.CLOSED
     fresh = _create(manager)
-    assert (
-        manager.expire_idle(workspace_id="desk", max_idle_seconds=3600) == 0
-    )
+    assert manager.expire_idle(workspace_id="desk", max_idle_seconds=3600) == 0
     assert manager.get(fresh.id, workspace_id="desk").status is SessionStatus.ACTIVE
 
 

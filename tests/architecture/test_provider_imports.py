@@ -43,7 +43,7 @@ def test_sdk_imports_stay_on_provider_allowlist() -> None:
         if rel in _ALLOW_FILES or any(rel.startswith(p) for p in _ALLOW_PREFIXES):
             continue
         imported = _imported_modules(path)
-        bad = {name for name in imported if name in _FORBIDDEN or name.split(".")[0] in _FORBIDDEN}
+        {name for name in imported if name in _FORBIDDEN or name.split(".")[0] in _FORBIDDEN}
         # google.genai is forbidden; google alone is not (could be other pkgs)
         if "google.generativeai" in imported or "google.genai" in imported:
             violations.append(rel)

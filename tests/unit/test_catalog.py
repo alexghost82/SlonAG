@@ -11,7 +11,6 @@ from config.catalog import (
     model_exists_in_catalog,
     resolve_capabilities,
 )
-from providers.contracts import ModelInfo
 
 
 class TestGetStaticModels:
@@ -125,6 +124,7 @@ class TestModelCapabilitiesDisplay:
 
     def test_gemini_flash_display_ru(self):
         from i18n import set_locale
+
         set_locale("ru")
 
         info = get_model_info("gemini", "gemini-2.5-flash")
@@ -136,6 +136,7 @@ class TestModelCapabilitiesDisplay:
 
     def test_gemini_flash_display_en(self):
         from i18n import set_locale
+
         set_locale("en")
 
         info = get_model_info("gemini", "gemini-2.5-flash")
@@ -146,6 +147,7 @@ class TestModelCapabilitiesDisplay:
 
     def test_embedding_model_display(self):
         from i18n import set_locale
+
         set_locale("en")
 
         info = get_model_info("gemini", "gemini-embedding-001")
@@ -154,6 +156,7 @@ class TestModelCapabilitiesDisplay:
 
     def test_text_only_model_display(self):
         from i18n import set_locale
+
         set_locale("en")
 
         info = get_model_info("openai", "gpt-4o")

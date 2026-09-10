@@ -82,53 +82,58 @@ _PATTERNS: Final[list[tuple[str, str]]] = [
 ]
 
 # Compiled versions
-_COMPILED: Final[list[tuple[str, re.Pattern]]] = [
-    (label, re.compile(p)) for label, p in _PATTERNS
-]
+_COMPILED: Final[list[tuple[str, re.Pattern]]] = [(label, re.compile(p)) for label, p in _PATTERNS]
 
 # Files that should NEVER appear in the index / working tree with secrets.
 # Used by scan_git_index() and by the pre-commit hook.
-_SENSITIVE_PATHS: Final[frozenset[str]] = frozenset({
-    "config/api_keys.json",
-    "config/api_keys.json.bak",
-    "config/settings.local.json",
-    "config/settings.secret.json",
-    ".env",
-    ".env.local",
-    ".env.production",
-    ".env.staging",
-})
+_SENSITIVE_PATHS: Final[frozenset[str]] = frozenset(
+    {
+        "config/api_keys.json",
+        "config/api_keys.json.bak",
+        "config/settings.local.json",
+        "config/settings.secret.json",
+        ".env",
+        ".env.local",
+        ".env.production",
+        ".env.staging",
+    }
+)
 
 # Exempt files – patterns that may legitimately contain credential-like
 # fragments but belong to the project itself.
-_EXEMPT_PATHS: Final[frozenset[str]] = frozenset({
-    "config/secrets.py",
-    "config/settings.example.json",
-    "tests/unit/config/test_secrets.py",
-    "tests/unit/security/test_secret_scan.py",
-    "tests/unit/security/test_secret_tracking.py",
-    "config/secret_tracking.py",
-    ".git/hooks/pre-commit",
-})
+_EXEMPT_PATHS: Final[frozenset[str]] = frozenset(
+    {
+        "config/secrets.py",
+        "config/settings.example.json",
+        "tests/unit/config/test_secrets.py",
+        "tests/unit/security/test_secret_scan.py",
+        "tests/unit/security/test_secret_tracking.py",
+        "config/secret_tracking.py",
+        ".git/hooks/pre-commit",
+    }
+)
 
 # Exempt substrings – short, known-safe strings that appear in docs and
 # test code but should never trigger.
-_EXEMPT_SUBSTRINGS: Final[frozenset[str]] = frozenset({
-    "sk-test-notreal",
-    "sk-placeholder",
-    "CHANGEME",
-    "TODO",
-    "INSERT",
-    "example_key",
-})
+_EXEMPT_SUBSTRINGS: Final[frozenset[str]] = frozenset(
+    {
+        "sk-test-notreal",
+        "sk-placeholder",
+        "CHANGEME",
+        "TODO",
+        "INSERT",
+        "example_key",
+    }
+)
 
 
 @dataclass(frozen=True)
 class Issue:
     """A single secret-leak issue found in scanned content."""
-    pattern: str          # human-readable label
-    line: int             # 1-based line number within the scanned file
-    detail: str           # description (never a live secret value)
+
+    pattern: str  # human-readable label
+    line: int  # 1-based line number within the scanned file
+    detail: str  # description (never a live secret value)
 
 
 def scan_text(text: str) -> list[Issue]:
@@ -142,11 +147,13 @@ def scan_text(text: str) -> list[Issue]:
     for line_idx, line in enumerate(text.splitlines(), start=1):
         for label, pat in _COMPILED:
             if pat.search(line):
-                issues.append(Issue(
-                    pattern=label,
-                    line=line_idx,
-                    detail=f"potential {label} detected",
-                ))
+                issues.append(
+                    Issue(
+                        pattern=label,
+                        line=line_idx,
+                        detail=f"potential {label} detected",
+                    )
+                )
                 break  # one issue per line-max
     return issues
 
@@ -161,11 +168,36 @@ def scan_path(path: Path) -> list[Issue]:
         return []
 
     # Quick bail for obviously non-source files.
-    _binary_exts = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff2",
-                    ".woff", ".ttf", ".otf", ".eot", ".bin", ".dat",
-                    ".db", ".sqlite", ".sqlite3", ".pyc", ".pyo",
-                    ".zip", ".tar", ".gz", ".xz", ".bz2", ".7z",
-                    ".app", ".dylib", ".so", ".dll", ".exe"}
+    _binary_exts = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".woff2",
+        ".woff",
+        ".ttf",
+        ".otf",
+        ".eot",
+        ".bin",
+        ".dat",
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".pyc",
+        ".pyo",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".xz",
+        ".bz2",
+        ".7z",
+        ".app",
+        ".dylib",
+        ".so",
+        ".dll",
+        ".exe",
+    }
     if path.suffix.lower() in _binary_exts:
         return []
 
@@ -189,7 +221,9 @@ def scan_git_index(root: Path) -> list[Issue]:
     try:
         result = subprocess.run(
             ["git", "-C", str(root), "ls-files", "--cached", "-z"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         files = [f for f in result.stdout.split("\0") if f]
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -198,10 +232,12 @@ def scan_git_index(root: Path) -> list[Issue]:
     for fname in files:
         for sensitive in _SENSITIVE_PATHS:
             if fname == sensitive or fname.endswith("/" + sensitive):
-                issues.append(Issue(
-                    pattern="tracked_secret_file",
-                    line=0,
-                    detail=f"{fname} is tracked in git",
-                ))
+                issues.append(
+                    Issue(
+                        pattern="tracked_secret_file",
+                        line=0,
+                        detail=f"{fname} is tracked in git",
+                    )
+                )
 
     return issues

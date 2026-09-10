@@ -18,7 +18,7 @@ from acta.vision.queues import (
     BoundedFrameQueue,
     BoundedTrajectoryStore,
 )
-from acta.vision.types import Frame, DetectionResult, FrameEvent, FrameSource, Bbox
+from acta.vision.types import Bbox, DetectionResult, Frame, FrameEvent, FrameSource
 
 
 @pytest.fixture
@@ -27,6 +27,7 @@ def loop():
 
 
 # ── BoundedFrameQueue ──────────────────────────────────────────────
+
 
 class TestBoundedFrameQueue:
     """Tests for BoundedFrameQueue."""
@@ -74,6 +75,7 @@ class TestBoundedFrameQueue:
 
 # ── BoundedDetectionQueue ─────────────────────────────────────────
 
+
 class TestBoundedDetectionQueue:
     """Tests for BoundedDetectionQueue."""
 
@@ -96,6 +98,7 @@ class TestBoundedDetectionQueue:
 
 # ── BoundedEventQueue ──────────────────────────────────────────────
 
+
 class TestBoundedEventQueue:
     """Tests for BoundedEventQueue."""
 
@@ -103,10 +106,14 @@ class TestBoundedEventQueue:
     async def test_put_and_drain(self, loop):
         q = BoundedEventQueue(maxlen=10)
         for i in range(10):
-            await q.put(FrameEvent(
-                event_type="appearance", track_id=f"t{i}",
-                timestamp=time.time(), description=f"event {i}",
-            ))
+            await q.put(
+                FrameEvent(
+                    event_type="appearance",
+                    track_id=f"t{i}",
+                    timestamp=time.time(),
+                    description=f"event {i}",
+                )
+            )
         items = await q.drain()
         assert len(items) == 10
 
@@ -114,14 +121,19 @@ class TestBoundedEventQueue:
     async def test_bounded_capacity(self, loop):
         q = BoundedEventQueue(maxlen=5)
         for i in range(20):
-            await q.put(FrameEvent(
-                event_type="appearance", track_id=f"t{i}",
-                timestamp=time.time(), description=f"event {i}",
-            ))
+            await q.put(
+                FrameEvent(
+                    event_type="appearance",
+                    track_id=f"t{i}",
+                    timestamp=time.time(),
+                    description=f"event {i}",
+                )
+            )
         assert q.count == 5
 
 
 # ── BoundedTrajectoryStore ─────────────────────────────────────────
+
 
 class TestBoundedTrajectoryStore:
     """Tests for BoundedTrajectoryStore."""

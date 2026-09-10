@@ -48,8 +48,8 @@ def _runtime(store: GatewayStore, *, max_pending: int = 128) -> GatewayWebSocket
     return GatewayWebSocketRuntime(
         store=store,
         router=GatewayRouter(),
-        is_active=lambda value: bool(store.device(value)["active"]),
-        workspace_for=lambda value: str(store.device(value)["workspace_id"]),
+        is_active=lambda value: bool(store.device(value)["active"]),  # type: ignore[index]
+        workspace_for=lambda value: str(store.device(value)["workspace_id"]),  # type: ignore[index]
         max_pending=max_pending,
     )
 

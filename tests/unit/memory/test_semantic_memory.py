@@ -9,19 +9,16 @@ Covers:
 - Confidence management
 - Migration and recovery from corrupted DB
 """
+
 from __future__ import annotations
 
-import json
 import sqlite3
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from acta.memory import (
     MemoryContextAssembler,
-    MemoryPolicy,
     MemoryRecord,
     MemoryRetriever,
     MemoryStore,
@@ -29,12 +26,11 @@ from acta.memory import (
     RetrievalResult,
 )
 from acta.memory.database import MemoryDatabase, MemoryRow
-from acta.memory.migrations.schema import SCHEMA_VERSION, apply_schema
-
+from acta.memory.migrations.schema import SCHEMA_VERSION
 from tests.unit.memory.fakes import FakeLocalEmbedder
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _record(
     key: str,
@@ -102,7 +98,7 @@ class TestDedupComprehensive:
     """Deduplication across all scopes and persistence layers."""
 
     def test_pending_dedup_before_commit(self, store: MemoryStore) -> None:
-        p1 = store.propose(_record("food", "sourdough"))
+        store.propose(_record("food", "sourdough"))
         p2 = store.propose(_record("food2", "sourdough"))
         assert len(store._pending) == 2
         assert p2.confidence <= 0.5
@@ -243,8 +239,19 @@ class TestExport:
         export = store.export_all()
         assert len(export) == 1
         item = export[0]
-        for field in ("id", "type", "key", "value", "source", "created_at", "updated_at",
-                       "workspace", "user_id", "session_id", "confidence"):
+        for field in (
+            "id",
+            "type",
+            "key",
+            "value",
+            "source",
+            "created_at",
+            "updated_at",
+            "workspace",
+            "user_id",
+            "session_id",
+            "confidence",
+        ):
             assert field in item, f"Missing field: {field}"
         store.close()
 
@@ -302,13 +309,16 @@ class TestRetrievalBounded:
         long_chunks = []
         for _ in range(10):
             from acta.memory.retriever import ContextChunk
-            long_chunks.append(ContextChunk(
-                source_ref="test:long",
-                text="A" * 2000,
-                confidence=1.0,
-                relevance=0.9,
-                recency=0.9,
-            ))
+
+            long_chunks.append(
+                ContextChunk(
+                    source_ref="test:long",
+                    text="A" * 2000,
+                    confidence=1.0,
+                    relevance=0.9,
+                    recency=0.9,
+                )
+            )
         result = RetrievalResult(chunks=long_chunks)
         assembled = assembler.assemble(result)
         encoded = assembled.encode("utf-8")
@@ -402,15 +412,21 @@ class TestMigrationRecovery:
 
     def test_migration_invalid_payload_raises(self, store: MemoryStore) -> None:
         with pytest.raises(Exception):
-            store.migrate_json("not-a-dict")
+            store.migrate_json("not-a-dict")  # type: ignore[arg-type]
 
     def test_db_survives_empty_insert(self, db_path: Path) -> None:
         db = MemoryDatabase(db_path)
-        db.insert(MemoryRow(
-            id="test1", type="test", key="k", value="v",
-            source="test", created_at="2024-01-01T00:00:00+00:00",
-            updated_at="2024-01-01T00:00:00+00:00",
-        ))
+        db.insert(
+            MemoryRow(
+                id="test1",
+                type="test",
+                key="k",
+                value="v",
+                source="test",
+                created_at="2024-01-01T00:00:00+00:00",
+                updated_at="2024-01-01T00:00:00+00:00",
+            )
+        )
         fetched = db.get("test1")
         assert fetched is not None
         assert fetched.value == "v"

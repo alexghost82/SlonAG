@@ -16,10 +16,8 @@ import pytest
 
 from providers.contracts import (
     AssistantToolCallMessage,
-    ChatEvent,
     ChatRequest,
     ModelInfo,
-    ToolCall,
     ToolDefinition,
     ToolResultMessage,
     UserMessage,
@@ -28,8 +26,8 @@ from providers.errors import ProviderAuthError
 from providers.router import Router
 from tests.unit.providers.mocks import MockChatProvider, mock_model
 
-
 # -- helpers --
+
 
 class _FakeTransport:
     """Minimal HttpResponse-compatible transport for OpenAI-style providers."""
@@ -56,7 +54,7 @@ class _FakeTransport:
         json: dict[str, Any] | None = None,
         stream: bool = False,
         timeout: float = 60.0,
-    ) -> "_FakeResponse":
+    ) -> _FakeResponse:
         self.calls.append({"method": method, "url": url, "json": json, "stream": stream, "timeout": timeout})
         if self.status_code >= 400:
             return _FakeResponse(status_code=self.status_code)
@@ -95,56 +93,98 @@ class _FakeResponse:
 
 def _openai_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="openai", model_id="gpt-4o", display_name="GPT-4o",
-        text=True, streaming=True, tool_calling=True, local=False, source="OpenAI",
+        provider_id="openai",
+        model_id="gpt-4o",
+        display_name="GPT-4o",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=False,
+        source="OpenAI",
         **overrides,
     )
 
 
 def _gemini_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="gemini", model_id="gemini-2.0-flash", display_name="Gemini 2.0 Flash",
-        text=True, streaming=True, tool_calling=True, local=False, source="Gemini",
+        provider_id="gemini",
+        model_id="gemini-2.0-flash",
+        display_name="Gemini 2.0 Flash",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=False,
+        source="Gemini",
         **overrides,
     )
 
 
 def _openrouter_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="openrouter", model_id="openai/gpt-4o", display_name="GPT-4o via OpenRouter",
-        text=True, streaming=True, tool_calling=True, local=False, source="OpenRouter",
+        provider_id="openrouter",
+        model_id="openai/gpt-4o",
+        display_name="GPT-4o via OpenRouter",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=False,
+        source="OpenRouter",
         **overrides,
     )
 
 
 def _local_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="local", model_id="tinyllama", display_name="TinyLlama",
-        text=True, streaming=True, tool_calling=True, local=True, source="loopback",
+        provider_id="local",
+        model_id="tinyllama",
+        display_name="TinyLlama",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=True,
+        source="loopback",
         **overrides,
     )
 
 
 def _ollama_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="ollama", model_id="llama3.2", display_name="Llama 3.2",
-        text=True, streaming=True, tool_calling=True, local=True, source="Ollama",
+        provider_id="ollama",
+        model_id="llama3.2",
+        display_name="Llama 3.2",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=True,
+        source="Ollama",
         **overrides,
     )
 
 
 def _llamacpp_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="llama_cpp", model_id="llama.gguf", display_name="llama.cpp GGUF",
-        text=True, streaming=True, tool_calling=True, local=True, source="llama.cpp",
+        provider_id="llama_cpp",
+        model_id="llama.gguf",
+        display_name="llama.cpp GGUF",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=True,
+        source="llama.cpp",
         **overrides,
     )
 
 
 def _openai_compat_model(**overrides: Any) -> ModelInfo:
     return ModelInfo(
-        provider_id="openai_compat", model_id="custom-model", display_name="Custom OpenAI-Compatible",
-        text=True, streaming=True, tool_calling=True, local=False, source="custom",
+        provider_id="openai_compat",
+        model_id="custom-model",
+        display_name="Custom OpenAI-Compatible",
+        text=True,
+        streaming=True,
+        tool_calling=True,
+        local=False,
+        source="custom",
         **overrides,
     )
 
@@ -160,19 +200,22 @@ def _openai_tool_call(id_: str, name: str, args: dict[str, Any]) -> dict[str, An
 
 
 def _openai_tool_response(id_: str, name: str, args: dict[str, Any]) -> dict[str, Any]:
-    return {"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [_openai_tool_call(id_, name, args)]}}]}
+    return {
+        "choices": [
+            {"message": {"role": "assistant", "content": "", "tool_calls": [_openai_tool_call(id_, name, args)]}}
+        ]
+    }
 
 
 # OpenAI
 
-async def test_openai_chat_returns_text() -> None:
-    transport = _FakeTransport(
-        chat={"choices": [{"message": {"role": "assistant", "content": "Hello from OpenAI!"}}]}
-    )
-    from providers.openai.provider import OpenAIChatProvider
-    from providers.openai.client import OpenAIHttpClient
 
-    client = OpenAIHttpClient("sk-test", transport=transport)
+async def test_openai_chat_returns_text() -> None:
+    transport = _FakeTransport(chat={"choices": [{"message": {"role": "assistant", "content": "Hello from OpenAI!"}}]})
+    from providers.openai.client import OpenAIHttpClient
+    from providers.openai.provider import OpenAIChatProvider
+
+    client = OpenAIHttpClient("sk-test", transport=transport)  # type: ignore[arg-type]
     provider = OpenAIChatProvider(api_key="sk-test", client=client)
     response = await provider.chat(ChatRequest(model=_openai_model(), messages=[UserMessage(content="hi")]))
     assert response.text == "Hello from OpenAI!"
@@ -181,13 +224,18 @@ async def test_openai_chat_returns_text() -> None:
 
 async def test_openai_chat_returns_tool_calls() -> None:
     transport = _FakeTransport(chat=_openai_tool_response("call-001", "get_weather", {"city": "NYC"}))
-    from providers.openai.provider import OpenAIChatProvider
     from providers.openai.client import OpenAIHttpClient
+    from providers.openai.provider import OpenAIChatProvider
 
-    client = OpenAIHttpClient("sk-test", transport=transport)
+    client = OpenAIHttpClient("sk-test", transport=transport)  # type: ignore[arg-type]
     provider = OpenAIChatProvider(api_key="sk-test", client=client)
-    tools = [ToolDefinition(name="get_weather", description="Get weather",
-                            parameters={"type": "object", "properties": {"city": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="get_weather",
+            description="Get weather",
+            parameters={"type": "object", "properties": {"city": {"type": "string"}}},
+        )
+    ]
     response = await provider.chat(
         ChatRequest(model=_openai_model(), messages=[UserMessage(content="weather?")], tools=tools)
     )
@@ -205,19 +253,25 @@ async def test_openai_stream_tool_call_chain() -> None:
             "data: [DONE]",
         ]
     )
-    from providers.openai.provider import OpenAIChatProvider
     from providers.openai.client import OpenAIHttpClient
+    from providers.openai.provider import OpenAIChatProvider
 
-    client = OpenAIHttpClient("sk-test", transport=transport)
+    client = OpenAIHttpClient("sk-test", transport=transport)  # type: ignore[arg-type]
     provider = OpenAIChatProvider(api_key="sk-test", client=client)
-    events = [e async for e in provider.stream(ChatRequest(model=_openai_model(), messages=[UserMessage(content="lookup test")]))]
+    events = [
+        e
+        async for e in provider.stream(
+            ChatRequest(model=_openai_model(), messages=[UserMessage(content="lookup test")])
+        )
+    ]
     tc_event = next(e for e in events if e.type == "tool_call")
-    assert tc_event.tool_call.id == "call-abc"
-    assert tc_event.tool_call.name == "lookup"
-    assert tc_event.tool_call.arguments == {"q": "test"}
+    assert tc_event.tool_call.id == "call-abc"  # type: ignore[union-attr]
+    assert tc_event.tool_call.name == "lookup"  # type: ignore[union-attr]
+    assert tc_event.tool_call.arguments == {"q": "test"}  # type: ignore[union-attr]
 
 
 # Gemini
+
 
 async def test_gemini_chat_via_mock() -> None:
     """Gemini: use MockChatProvider (no live SDK required)."""
@@ -230,23 +284,31 @@ async def test_gemini_chat_via_mock() -> None:
 async def test_gemini_stream_via_mock() -> None:
     """Gemini: stream via MockChatProvider."""
     mock = MockChatProvider("gemini")
-    events = [e async for e in mock.stream(ChatRequest(model=_gemini_model(), messages=[UserMessage(content="stream-ping")]))]
+    events = [
+        e async for e in mock.stream(ChatRequest(model=_gemini_model(), messages=[UserMessage(content="stream-ping")]))
+    ]
     assert events[-1].type == "done"
     assert any(e.type == "delta" for e in events)
 
 
 # OpenRouter
 
+
 async def test_openrouter_chat_returns_tool_calls() -> None:
-    from tests.unit.providers.openrouter.fakes import FakeResponse
     from providers.openrouter.provider import OpenRouterChatProvider
+    from tests.unit.providers.openrouter.fakes import FakeResponse
 
     def fake_request(*_args: object, **_kwargs: object) -> FakeResponse:
         return FakeResponse(payload=_openai_tool_response("or-call-001", "search", {"query": "docs"}))
 
     provider = OpenRouterChatProvider(api_key="sk-or-test", request=fake_request)
-    tools = [ToolDefinition(name="search", description="Search",
-                            parameters={"type": "object", "properties": {"query": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="search",
+            description="Search",
+            parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        )
+    ]
     response = await provider.chat(
         ChatRequest(model=_openrouter_model(), messages=[UserMessage(content="search docs")], tools=tools)
     )
@@ -257,6 +319,7 @@ async def test_openrouter_chat_returns_tool_calls() -> None:
 
 # Local (OpenAI-compatible)
 
+
 async def test_local_chat_tool_call_chain() -> None:
     """Local provider: chat -> tool call -> ToolResult -> continuation -> final answer."""
     from tests.unit.providers.local.fakes import openai_transport
@@ -264,11 +327,24 @@ async def test_local_chat_tool_call_chain() -> None:
     transport = openai_transport()
     from providers.local.openai_compatible import OpenAICompatibleChatProvider
 
-    transport.chat = {"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [_openai_tool_call("local-1", "echo", {"msg": "hello"})]}}]}
+    transport.chat = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [_openai_tool_call("local-1", "echo", {"msg": "hello"})],
+                }
+            }
+        ]
+    }
     provider = OpenAICompatibleChatProvider(base_url="http://127.0.0.1:8080/v1", transport=transport)
 
-    tools = [ToolDefinition(name="echo", description="Echo",
-                            parameters={"type": "object", "properties": {"msg": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="echo", description="Echo", parameters={"type": "object", "properties": {"msg": {"type": "string"}}}
+        )
+    ]
     response1 = await provider.chat(
         ChatRequest(model=_local_model(), messages=[UserMessage(content="echo hello")], tools=tools)
     )
@@ -280,16 +356,21 @@ async def test_local_chat_tool_call_chain() -> None:
     # Reset to pong response for the continuation
     transport.chat = {"choices": [{"message": {"role": "assistant", "content": "pong"}}]}
     response2 = await provider.chat(
-        ChatRequest(model=_local_model(), messages=[
-            UserMessage(content="echo hello"),
-            AssistantToolCallMessage(tool_calls=(tc,)),
-            result,
-        ], tools=tools)
+        ChatRequest(
+            model=_local_model(),
+            messages=[
+                UserMessage(content="echo hello"),
+                AssistantToolCallMessage(tool_calls=(tc,)),
+                result,
+            ],
+            tools=tools,
+        )
     )
     assert response2.text == "pong"
 
 
 # Ollama
+
 
 async def test_ollama_chat_returns_tool_call() -> None:
     """Ollama: returns tool_call in response."""
@@ -300,11 +381,13 @@ async def test_ollama_chat_returns_tool_call() -> None:
             "message": {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{
-                    "id": "ollama-1",
-                    "type": "function",
-                    "function": {"name": "query_db", "arguments": {"sql": "SELECT 1"}}
-                }],
+                "tool_calls": [
+                    {
+                        "id": "ollama-1",
+                        "type": "function",
+                        "function": {"name": "query_db", "arguments": {"sql": "SELECT 1"}},
+                    }
+                ],
                 "done": True,
             },
         }
@@ -312,8 +395,13 @@ async def test_ollama_chat_returns_tool_call() -> None:
     from providers.local.ollama import OllamaChatProvider
 
     provider = OllamaChatProvider(base_url="http://127.0.0.1:11434", transport=transport)
-    tools = [ToolDefinition(name="query_db", description="Query DB",
-                            parameters={"type": "object", "properties": {"sql": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="query_db",
+            description="Query DB",
+            parameters={"type": "object", "properties": {"sql": {"type": "string"}}},
+        )
+    ]
     response = await provider.chat(
         ChatRequest(model=_ollama_model(), messages=[UserMessage(content="run query")], tools=tools)
     )
@@ -330,11 +418,14 @@ async def test_ollama_stream_chain() -> None:
     from providers.local.ollama import OllamaChatProvider
 
     provider = OllamaChatProvider(base_url="http://127.0.0.1:11434", transport=transport)
-    events = [e async for e in provider.stream(ChatRequest(model=_ollama_model(), messages=[UserMessage(content="ping")]))]
+    events = [
+        e async for e in provider.stream(ChatRequest(model=_ollama_model(), messages=[UserMessage(content="ping")]))
+    ]
     assert events[-1].type == "done"
 
 
 # llama.cpp
+
 
 async def test_llamacpp_chat_returns_text() -> None:
     """llama.cpp: chat returns text (OpenAI-compatible format)."""
@@ -354,13 +445,28 @@ async def test_llamacpp_chat_tool_call() -> None:
 
     transport = FakeTransport(
         models={"data": [{"id": "llama.gguf"}]},
-        chat={"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [_openai_tool_call("cpp-1", "calc", {"expr": "1+1"})]}}]}
+        chat={
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [_openai_tool_call("cpp-1", "calc", {"expr": "1+1"})],
+                    }
+                }
+            ]
+        },
     )
     from providers.local.llama_cpp import LlamaCppChatProvider
 
     provider = LlamaCppChatProvider(base_url="http://127.0.0.1:8088/v1", transport=transport)
-    tools = [ToolDefinition(name="calc", description="Calculate",
-                            parameters={"type": "object", "properties": {"expr": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="calc",
+            description="Calculate",
+            parameters={"type": "object", "properties": {"expr": {"type": "string"}}},
+        )
+    ]
     response = await provider.chat(
         ChatRequest(model=_llamacpp_model(), messages=[UserMessage(content="calc")], tools=tools)
     )
@@ -370,13 +476,24 @@ async def test_llamacpp_chat_tool_call() -> None:
 
 # OpenAI-compatible (generic)
 
+
 async def test_openai_compat_chat_tool_call_chain() -> None:
     """OpenAI-compatible: chat -> tool call -> ToolResult -> continuation -> final answer."""
     from tests.unit.providers.local.fakes import FakeTransport
 
     transport = FakeTransport(
         models={"data": [{"id": "custom-model"}]},
-        chat={"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [_openai_tool_call("c1", "lookup", {"key": "test"})]}}]}
+        chat={
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [_openai_tool_call("c1", "lookup", {"key": "test"})],
+                    }
+                }
+            ]
+        },
     )
     # Use the registry factory to get an openai_compat provider (provider_id patched to "openai_compat")
     from providers.local import register_factories
@@ -386,8 +503,13 @@ async def test_openai_compat_chat_tool_call_chain() -> None:
 
     factory = get("openai_compat")
     provider = factory(base_url="http://127.0.0.1:8080/v1", transport=transport)
-    tools = [ToolDefinition(name="lookup", description="Lookup",
-                            parameters={"type": "object", "properties": {"key": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="lookup",
+            description="Lookup",
+            parameters={"type": "object", "properties": {"key": {"type": "string"}}},
+        )
+    ]
 
     response1 = await provider.chat(
         ChatRequest(model=_openai_compat_model(), messages=[UserMessage(content="lookup test")], tools=tools)
@@ -401,16 +523,21 @@ async def test_openai_compat_chat_tool_call_chain() -> None:
     transport.chat = {"choices": [{"message": {"role": "assistant", "content": "pong"}}]}
     result = ToolResultMessage(tool_call_id=tc.id, tool_name=tc.name, result=42)
     response2 = await provider.chat(
-        ChatRequest(model=_openai_compat_model(), messages=[
-            UserMessage(content="lookup test"),
-            AssistantToolCallMessage(tool_calls=(tc,)),
-            result,
-        ], tools=tools)
+        ChatRequest(
+            model=_openai_compat_model(),
+            messages=[
+                UserMessage(content="lookup test"),
+                AssistantToolCallMessage(tool_calls=(tc,)),
+                result,
+            ],
+            tools=tools,
+        )
     )
     assert response2.text == "pong"
 
 
 # Router integration
+
 
 async def test_router_stream_with_mock_provider() -> None:
     """Router: stream through a mock provider."""
@@ -447,13 +574,24 @@ async def test_router_chat_returns_response() -> None:
 
 # Full E2E chain (local + Router + ToolChain)
 
+
 async def test_full_e2e_local_tool_chain() -> None:
     """Full E2E: local provider -> Router -> tool call -> ToolResult -> continuation -> final answer."""
     from tests.unit.providers.local.fakes import FakeTransport
 
     transport = FakeTransport(
         models={"data": [{"id": "test-model"}]},
-        chat={"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [_openai_tool_call("e2e-tool-1", "process", {"input": "data"})]}}]}
+        chat={
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [_openai_tool_call("e2e-tool-1", "process", {"input": "data"})],
+                    }
+                }
+            ]
+        },
     )
 
     from providers.local import register_factories
@@ -464,8 +602,13 @@ async def test_full_e2e_local_tool_chain() -> None:
     factory = get("local")
     provider = factory(base_url="http://127.0.0.1:8080/v1", transport=transport)
 
-    tools = [ToolDefinition(name="process", description="Process data",
-                            parameters={"type": "object", "properties": {"input": {"type": "string"}}})]
+    tools = [
+        ToolDefinition(
+            name="process",
+            description="Process data",
+            parameters={"type": "object", "properties": {"input": {"type": "string"}}},
+        )
+    ]
     model = _local_model()
 
     response1 = await provider.chat(
@@ -480,11 +623,15 @@ async def test_full_e2e_local_tool_chain() -> None:
     # Reset to pong response for the continuation
     transport.chat = {"choices": [{"message": {"role": "assistant", "content": "pong"}}]}
     response2 = await provider.chat(
-        ChatRequest(model=model, messages=[
-            UserMessage(content="process data"),
-            AssistantToolCallMessage(tool_calls=(tc,)),
-            tool_result,
-        ], tools=tools)
+        ChatRequest(
+            model=model,
+            messages=[
+                UserMessage(content="process data"),
+                AssistantToolCallMessage(tool_calls=(tc,)),
+                tool_result,
+            ],
+            tools=tools,
+        )
     )
     assert response2.text == "pong"
 
@@ -495,7 +642,7 @@ async def test_full_e2e_via_router() -> None:
 
     transport = FakeTransport(
         models={"data": [{"id": "test-model"}]},
-        chat={"choices": [{"message": {"role": "assistant", "content": "final-answer"}}]}
+        chat={"choices": [{"message": {"role": "assistant", "content": "final-answer"}}]},
     )
 
     from providers.local import register_factories

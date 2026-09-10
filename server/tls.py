@@ -49,11 +49,7 @@ def resolve_tls_paths(
         return Path(certfile).expanduser(), Path(keyfile).expanduser()
     if certfile is not None or keyfile is not None:
         raise TlsConfigError("Pass both certfile and keyfile, or neither")
-    base = (
-        Path(cert_dir).expanduser().resolve()
-        if cert_dir is not None
-        else default_cert_dir(repo_root)
-    )
+    base = Path(cert_dir).expanduser().resolve() if cert_dir is not None else default_cert_dir(repo_root)
     return base / DEFAULT_CERT_NAME, base / DEFAULT_KEY_NAME
 
 
@@ -92,11 +88,7 @@ def generate_self_signed_cert(
         "-subj",
         f"/CN={common_name}",
         "-addext",
-        (
-            f"subjectAltName=IP:{common_name}"
-            if _is_ip_address(common_name)
-            else f"subjectAltName=DNS:{common_name}"
-        ),
+        (f"subjectAltName=IP:{common_name}" if _is_ip_address(common_name) else f"subjectAltName=DNS:{common_name}"),
     ]
     try:
         completed = subprocess.run(
@@ -107,8 +99,7 @@ def generate_self_signed_cert(
         )
     except FileNotFoundError as exc:
         raise TlsConfigError(
-            f"openssl not found ({openssl_bin!r}). Install OpenSSL or use mkcert; "
-            "see docs/audit/tls-lan.md"
+            f"openssl not found ({openssl_bin!r}). Install OpenSSL or use mkcert; see docs/audit/tls-lan.md"
         ) from exc
     if completed.returncode != 0:
         err = (completed.stderr or completed.stdout or "").strip()
@@ -167,9 +158,7 @@ def ensure_tls_material(
     )
 
 
-def build_server_ssl_context(
-    certfile: str | Path, keyfile: str | Path
-) -> ssl.SSLContext:
+def build_server_ssl_context(certfile: str | Path, keyfile: str | Path) -> ssl.SSLContext:
     """Build a TLS server context for ``ThreadingHTTPServer``."""
     cert_path = Path(certfile)
     key_path = Path(keyfile)
@@ -204,5 +193,6 @@ def load_or_create_tls(
 ) -> TlsMaterial:
     """Create or load TLS material for E2E tests."""
     from pathlib import Path as _Path
+
     r = _Path(repo_root) if repo_root else None
     return ensure_tls_material(repo_root=r, generate=generate)

@@ -355,7 +355,6 @@ _REGISTRY: dict[str, SafetyRule] = {
             types=_types(text="str", voice="str"),
         ),
     ),
-
     "code_helper": SafetyRule(
         RiskLevel.EXACT_CONFIRM,
         schema=ArgSchema(
@@ -478,8 +477,6 @@ def validate_args(tool_name: str, args: object) -> dict[str, object]:
                 field=key,
             )
     return checked
-
-
 
 
 def register_mcp_tool(tool_name: str, *, risk: RiskLevel = RiskLevel.READ) -> None:

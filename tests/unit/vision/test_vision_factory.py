@@ -5,17 +5,13 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+from acta.vision.provider import LocalVisionProvider
 from providers.contracts import VisionProvider
 from providers.registry import get, registered_ids
-
-from acta.vision.provider import LocalVisionProvider
-
 from tests.unit.vision.fakes import FakeEngine
 
 
-def test_factory_vision_local_is_registered(
-    clean_registry, tmp_path: Path
-) -> None:
+def test_factory_vision_local_is_registered(clean_registry, tmp_path: Path) -> None:
     import acta.vision as vision_pkg
 
     importlib.reload(vision_pkg)

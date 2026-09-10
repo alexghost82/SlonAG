@@ -4,6 +4,7 @@ Normalizes event content (ignoring timestamps, IDs, noise) and
 hashes the result. Near-duplicates within a short window are
 collapsed into a single decision.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -78,10 +79,7 @@ class EventDedup:
     def clear_expired(self, now: float | None = None) -> None:
         """Remove fingerprints older than TTL."""
         now = now or time.time()
-        expired = [
-            fp for fp, ds in self._cache.items()
-            if now - ds.last_seen_at > self._ttl
-        ]
+        expired = [fp for fp, ds in self._cache.items() if now - ds.last_seen_at > self._ttl]
         for fp in expired:
             del self._cache[fp]
 

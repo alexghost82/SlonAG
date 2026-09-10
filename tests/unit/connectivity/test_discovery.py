@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from acta.connectivity.discovery import LANDevice, LANDeviceScanner, SERVICE_TYPE
+from acta.connectivity.discovery import SERVICE_TYPE, LANDevice, LANDeviceScanner
 
 
 class TestLANDevice:
@@ -22,25 +22,39 @@ class TestLANDevice:
 
     def test_connect_url_tls(self) -> None:
         dev = LANDevice(
-            name="T", host="1.2.3.4", port=443,
-            device_id="d", display_name="D", fingerprint="f", uses_tls=True,
+            name="T",
+            host="1.2.3.4",
+            port=443,
+            device_id="d",
+            display_name="D",
+            fingerprint="f",
+            uses_tls=True,
         )
         assert dev.connect_url == "wss://1.2.3.4:443"
 
     def test_connect_url_plain(self) -> None:
         dev = LANDevice(
-            name="T", host="1.2.3.4", port=80,
-            device_id="d", display_name="D", fingerprint="", uses_tls=False,
+            name="T",
+            host="1.2.3.4",
+            port=80,
+            device_id="d",
+            display_name="D",
+            fingerprint="",
+            uses_tls=False,
         )
         assert dev.connect_url == "ws://1.2.3.4:80"
 
     def test_frozen(self) -> None:
         dev = LANDevice(
-            name="N", host="h", port=1,
-            device_id="d", display_name="d", fingerprint="f",
+            name="N",
+            host="h",
+            port=1,
+            device_id="d",
+            display_name="d",
+            fingerprint="f",
         )
         with pytest.raises(Exception):
-            dev.host = "new"
+            dev.host = "new"  # type: ignore[misc]
 
 
 class TestLANDeviceScanner:

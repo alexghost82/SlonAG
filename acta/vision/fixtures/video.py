@@ -36,14 +36,14 @@ def create_test_video(
     -------
     Path : Path to the created video file.
     """
-    import cv2 as cv  # type: ignore[import-untyped]  # noqa: F401
-    import numpy as np  # type: ignore[import-untyped]
+    import cv2 as cv  # noqa: F401
+    import numpy as np
 
     out_path = Path(path) if path else Path("/tmp/vision_test_video.mp4")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     fourcc = cv.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
-    out = cv.VideoWriter(str(out_path), fourcc, fps, (width, height))  # type: ignore[attr-defined]
+    out = cv.VideoWriter(str(out_path), fourcc, fps, (width, height))
 
     for i in range(num_frames):
         # Background

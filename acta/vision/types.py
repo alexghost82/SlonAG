@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class FrameSource(str, Enum):
+class FrameSource(StrEnum):
     IMAGE_FILE = "image"
     SCREENSHOT = "screenshot"
     SCREEN = "screen"
@@ -19,13 +19,13 @@ class FrameSource(str, Enum):
     RTSP_STREAM = "rtsp"
 
 
-class DetectionKind(str, Enum):
+class DetectionKind(StrEnum):
     OBJECT = "object"
     PERSON = "person"
     TEXT = "text"
 
 
-class TrackEvent(str, Enum):
+class TrackEvent(StrEnum):
     APPEARANCE = "appearance"
     DISAPPEARANCE = "disappearance"
     CONTINUITY = "continuity"
@@ -117,21 +117,25 @@ class TrackingState:
         return time.time() - self.last_seen > self.ttl_seconds
 
     def add_appearance(self, frame_index: int, bbox: Bbox, confidence: float) -> None:
-        self.appearances.append({
-            "frame_index": frame_index,
-            "bbox": {"x_min": bbox.x_min, "y_min": bbox.y_min,
-                     "x_max": bbox.x_max, "y_max": bbox.y_max},
-            "confidence": confidence,
-            "timestamp": time.time(),
-        })
+        self.appearances.append(
+            {
+                "frame_index": frame_index,
+                "bbox": {"x_min": bbox.x_min, "y_min": bbox.y_min, "x_max": bbox.x_max, "y_max": bbox.y_max},
+                "confidence": confidence,
+                "timestamp": time.time(),
+            }
+        )
         if len(self.appearances) > self.max_appearances:
             self.appearances.pop(0)
 
     def add_trajectory_point(self, frame_index: int, bbox: Bbox) -> None:
         pt = TrajectoryPoint(
-            timestamp=time.time(), track_id=self.track_id,
-            center_x=bbox.center_x, center_y=bbox.center_y,
-            width=bbox.width, height=bbox.height,
+            timestamp=time.time(),
+            track_id=self.track_id,
+            center_x=bbox.center_x,
+            center_y=bbox.center_y,
+            width=bbox.width,
+            height=bbox.height,
         )
         self.trajectory.append(pt)
         if len(self.trajectory) > self.max_trajectory_points:

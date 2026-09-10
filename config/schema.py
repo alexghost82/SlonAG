@@ -11,9 +11,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 PRIVACY_PROFILES = frozenset({"fully_local", "local_with_tools", "cloud", "hybrid"})
-PROVIDER_IDS = frozenset(
-    {"gemini", "openai", "openrouter", "local", "ollama", "llama_cpp", "openai_compat"}
-)
+PROVIDER_IDS = frozenset({"gemini", "openai", "openrouter", "local", "ollama", "llama_cpp", "openai_compat"})
 LOCAL_PROVIDER_IDS = frozenset({"local", "ollama", "llama_cpp"})
 CLOUD_PROVIDER_IDS = PROVIDER_IDS - LOCAL_PROVIDER_IDS
 NETWORK_MODES = frozenset({"offline", "tools_only", "hybrid"})
@@ -112,11 +110,7 @@ class LocalModelOverride:
     context_length: int | None = None
 
     def to_dict(self) -> dict[str, bool | int]:
-        return {
-            key: value
-            for key, value in asdict(self).items()
-            if value is not None
-        }
+        return {key: value for key, value in asdict(self).items() if value is not None}
 
 
 @dataclass(frozen=True)
@@ -136,14 +130,10 @@ class LocalModelsSettings:
 
     default_provider: str = "ollama"
     ollama: LocalProviderSettings = field(
-        default_factory=lambda: LocalProviderSettings(
-            base_url=DEFAULT_OLLAMA_BASE_URL
-        )
+        default_factory=lambda: LocalProviderSettings(base_url=DEFAULT_OLLAMA_BASE_URL)
     )
     llama_cpp: LocalProviderSettings = field(
-        default_factory=lambda: LocalProviderSettings(
-            base_url=DEFAULT_LLAMA_CPP_BASE_URL
-        )
+        default_factory=lambda: LocalProviderSettings(base_url=DEFAULT_LLAMA_CPP_BASE_URL)
     )
     preferred: PreferredLocalModels = field(default_factory=PreferredLocalModels)
     overrides: dict[str, LocalModelOverride] = field(default_factory=dict)
@@ -154,10 +144,7 @@ class LocalModelsSettings:
             "ollama": self.ollama.to_dict(),
             "llama_cpp": self.llama_cpp.to_dict(),
             "preferred": self.preferred.to_dict(),
-            "overrides": {
-                model_id: override.to_dict()
-                for model_id, override in self.overrides.items()
-            },
+            "overrides": {model_id: override.to_dict() for model_id, override in self.overrides.items()},
         }
 
 
@@ -181,7 +168,6 @@ class Settings:
     voice_mic_device: str | None = None
     voice_speaker_device: str | None = None
 
-
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "privacy_profile": self.privacy_profile,
@@ -192,9 +178,7 @@ class Settings:
             "routing_mode": self.routing_mode,
             "model_roles": self.model_roles.to_dict(),
             "local_models": self.local_models.to_dict(),
-            "provider_settings": {
-                pid: ps.to_dict() for pid, ps in self.provider_settings.items()
-            },
+            "provider_settings": {pid: ps.to_dict() for pid, ps in self.provider_settings.items()},
         }
         if self.os_system is not None:
             payload["os_system"] = self.os_system
@@ -205,6 +189,27 @@ class Settings:
         payload["voice_mic_device"] = self.voice_mic_device
         payload["voice_speaker_device"] = self.voice_speaker_device
         return payload
+
+
+def settings_forbid_cloud(settings: Settings | None = None) -> bool:
+    """True when offline / local_only / fully_local (and related) ban cloud."""
+    current = settings
+    if current is None:
+        try:
+            from config.settings import load_settings
+
+            current = load_settings()
+        except Exception:
+            return True
+    network = getattr(current, "network_mode", "") or ""
+    routing = getattr(current, "routing_mode", "") or ""
+    privacy = getattr(current, "privacy_profile", "") or ""
+    return (
+        network in {"offline", "local_only", "tools_only"}
+        or routing == "local_only"
+        or privacy in {"fully_local", "local_only", "local_with_tools"}
+    )
+
 
 def default_settings() -> Settings:
     return Settings()
@@ -224,33 +229,21 @@ def validate_settings(data: object) -> Settings:
         if not isinstance(key, str):
             raise SettingsValidationError("settings keys must be strings")
         if is_secret_field(key):
-            raise SettingsValidationError(
-                f"settings must not contain secret field {key!r}"
-            )
+            raise SettingsValidationError(f"settings must not contain secret field {key!r}")
 
-    privacy_profile = _optional_enum(
-        data, "privacy_profile", PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE
-    )
+    privacy_profile = _optional_enum(data, "privacy_profile", PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE)
     provider_id = _optional_enum(data, "provider_id", PROVIDER_IDS, DEFAULT_PROVIDER_ID)
     model_id = _optional_str(data, "model_id", "")
     language = _optional_non_empty_str(data, "language", DEFAULT_LANGUAGE)
-    network_mode = _optional_enum(
-        data, "network_mode", NETWORK_MODES, DEFAULT_NETWORK_MODE
-    )
-    routing_mode = _optional_enum(
-        data, "routing_mode", ROUTING_MODES, DEFAULT_ROUTING_MODE
-    )
+    network_mode = _optional_enum(data, "network_mode", NETWORK_MODES, DEFAULT_NETWORK_MODE)
+    routing_mode = _optional_enum(data, "routing_mode", ROUTING_MODES, DEFAULT_ROUTING_MODE)
     model_roles = _validate_model_roles(data.get("model_roles", {}))
     local_models = _validate_local_models(data.get("local_models", {}))
     provider_settings = _validate_provider_settings(data.get("provider_settings"))
     os_system = _optional_os_overlay(data)
     camera_index = _optional_non_negative_int(data, "camera_index")
-    voice_stt_engine = _optional_non_empty_str(
-        data, "voice_stt_engine", DEFAULT_VOICE_STT_ENGINE
-    )
-    voice_tts_engine = _optional_non_empty_str(
-        data, "voice_tts_engine", DEFAULT_VOICE_TTS_ENGINE
-    )
+    voice_stt_engine = _optional_non_empty_str(data, "voice_stt_engine", DEFAULT_VOICE_STT_ENGINE)
+    voice_tts_engine = _optional_non_empty_str(data, "voice_tts_engine", DEFAULT_VOICE_TTS_ENGINE)
     voice_mic_device = _optional_nullable_str(data, "voice_mic_device")
     voice_speaker_device = _optional_nullable_str(data, "voice_speaker_device")
 
@@ -273,9 +266,7 @@ def validate_settings(data: object) -> Settings:
     )
 
 
-def _optional_non_negative_int(
-    data: Mapping[str, Any], field_name: str
-) -> int | None:
+def _optional_non_negative_int(data: Mapping[str, Any], field_name: str) -> int | None:
     if field_name not in data:
         return None
     value = data[field_name]
@@ -302,9 +293,7 @@ def _optional_enum(
     return value
 
 
-def _optional_non_empty_str(
-    data: Mapping[str, Any], field_name: str, default: str
-) -> str:
+def _optional_non_empty_str(data: Mapping[str, Any], field_name: str, default: str) -> str:
     if field_name not in data:
         return default
     value = data[field_name]
@@ -315,9 +304,7 @@ def _optional_non_empty_str(
     return value
 
 
-def _optional_nullable_str(
-    data: Mapping[str, Any], field_name: str
-) -> str | None:
+def _optional_nullable_str(data: Mapping[str, Any], field_name: str) -> str | None:
     if field_name not in data:
         return None
     value = data[field_name]
@@ -328,9 +315,7 @@ def _optional_nullable_str(
     return value
 
 
-def _optional_str(
-    data: Mapping[str, Any], field_name: str, default: str
-) -> str:
+def _optional_str(data: Mapping[str, Any], field_name: str, default: str) -> str:
     """Return *field_name* value as a string from *data*, or *default*.
 
     Unlike ``_optional_non_empty_str``, this helper accepts empty strings
@@ -344,7 +329,6 @@ def _optional_str(
     if not isinstance(value, str):
         raise SettingsValidationError(f"{field_name} must be a string")
     return value
-
 
 
 def _optional_os_overlay(data: Mapping[str, Any]) -> str | None:
@@ -372,9 +356,7 @@ def _validate_model_roles(value: object) -> ModelRoles:
         if not isinstance(key, str):
             raise SettingsValidationError("model_roles keys must be strings")
         if is_secret_field(key):
-            raise SettingsValidationError(
-                f"model_roles must not contain secret field {key!r}"
-            )
+            raise SettingsValidationError(f"model_roles must not contain secret field {key!r}")
         if key not in MODEL_ROLE_KEYS:
             raise SettingsValidationError(f"model_roles contains unknown role {key!r}")
         if not isinstance(role_value, str):
@@ -392,14 +374,10 @@ def _validate_local_models(value: object) -> LocalModelsSettings:
         "local_models",
         {"default_provider", "ollama", "llama_cpp", "preferred", "overrides"},
     )
-    default_provider = _optional_enum(
-        data, "default_provider", LOCAL_PROVIDER_IDS, "ollama"
-    )
+    default_provider = _optional_enum(data, "default_provider", LOCAL_PROVIDER_IDS, "ollama")
     return LocalModelsSettings(
         default_provider=default_provider,
-        ollama=_validate_local_provider(
-            data.get("ollama", {}), "local_models.ollama", DEFAULT_OLLAMA_BASE_URL
-        ),
+        ollama=_validate_local_provider(data.get("ollama", {}), "local_models.ollama", DEFAULT_OLLAMA_BASE_URL),
         llama_cpp=_validate_local_provider(
             data.get("llama_cpp", {}),
             "local_models.llama_cpp",
@@ -410,9 +388,7 @@ def _validate_local_models(value: object) -> LocalModelsSettings:
     )
 
 
-def _validate_local_provider(
-    value: object, field_name: str, default_base_url: str
-) -> LocalProviderSettings:
+def _validate_local_provider(value: object, field_name: str, default_base_url: str) -> LocalProviderSettings:
     data = _require_mapping(value, field_name)
     _reject_unknown_or_secret_keys(data, field_name, {"enabled", "base_url"})
     enabled = data.get("enabled", True)
@@ -442,13 +418,9 @@ def _validate_model_overrides(value: object) -> dict[str, LocalModelOverride]:
     allowed = {"tool_calling", "structured_output", "vision", "context_length"}
     for model_id, raw_override in data.items():
         if not isinstance(model_id, str) or not model_id.strip():
-            raise SettingsValidationError(
-                f"{field_name} model ids must be non-empty strings"
-            )
+            raise SettingsValidationError(f"{field_name} model ids must be non-empty strings")
         if is_secret_field(model_id):
-            raise SettingsValidationError(
-                f"{field_name} must not contain secret field {model_id!r}"
-            )
+            raise SettingsValidationError(f"{field_name} must not contain secret field {model_id!r}")
         override_name = f"{field_name}.{model_id}"
         override = _require_mapping(raw_override, override_name)
         _reject_unknown_or_secret_keys(override, override_name, allowed)
@@ -457,22 +429,14 @@ def _validate_model_overrides(value: object) -> dict[str, LocalModelOverride]:
             if capability in override:
                 capability_value = override[capability]
                 if not isinstance(capability_value, bool):
-                    raise SettingsValidationError(
-                        f"{override_name}.{capability} must be a boolean"
-                    )
+                    raise SettingsValidationError(f"{override_name}.{capability} must be a boolean")
                 kwargs[capability] = capability_value
         if "context_length" in override:
             context_length = override["context_length"]
-            if (
-                not isinstance(context_length, int)
-                or isinstance(context_length, bool)
-                or context_length <= 0
-            ):
-                raise SettingsValidationError(
-                    f"{override_name}.context_length must be a positive integer"
-                )
+            if not isinstance(context_length, int) or isinstance(context_length, bool) or context_length <= 0:
+                raise SettingsValidationError(f"{override_name}.context_length must be a positive integer")
             kwargs["context_length"] = context_length
-        result[model_id] = LocalModelOverride(**kwargs)
+        result[model_id] = LocalModelOverride(**kwargs)  # type: ignore[arg-type]
     return result
 
 
@@ -486,20 +450,14 @@ def _validate_provider_settings(value: object) -> dict[str, ProviderBaseURL]:
     result: dict[str, ProviderBaseURL] = {}
     for pid, raw in value.items():
         if not isinstance(pid, str) or pid not in allowed_providers:
-            raise SettingsValidationError(
-                f"provider_settings contains unknown provider {pid!r}"
-            )
+            raise SettingsValidationError(f"provider_settings contains unknown provider {pid!r}")
         if not isinstance(raw, Mapping):
             raise SettingsValidationError(f"provider_settings.{pid} must be an object")
-        _reject_unknown_or_secret_keys(
-            raw, f"provider_settings.{pid}", {"base_url", "remote_enabled"}
-        )
+        _reject_unknown_or_secret_keys(raw, f"provider_settings.{pid}", {"base_url", "remote_enabled"})
         base_url = _optional_str(raw, "base_url", "")
         remote = raw.get("remote_enabled", False)
         if not isinstance(remote, bool):
-            raise SettingsValidationError(
-                f"provider_settings.{pid}.remote_enabled must be a boolean"
-            )
+            raise SettingsValidationError(f"provider_settings.{pid}.remote_enabled must be a boolean")
         result[pid] = ProviderBaseURL(base_url=base_url, remote_enabled=remote)
     return result
 
@@ -510,17 +468,11 @@ def _require_mapping(value: object, field_name: str) -> Mapping[str, Any]:
     return value
 
 
-def _reject_unknown_or_secret_keys(
-    data: Mapping[object, object], field_name: str, allowed: set[str]
-) -> None:
+def _reject_unknown_or_secret_keys(data: Mapping[str, Any], field_name: str, allowed: set[str]) -> None:
     for key in data:
         if not isinstance(key, str):
             raise SettingsValidationError(f"{field_name} keys must be strings")
         if is_secret_field(key):
-            raise SettingsValidationError(
-                f"{field_name} must not contain secret field {key!r}"
-            )
+            raise SettingsValidationError(f"{field_name} must not contain secret field {key!r}")
         if key not in allowed:
-            raise SettingsValidationError(
-                f"{field_name} contains unknown field {key!r}"
-            )
+            raise SettingsValidationError(f"{field_name} contains unknown field {key!r}")

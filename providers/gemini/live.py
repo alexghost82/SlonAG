@@ -2,13 +2,32 @@
 
 from __future__ import annotations
 
-from google import genai
-from google.genai import types
+from typing import Any
 
-__all__ = ["create_live_client", "genai", "types"]
+__all__ = ["create_live_client"]
+
+
+def __getattr__(name: str) -> Any:
+    if name in {"genai", "types"}:
+        from google import genai
+        from google.genai import types
+
+        return genai if name == "genai" else types
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def create_live_client(*, api_key: str, http_options: dict | None = None):
-    """Construct the Gemini Live client. Callers must not import google.genai."""
+    """Construct the Gemini Live client. Callers must not import google.genai.
+
+    Fail-closed when settings forbid cloud (offline / local_only / fully_local).
+    The SDK is imported only after the cloud gate so offline tests do not
+    require a working vision extra.
+    """
+    from config.schema import settings_forbid_cloud
+
+    if settings_forbid_cloud():
+        raise RuntimeError("Live client is disabled in local_only/offline/fully_local")
+    from google import genai
+
     options = http_options or {"api_version": "v1beta"}
-    return genai.Client(api_key=api_key, http_options=options)
+    return genai.Client(api_key=api_key, http_options=options)  # type: ignore[arg-type]

@@ -194,11 +194,12 @@ class LANDeviceScanner:
                 port=8765,
                 server="mark-desktop.local.",
             )
-            await info.async_request(aiozc, int(self._timeout * 1000))
+            await info.async_request(aiozc, int(self._timeout * 1000))  # type: ignore[arg-type]
             return await _discover_all(aiozc)
 
         try:
             import asyncio
+
             results = asyncio.run(_probe())
         except Exception:  # noqa: BLE001
             pass
@@ -216,6 +217,7 @@ class LANDeviceScanner:
 
     def _scan_dns_sd(self) -> list[LANDevice]:
         import subprocess
+
         result = subprocess.run(
             ["dns-sd", "-B", "_mark-control._tcp", "."],
             capture_output=True,
@@ -251,12 +253,12 @@ class LANDeviceScanner:
 
 async def _discover_all(aiozc: Any) -> list[LANDevice]:
     """Discover all services of SERVICE_TYPE."""
-    from zeroconf.asyncio import AsyncServiceBrowser
 
-    browser: AsyncServiceBrowser | None = None
     found: list[LANDevice] = []
 
     def _add_service(zc, service_type_: str, name: str) -> None:
+        from zeroconf.asyncio import AsyncServiceInfo
+
         info = AsyncServiceInfo(service_type_, name)
 
         async def _fetch() -> None:
@@ -272,6 +274,8 @@ async def _discover_all(aiozc: Any) -> list[LANDevice]:
         pass
 
     # Simplest approach: resolve the known service name directly.
+    from zeroconf.asyncio import AsyncServiceInfo
+
     info = AsyncServiceInfo(
         SERVICE_TYPE,
         f"Slon Desktop Control.{SERVICE_TYPE}",
@@ -291,6 +295,7 @@ def _make_lan_device(info: Any) -> LANDevice | None:
     """Build a LANDevice from an AsyncServiceInfo (or zeroconf.ServiceInfo)."""
     try:
         import ipaddress
+
         port = info.port or 8765
 
         addresses = info.addresses or []
@@ -336,9 +341,7 @@ def _make_lan_device(info: Any) -> LANDevice | None:
         return None
 
 
-def _discover_sync(
-    zc: Any, timeout: float = 5.0
-) -> list[LANDevice]:
+def _discover_sync(zc: Any, timeout: float = 5.0) -> list[LANDevice]:
     """Synchronous discovery using zeroconf."""
 
     from zeroconf import ServiceStateChange
@@ -378,6 +381,7 @@ def _make_lan_device_sync(info: Any) -> LANDevice | None:
     """Build a LANDevice from a synchronous zeroconf.ServiceInfo."""
     try:
         import ipaddress
+
         port = info.port or 8765
         addresses = info.addresses or []
 

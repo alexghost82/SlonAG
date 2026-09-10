@@ -16,6 +16,7 @@ from typing import Any
 
 # ── Observations ──────────────────────────────────────────────
 
+
 class ObservationKind(Enum):
     TOOL_FAILURE = auto()
     TOOL_TIMEOUT = auto()
@@ -32,17 +33,17 @@ class ObservationKind(Enum):
 
 
 class RiskLevel(Enum):
-    SAFE = "safe"           # cosmetic, read-only changes
-    LOW = "low"             # bounded config changes
-    MEDIUM = "medium"       # affects routing or memory
-    HIGH = "high"           # structural changes
+    SAFE = "safe"  # cosmetic, read-only changes
+    LOW = "low"  # bounded config changes
+    MEDIUM = "medium"  # affects routing or memory
+    HIGH = "high"  # structural changes
 
 
 class EvidenceType(Enum):
-    STATISTICAL = "statistical"       # from metrics collection
-    PATTERN = "pattern"               # repeated pattern detected
-    USER_FEEDBACK = "user_feedback"   # explicit user correction
-    BENCHMARK = "benchmark"           # measured performance delta
+    STATISTICAL = "statistical"  # from metrics collection
+    PATTERN = "pattern"  # repeated pattern detected
+    USER_FEEDBACK = "user_feedback"  # explicit user correction
+    BENCHMARK = "benchmark"  # measured performance delta
 
 
 class MetricKind(Enum):
@@ -63,8 +64,10 @@ class MetricKind(Enum):
 
 # ── Evaluation ────────────────────────────────────────────────
 
+
 class EvaluationStatus(Enum):
     """Status of an improvement evaluation (between approval and apply)."""
+
     NOT_EVALUATED = "not_evaluated"
     PASSED = "passed"
     FAILED = "failed"
@@ -72,8 +75,10 @@ class EvaluationStatus(Enum):
 
 # ── Audit ─────────────────────────────────────────────────────
 
+
 class AuditAction(Enum):
     """An immutable audit action recorded for every state change."""
+
     OBSERVE = "observe"
     CANDIDATE_GENERATED = "candidate_generated"
     PROPOSED = "proposed"
@@ -90,6 +95,7 @@ class AuditAction(Enum):
 @dataclass(frozen=True)
 class AuditEntry:
     """Immutable audit log entry — one record per state transition."""
+
     action: AuditAction
     timestamp: float = field(default_factory=time.monotonic)
     details: dict[str, Any] = field(default_factory=dict)
@@ -116,9 +122,11 @@ class AuditEntry:
 
 # ── Metrics ───────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class MetricSnapshot:
     """A point-in-time metric reading."""
+
     kind: MetricKind
     value: float
     unit: str
@@ -130,6 +138,7 @@ class MetricSnapshot:
 @dataclass(frozen=True)
 class MetricBucket:
     """Accumulated statistics for a metric dimension."""
+
     kind: MetricKind
     dimension_key: str
     dimension_value: str
@@ -150,6 +159,7 @@ class MetricBucket:
 @dataclass(frozen=True)
 class Observation:
     """A single observation event."""
+
     kind: ObservationKind
     timestamp: float = field(default_factory=time.monotonic)
     details: dict[str, Any] = field(default_factory=dict)
@@ -157,6 +167,7 @@ class Observation:
 
 
 # ── Improvement Candidates ────────────────────────────────────
+
 
 class ImprovementCategory(Enum):
     PREFERENCE_REFINEMENT = "preference_refinement"
@@ -172,6 +183,7 @@ class ImprovementCategory(Enum):
 @dataclass(frozen=True)
 class ImprovementCandidate:
     """A proposed improvement, awaiting evaluation and approval."""
+
     id: str
     category: ImprovementCategory
     title: str
@@ -191,6 +203,7 @@ class ImprovementCandidate:
 
 # ── Improvement Record ────────────────────────────────────────
 
+
 class ImprovementStatus(Enum):
     PROPOSED = "proposed"
     APPROVED = "approved"
@@ -208,6 +221,7 @@ class SelfImprovementRecord:
         audit_log: Append-only immutable audit trail.
         evaluation: Evaluation result (between approval and apply).
     """
+
     id: str
     title: str
     status: ImprovementStatus = ImprovementStatus.PROPOSED
@@ -233,17 +247,18 @@ class SelfImprovementRecord:
     def bump_version(self, reason: str = "state change") -> int:
         """Increment version and log the bump. Returns new version."""
         self.version += 1
-        self._audit_log.append(AuditEntry(
-            action=AuditAction.VERSION_INCREMENTED,
-            details={"reason": reason, "old_version": self.version - 1, "new_version": self.version},
-            message_ru=f"Версия изменена: {self.version - 1} → {self.version} ({reason})",
-        ))
+        self._audit_log.append(
+            AuditEntry(
+                action=AuditAction.VERSION_INCREMENTED,
+                details={"reason": reason, "old_version": self.version - 1, "new_version": self.version},
+                message_ru=f"Версия изменена: {self.version - 1} → {self.version} ({reason})",
+            )
+        )
         return self.version
 
     # ── Audit logging ──────────────────────────────────────────
 
-    def audit(self, action: AuditAction, details: dict[str, Any] | None = None,
-              message_ru: str = "") -> None:
+    def audit(self, action: AuditAction, details: dict[str, Any] | None = None, message_ru: str = "") -> None:
         """Append an immutable audit entry."""
         entry = AuditEntry(
             action=action,
@@ -302,9 +317,11 @@ class SelfImprovementRecord:
 
 # ── State ─────────────────────────────────────────────────────
 
+
 @dataclass
 class SelfImprovementState:
     """Persistent state for the self-improvement system."""
+
     observations_count: int = 0
     candidates_generated: int = 0
     approved_count: int = 0
@@ -334,6 +351,7 @@ class SelfImprovementState:
 
 # ── Bounded change application ────────────────────────────────
 
+
 def apply_bounded_change(
     change: dict[str, Any],
     rollback_snapshot: dict[str, Any] | None = None,
@@ -359,6 +377,7 @@ def apply_bounded_change(
     if target == "config":
         from config.schema import SettingsValidationError
         from config.settings import load_settings, save_settings
+
         try:
             settings = load_settings()
             rollback_data = settings.to_dict()
@@ -375,10 +394,12 @@ def apply_bounded_change(
         if action_type == "refine_extraction_prompt":
             # Write a refined extraction prompt to memory — safe, reversible
             from memory.memory_manager import update_memory
+
             category = change.get("correction_type", "preferences")
             prompt_key = f"extraction_prompt_{category}"
             value = change.get("value", "")
             from memory.memory_manager import load_memory
+
             memory = load_memory()
             old_entry = memory.get("system", {}).get(prompt_key)
             rollback = {"type": "memory", "category": "system", "key": prompt_key, "old": old_entry}
@@ -386,24 +407,29 @@ def apply_bounded_change(
         elif action_type == "prune_stale_entries":
             # Memory pruning: mark entries as stale (reversible)
             from memory.memory_manager import load_memory, update_memory
+
             stale_count = change.get("stale_count", 0)
             memory = load_memory()
             # Snapshot the current memory state for rollback
             rollback = {"type": "memory", "action": "prune_stale", "memory_snapshot": json.dumps(memory)}
             # Store pruning metadata (non-destructive: just marks as stale)
-            update_memory({
-                "audit": {
-                    "last_stale_prune_at": datetime.now(UTC).strftime("%Y-%m-%d"),
-                    "pruned_count": stale_count,
+            update_memory(
+                {
+                    "audit": {
+                        "last_stale_prune_at": datetime.now(UTC).strftime("%Y-%m-%d"),
+                        "pruned_count": stale_count,
+                    }
                 }
-            })
+            )
         else:
             # Generic memory update
             from memory.memory_manager import update_memory
+
             category = change.get("category", "notes")
             key = change["key"]
             value = change["value"]
             from memory.memory_manager import load_memory
+
             memory = load_memory()
             old_entry = memory.get(category, {}).get(key)
             rollback = {"type": "memory", "category": "category", "key": key, "old": old_entry}
@@ -415,10 +441,11 @@ def apply_bounded_change(
         new_timeout = change["value"]
         # Snapshot: store in self-improvement state
         from acta.selfimprovement import load_state
+
         state = load_state()
-        existing = state.improvements.get("_timeout_overrides", SelfImprovementRecord(
-            id="_timeout_overrides", title="Timeout overrides"
-        ))
+        state.improvements.get(
+            "_timeout_overrides", SelfImprovementRecord(id="_timeout_overrides", title="Timeout overrides")
+        )
         rollback = {"type": "timeout", "path": timeout_path, "old_value": change.get("previous")}
         # Store override in improvement state
         state.improvements[f"_timeout_{timeout_path}"] = SelfImprovementRecord(
@@ -430,6 +457,7 @@ def apply_bounded_change(
             rollback_change=rollback,
         )
         from acta.selfimprovement.storage import save_state
+
         save_state(state)
 
     elif target == "routing_stats":

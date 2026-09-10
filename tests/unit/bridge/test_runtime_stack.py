@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from providers.contracts import ModelInfo
 from acta.bridge import authorize_tool, build_runtime_stack
+from providers.contracts import ModelInfo
 
 
 def test_build_stack_degrades_without_keys(tmp_path: Path) -> None:
@@ -25,9 +25,7 @@ def test_build_stack_degrades_without_keys(tmp_path: Path) -> None:
     assert stack.memory is not None
     assert any("provider_id=gemini" in line for line in stack.status_lines)
     # Router may construct even without keys; validate is separate.
-    assert stack.router is not None or any(
-        "router:" in line for line in stack.status_lines
-    )
+    assert stack.router is not None or any("router:" in line for line in stack.status_lines)
 
 
 def test_authorize_unknown_tool_fails_closed(tmp_path: Path) -> None:

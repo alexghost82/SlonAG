@@ -13,7 +13,6 @@ from providers.contracts import (
 from providers.registry import get
 from speech.stt.engines import OptionalFasterWhisperEngine
 from speech.stt.provider import DEFAULT_LANGUAGE, PROVIDER_ID, LocalSTTProvider
-
 from tests.unit.speech.stt.fakes import ExplodingEngine, FakeEngine, PartialEngine
 
 AUDIO = b"RIFF\x00\x00\x00\x00WAVEfake"

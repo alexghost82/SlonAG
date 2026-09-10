@@ -57,8 +57,7 @@ class ToolRegistry:
         return tuple(
             spec
             for spec in self.list()
-            if required_capabilities.issubset(spec.capabilities)
-            and required_scopes.issubset(spec.scopes)
+            if required_capabilities.issubset(spec.capabilities) and required_scopes.issubset(spec.scopes)
         )
 
 

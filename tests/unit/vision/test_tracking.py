@@ -11,10 +11,8 @@ Covers:
 
 import time
 
-import pytest
-
 from acta.vision.tracking import ObjectTracker
-from acta.vision.types import Bbox, DetectionResult, DetectionKind, FrameEvent
+from acta.vision.types import Bbox, DetectionKind, DetectionResult
 
 
 class TestObjectTracker:
@@ -23,7 +21,9 @@ class TestObjectTracker:
     def test_allocate_track(self):
         tracker = ObjectTracker()
         det = DetectionResult(
-            kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+            kind=DetectionKind.OBJECT,
+            label="box",
+            confidence=0.9,
             bbox=Bbox(0.2, 0.2, 0.4, 0.4),
         )
         tracker.update_detection(det)
@@ -35,7 +35,9 @@ class TestObjectTracker:
         assert tracker.track_count == 0
         for i in range(5):
             det = DetectionResult(
-                kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+                kind=DetectionKind.OBJECT,
+                label="box",
+                confidence=0.9,
                 bbox=Bbox(0.2, 0.2, 0.4, 0.4),
             )
             tracker.update_detection(det)
@@ -45,7 +47,9 @@ class TestObjectTracker:
         tracker = ObjectTracker()
         for i in range(5):
             det = DetectionResult(
-                kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+                kind=DetectionKind.OBJECT,
+                label="box",
+                confidence=0.9,
                 bbox=Bbox(0.2 + i * 0.05, 0.3, 0.4 + i * 0.05, 0.5),
                 track_id="object_000001",
             )
@@ -57,7 +61,9 @@ class TestObjectTracker:
         tracker = ObjectTracker(max_trajectory_points=3)
         for i in range(10):
             det = DetectionResult(
-                kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+                kind=DetectionKind.OBJECT,
+                label="box",
+                confidence=0.9,
                 bbox=Bbox(0.2, 0.3 + i * 0.02, 0.4, 0.5),
                 track_id="object_000001",
             )
@@ -69,7 +75,9 @@ class TestObjectTracker:
         tracker = ObjectTracker(max_appearances=3)
         for i in range(10):
             det = DetectionResult(
-                kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+                kind=DetectionKind.OBJECT,
+                label="box",
+                confidence=0.9,
                 bbox=Bbox(0.2, 0.3, 0.4, 0.5),
                 track_id="object_000001",
             )
@@ -81,7 +89,9 @@ class TestObjectTracker:
         tracker = ObjectTracker(max_tracks=3)
         for i in range(10):
             det = DetectionResult(
-                kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+                kind=DetectionKind.OBJECT,
+                label="box",
+                confidence=0.9,
                 bbox=Bbox(0.2, 0.2, 0.4, 0.4),
             )
             tracker.update_detection(det)
@@ -90,7 +100,9 @@ class TestObjectTracker:
     def test_stale_cleanup(self):
         tracker = ObjectTracker(ttl_seconds=0.001)
         det = DetectionResult(
-            kind=DetectionKind.OBJECT, label="box", confidence=0.9,
+            kind=DetectionKind.OBJECT,
+            label="box",
+            confidence=0.9,
             bbox=Bbox(0.2, 0.2, 0.4, 0.4),
             track_id="object_000001",
         )

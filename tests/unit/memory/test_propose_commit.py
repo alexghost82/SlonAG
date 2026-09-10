@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
-import sqlite3
 
 from acta.memory import (
     CODE_UNKNOWN_PROPOSAL,

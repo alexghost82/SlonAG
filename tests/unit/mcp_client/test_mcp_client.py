@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
+
 import pytest
 
-from acta.mcp.client import McpClient, McpCallResult
+from acta.mcp.client import McpClient
 from acta.mcp.types import McpServerConfig, McpTransportKind
 
 
@@ -101,37 +101,46 @@ class TestMcpToolInvocation:
         client = McpClient(_make_config())
         async with client:
             await client.discover_tools()
-            result = await client.invoke_tool("test_compute", {
-                "operation": "add",
-                "a": 2,
-                "b": 3,
-            })
+            result = await client.invoke_tool(
+                "test_compute",
+                {
+                    "operation": "add",
+                    "a": 2,
+                    "b": 3,
+                },
+            )
             assert result.ok
-            assert "5" in result.content
+            assert "5" in result.content  # type: ignore[operator]
 
     @pytest.mark.asyncio
     async def test_invoke_compute_multiply(self) -> None:
         client = McpClient(_make_config())
         async with client:
             await client.discover_tools()
-            result = await client.invoke_tool("test_compute", {
-                "operation": "multiply",
-                "a": 4,
-                "b": 5,
-            })
+            result = await client.invoke_tool(
+                "test_compute",
+                {
+                    "operation": "multiply",
+                    "a": 4,
+                    "b": 5,
+                },
+            )
             assert result.ok
-            assert "20" in result.content
+            assert "20" in result.content  # type: ignore[operator]
 
     @pytest.mark.asyncio
     async def test_invoke_compute_divide_by_zero(self) -> None:
         client = McpClient(_make_config())
         async with client:
             await client.discover_tools()
-            result = await client.invoke_tool("test_compute", {
-                "operation": "divide",
-                "a": 10,
-                "b": 0,
-            })
+            result = await client.invoke_tool(
+                "test_compute",
+                {
+                    "operation": "divide",
+                    "a": 10,
+                    "b": 0,
+                },
+            )
             assert not result.ok
 
     @pytest.mark.asyncio
@@ -141,17 +150,20 @@ class TestMcpToolInvocation:
             await client.discover_tools()
             result = await client.invoke_tool("test_nonexistent", {})
             assert not result.ok
-            assert "неизвестн" in result.error.lower()
+            assert "неизвестн" in result.error.lower()  # type: ignore[union-attr]
 
     @pytest.mark.asyncio
     async def test_invoke_write_note(self) -> None:
         client = McpClient(_make_config())
         async with client:
             await client.discover_tools()
-            result = await client.invoke_tool("test_write_note", {
-                "title": "Test Note",
-                "content": "Hello world",
-            })
+            result = await client.invoke_tool(
+                "test_write_note",
+                {
+                    "title": "Test Note",
+                    "content": "Hello world",
+                },
+            )
             assert result.ok
 
     @pytest.mark.asyncio
@@ -161,7 +173,6 @@ class TestMcpToolInvocation:
             await client.discover_tools()
             result = await client.invoke_tool("test_echo", {"message": "test"})
             assert result.ok
-
 
 
 class TestMcpResourceDiscovery:
@@ -219,9 +230,12 @@ class TestMcpPromptDiscovery:
         client = McpClient(_make_config())
         async with client:
             await client.discover_prompts()
-            result = await client.get_prompt("test_summarize", {
-                "text": "Hello world this is a test",
-            })
+            result = await client.get_prompt(
+                "test_summarize",
+                {
+                    "text": "Hello world this is a test",
+                },
+            )
             assert result.ok
             assert len(result.prompts) >= 1
 
@@ -290,7 +304,7 @@ class TestMcpToolFiltering:
             assert result.ok
             result2 = await client.invoke_tool("filtered_compute", {"operation": "add", "a": 1, "b": 2})
             assert not result2.ok
-            assert "разреш" in result2.error.lower()
+            assert "разреш" in result2.error.lower()  # type: ignore[union-attr]
 
     @pytest.mark.asyncio
     async def test_denied_tools_filter(self) -> None:
@@ -306,4 +320,4 @@ class TestMcpToolFiltering:
             await client.discover_tools()
             result = await client.invoke_tool("filtered_compute", {"operation": "add", "a": 1, "b": 2})
             assert not result.ok
-            assert "запрещ" in result.error.lower()
+            assert "запрещ" in result.error.lower()  # type: ignore[union-attr]

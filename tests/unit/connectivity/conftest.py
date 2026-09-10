@@ -9,6 +9,7 @@ import pytest
 def fake_lan_device():
     """Create a fake LAN device for tests."""
     from acta.connectivity.discovery import LANDevice
+
     return LANDevice(
         name="Slon Desktop._mark-control._tcp.local.",
         host="192.168.1.42",
@@ -24,6 +25,7 @@ def fake_lan_device():
 def fake_policy():
     """Create a default ConnectivityPolicy for tests."""
     from acta.connectivity.types import ConnectivityPolicy
+
     return ConnectivityPolicy(
         lan_preferred=True,
         remote_fallback=True,

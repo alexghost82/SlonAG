@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from i18n import t
 from providers.contracts import ModelInfo
 
 # ─── Static Gemini catalog ──────────────────────────────────────────────────
@@ -22,6 +23,7 @@ def _load_gemini_models() -> tuple[ModelInfo, ...]:
     """Return the static Gemini model list from the provider catalog."""
     try:
         from providers.gemini.catalog import GEMINI_MODELS  # noqa: F401
+
         return GEMINI_MODELS
     except Exception:
         return ()
@@ -102,6 +104,7 @@ def _get_overrides(provider_id: str, model_id: str) -> dict[str, Any]:
 
 # ─── Public API ─────────────────────────────────────────────────────────────
 
+
 def get_static_models(provider_id: str) -> tuple[ModelInfo, ...]:
     """Return the static catalog models for *provider_id*.
 
@@ -141,7 +144,7 @@ def get_model_info(provider_id: str, model_id: str) -> ModelInfo | None:
             provider_id=provider_id,
             model_id=model_id,
             display_name=model_id,
-            **overrides,  # type: ignore[arg-type]
+            **overrides,
         )
 
     return None
@@ -165,10 +168,7 @@ def resolve_capabilities(provider_id: str, model_id: str) -> dict[str, Any]:
         "audio_output",
         "embeddings",
     )
-    return {
-        field: getattr(info, field, False)
-        for field in fields
-    }
+    return {field: getattr(info, field, False) for field in fields}
 
 
 def model_capabilities_display(info: ModelInfo) -> str:
@@ -177,6 +177,7 @@ def model_capabilities_display(info: ModelInfo) -> str:
     Example: ``"Текст, Инструменты, Зрение"``
     """
     from i18n import t
+
     parts: list[str] = []
     if info.text:
         parts.append(t("catalog.cap_text"))
@@ -199,9 +200,7 @@ def model_capabilities_display(info: ModelInfo) -> str:
 
 def provider_validation_message(provider_id: str) -> str | None:
     """Return a validation note for a provider, or None if the provider is fine."""
-    known_providers = frozenset({
-        "gemini", "openai", "openrouter", "local", "ollama", "llama_cpp", "openai_compat"
-    })
+    known_providers = frozenset({"gemini", "openai", "openrouter", "local", "ollama", "llama_cpp", "openai_compat"})
     if provider_id not in known_providers:
         return t("catalog.err_unknown_provider", provider=provider_id)
     return None

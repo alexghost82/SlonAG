@@ -85,6 +85,7 @@ class BoundedDetectionQueue:
     def count(self) -> int:
         return len(self._queue)
 
+
 class BoundedEventQueue:
     """Bounded async queue for frame events."""
 

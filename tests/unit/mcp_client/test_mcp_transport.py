@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
+
 import pytest
 
 from acta.mcp.transport import McpStdioTransport
@@ -67,11 +67,15 @@ class TestMcpStdioTransport:
         )
         transport = McpStdioTransport(config)
         async with transport:
-            await transport.send_message("initialize", {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "slonag", "version": "0.1.0"},
-            }, timeout=5.0)
+            await transport.send_message(
+                "initialize",
+                {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "slonag", "version": "0.1.0"},
+                },
+                timeout=5.0,
+            )
 
             result = await transport.send_message("tools/list", timeout=5.0)
             assert isinstance(result, dict)
@@ -92,11 +96,15 @@ class TestMcpStdioTransport:
         )
         transport = McpStdioTransport(config)
         async with transport:
-            await transport.send_message("initialize", {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "slonag", "version": "0.1.0"},
-            }, timeout=5.0)
+            await transport.send_message(
+                "initialize",
+                {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "slonag", "version": "0.1.0"},
+                },
+                timeout=5.0,
+            )
             with pytest.raises(RuntimeError, match="Method not found"):
                 await transport.send_message("nonexistent/method", timeout=5.0)
 

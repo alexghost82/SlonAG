@@ -177,9 +177,7 @@ class WorkflowCandidate:
             WorkflowState.DEPRECATED: {WorkflowState.PARAMETERIZED},
         }
         if new_state not in allowed.get(self.state, set()):
-            raise ValueError(
-                f"Cannot transition from {self.state.value} to {new_state.value}"
-            )
+            raise ValueError(f"Cannot transition from {self.state.value} to {new_state.value}")
         self.state = new_state
         self.updated_at = time.time()
         if new_state == WorkflowState.APPROVED:

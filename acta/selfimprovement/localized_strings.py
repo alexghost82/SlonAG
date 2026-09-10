@@ -24,11 +24,11 @@ RU_CANDIDATE_RISK_HIGH = "Высокий риск"
 
 # ── Approval messages ────────────────────────────────────────
 
-RU_APPROVE_SUCCESS = "Улучшение \"{title}\" одобрено пользователем"
-RU_REJECT_SUCCESS = "Улучшение \"{title}\" отклонено"
-RU_ALREADY_APPROVED = "Улучшение \"{title}\" уже одобрено"
-RU_ALREADY_REJECTED = "Улучшение \"{title}\" уже отклонено"
-RU_NOT_FOUND = "Улучшение \"{title}\" не найдено"
+RU_APPROVE_SUCCESS = 'Улучшение "{title}" одобрено пользователем'
+RU_REJECT_SUCCESS = 'Улучшение "{title}" отклонено'
+RU_ALREADY_APPROVED = 'Улучшение "{title}" уже одобрено'
+RU_ALREADY_REJECTED = 'Улучшение "{title}" уже отклонено'
+RU_NOT_FOUND = 'Улучшение "{title}" не найдено'
 RU_USER_APPROVAL_REQUIRED = "Требуется одобрение пользователя: {title}"
 
 # ── Evaluation messages ─────────────────────────────────────────
@@ -39,7 +39,7 @@ RU_EVALUATION_SECURITY = "Недопустимое изменение безоп
 
 # ── Apply messages ────────────────────────────────────────────
 
-RU_APPLY_SUCCESS = "Изменение \"{title}\" применено успешно"
+RU_APPLY_SUCCESS = 'Изменение "{title}" применено успешно'
 RU_APPLY_ERROR = "Ошибка применения: {error}"
 RU_APPLY_NO_APPROVAL = "Невозможно применить: требуется одобрение пользователя"
 
@@ -50,8 +50,8 @@ RU_MONITOR_STABLE = "Наблюдение подтверждено: {title} — 
 
 # ── Rollback messages ─────────────────────────────────────────
 
-RU_ROLLBACK_SUCCESS = "Откат \"{title}\" выполнен: {reason}"
-RU_ROLLBACK_FAILED = "Откат \"{title}\" не выполнен: {reason}"
+RU_ROLLBACK_SUCCESS = 'Откат "{title}" выполнен: {reason}'
+RU_ROLLBACK_FAILED = 'Откат "{title}" не выполнен: {reason}'
 
 # ── General messages ──────────────────────────────────────────
 

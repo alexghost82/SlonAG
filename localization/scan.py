@@ -79,9 +79,7 @@ def _tr_argument_ids(tree: ast.AST) -> set[int]:
 def _docstring_ids(tree: ast.AST) -> set[int]:
     skip: set[int] = set()
     for node in ast.walk(tree):
-        if not isinstance(
-            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        ):
+        if not isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
         if not node.body:
             continue

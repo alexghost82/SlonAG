@@ -16,7 +16,6 @@ from providers.contracts import (
 )
 from providers.errors import CapabilityError, ProviderAuthError, ProviderError
 from providers.registry import register
-
 from providers.router import NeverFallbackPolicy, Router
 from providers.routing import select_model
 from tests.unit.providers.mocks import MockChatProvider, mock_model
@@ -199,9 +198,7 @@ async def test_default_policy_never_falls_back() -> None:
     [{"network_mode": "offline"}, {"privacy_profile": "fully_local"}],
 )
 @pytest.mark.parametrize("cloud_id", ["gemini", "openai", "openrouter"])
-async def test_offline_and_fully_local_refuse_cloud(
-    constraint: dict[str, str], cloud_id: str
-) -> None:
+async def test_offline_and_fully_local_refuse_cloud(constraint: dict[str, str], cloud_id: str) -> None:
     cloud = RecordingProvider(cloud_id)
     router = Router(
         provider_id=cloud_id,
@@ -405,7 +402,7 @@ def test_offline_constraints_select_only_local(constraint: dict[str, str]) -> No
         (cloud, local),
         routing_mode="cloud_first",
         configured_provider_id="openrouter",
-        **constraint,
+        **constraint,  # type: ignore[arg-type]
     )
     assert selected is local
 
@@ -449,7 +446,7 @@ def test_local_only_raises_capability_error_for_invalid_local(
             (model, _candidate("openai")),
             routing_mode="local_only",
             configured_provider_id="ollama",
-            availability=availability,
+            availability=availability,  # type: ignore[arg-type]
         )
 
 
@@ -477,7 +474,7 @@ async def test_restricted_routing_never_invokes_cloud_without_capable_local(
         models=(local_model, cloud_model),
         model_availability={"ollama": local_available, "openai": True},
         providers={"ollama": local, "openai": cloud},
-        **constraint,
+        **constraint,  # type: ignore[arg-type]
     )
     with pytest.raises(CapabilityError):
         await router.chat(_request("openai"))

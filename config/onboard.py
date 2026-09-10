@@ -127,9 +127,12 @@ TTS_ENGINES: list[tuple[str, str]] = [
 # Step definitions
 # ---------------------------------------------------------------------------
 
+
 class OnboardStepId(str):
     """Opaque step identifier."""
+
     pass
+
 
 STEP_LANGUAGE = OnboardStepId("language")
 STEP_PROVIDER = OnboardStepId("provider")
@@ -163,15 +166,18 @@ ALL_STEPS = (
 # Step metadata
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class StepMeta:
     """Metadata for a single onboarding step."""
+
     id: OnboardStepId
     title_key: str
     hint_key: str
     order: int
     optional: bool = False
     connection_test: bool = False
+
 
 STEP_META: dict[OnboardStepId, StepMeta] = {
     STEP_LANGUAGE: StepMeta(
@@ -261,20 +267,25 @@ STEP_META: dict[OnboardStepId, StepMeta] = {
 # Connection test result
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ConnectionTestResult:
     """Result of a connection test."""
+
     label: str
     ok: bool
     message: str
+
 
 # ---------------------------------------------------------------------------
 # Onboard result (immutable, returned after wizard completion)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class OnboardResult:
     """Final result from a completed onboarding wizard."""
+
     language: str
     provider_id: str
     model_id: str
@@ -299,13 +310,16 @@ class OnboardResult:
     secrets_saved: list[str] = field(default_factory=list)
     connection_tests: list[ConnectionTestResult] = field(default_factory=list)
 
+
 # ---------------------------------------------------------------------------
 # Onboard state (accumulates answers across wizard steps)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class OnboardState:
     """Accumulates user answers across wizard steps."""
+
     language: str = DEFAULT_LANGUAGE
     provider_id: str = DEFAULT_PROVIDER_ID
     model_id: str = ""
@@ -390,24 +404,29 @@ class OnboardState:
     def _detect_os() -> str:
         return {"darwin": "mac", "windows": "windows"}.get(sys.platform, "linux")
 
+
 # ---------------------------------------------------------------------------
 # Validation helpers
 # ---------------------------------------------------------------------------
+
 
 def validate_language(value: str) -> tuple[bool, str | None]:
     if not value or not value.strip():
         return False, t("onboard.err_required", field=t("onboard.field_language"))
     return True, None
 
+
 def validate_provider(value: str) -> tuple[bool, str | None]:
     if not value or value not in PROVIDER_IDS:
         return False, t("onboard.err_provider_invalid", provider=value or "(empty)")
     return True, None
 
+
 def validate_model_id(provider_id: str, value: str) -> tuple[bool, str | None]:
     if not value or value.strip() == "":
         return True, None
     return True, None
+
 
 def validate_model_for_provider(provider_id: str, model_id: str) -> tuple[bool, str | None]:
     """Validate that *model_id* is a valid choice for *provider_id*.
@@ -444,7 +463,6 @@ def get_model_capabilities_summary(provider_id: str, model_id: str) -> str:
     return model_capabilities_display(info)
 
 
-
 def validate_api_key_field(provider_id: str, key_value: str) -> tuple[bool, str | None]:
     if provider_id in LOCAL_PROVIDER_IDS:
         return True, None
@@ -454,6 +472,7 @@ def validate_api_key_field(provider_id: str, key_value: str) -> tuple[bool, str 
         return False, t("onboard.err_api_key_short")
     return True, None
 
+
 def validate_base_url(value: str, provider_id: str) -> tuple[bool, str | None]:
     if not value or not value.strip():
         return True, None
@@ -462,17 +481,18 @@ def validate_base_url(value: str, provider_id: str) -> tuple[bool, str | None]:
         return False, t("onboard.err_url_scheme")
     return True, None
 
+
 def validate_privacy_profile(value: str) -> tuple[bool, str | None]:
-    return (value in PRIVACY_PROFILES,
-            None if value in PRIVACY_PROFILES else t("onboard.err_privacy_invalid"))
+    return (value in PRIVACY_PROFILES, None if value in PRIVACY_PROFILES else t("onboard.err_privacy_invalid"))
+
 
 def validate_network_mode(value: str) -> tuple[bool, str | None]:
-    return (value in NETWORK_MODES,
-            None if value in NETWORK_MODES else t("onboard.err_network_invalid"))
+    return (value in NETWORK_MODES, None if value in NETWORK_MODES else t("onboard.err_network_invalid"))
+
 
 def validate_routing_mode(value: str) -> tuple[bool, str | None]:
-    return (value in ROUTING_MODES,
-            None if value in ROUTING_MODES else t("onboard.err_routing_invalid"))
+    return (value in ROUTING_MODES, None if value in ROUTING_MODES else t("onboard.err_routing_invalid"))
+
 
 def validate_camera_index(value: str) -> tuple[bool, str | None]:
     if not value.strip():
@@ -485,6 +505,7 @@ def validate_camera_index(value: str) -> tuple[bool, str | None]:
     except ValueError:
         return False, t("onboard.err_camera_index_invalid")
 
+
 def validate_rtsp_url(value: str) -> tuple[bool, str | None]:
     if not value or not value.strip():
         return True, None
@@ -492,6 +513,7 @@ def validate_rtsp_url(value: str) -> tuple[bool, str | None]:
     if not url.startswith(("rtsp://", "rtmps://")):
         return False, t("onboard.err_rtsp_scheme")
     return True, None
+
 
 def validate_step(state: OnboardState, step_id: OnboardStepId) -> tuple[bool, str | None]:
     """Validate user input for a given step. Returns (valid, error_message)."""
@@ -541,9 +563,11 @@ def validate_step(state: OnboardState, step_id: OnboardStepId) -> tuple[bool, st
         return True, None
     return True, None
 
+
 # ---------------------------------------------------------------------------
 # Connection tests
 # ---------------------------------------------------------------------------
+
 
 def test_dns_lookup(hostname: str) -> ConnectionTestResult:
     """DNS resolution check."""
@@ -556,6 +580,7 @@ def test_dns_lookup(hostname: str) -> ConnectionTestResult:
     except OSError:
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_dns_net"))
 
+
 def test_tcp_connect(host: str, port: int, timeout: float = 2.0) -> ConnectionTestResult:
     """TCP port reachability check."""
     label = f"{host}:{port}"
@@ -566,11 +591,13 @@ def test_tcp_connect(host: str, port: int, timeout: float = 2.0) -> ConnectionTe
     except (TimeoutError, ConnectionRefusedError, OSError):
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_tcp_fail", host=host, port=port))
 
+
 def test_http_get(url: str, timeout: float = 3.0) -> ConnectionTestResult:
     """HTTP HEAD request check."""
     label = t("onboard.test_http", url=url)
     try:
         import urllib.request
+
         req = urllib.request.Request(url, method="HEAD")
         req.add_header("User-Agent", "SlonOnboard/1.0")
         resp = urllib.request.urlopen(req, timeout=timeout)
@@ -578,6 +605,7 @@ def test_http_get(url: str, timeout: float = 3.0) -> ConnectionTestResult:
         return ConnectionTestResult(label=label, ok=True, message=f"{t('onboard.test_ok')} ({resp.status})")
     except Exception as exc:
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_http_fail", exc=str(exc)))
+
 
 def test_provider_api_key(provider_id: str, api_key: str) -> ConnectionTestResult:
     """Test a provider's API key."""
@@ -598,12 +626,14 @@ def test_provider_api_key(provider_id: str, api_key: str) -> ConnectionTestResul
     except Exception as exc:
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_api_key_fail", exc=str(exc)))
 
+
 def _test_gemini_key(api_key: str) -> ConnectionTestResult:
     label = t("onboard.test_gemini")
     try:
         from google import genai
+
         client = genai.Client(api_key=api_key)
-        list(client.models.list(page_size=1))
+        list(client.models.list(page_size=1))  # type: ignore[call-arg]
         return ConnectionTestResult(label=label, ok=True, message=t("onboard.test_gemini_ok"))
     except Exception as exc:
         msg = str(exc)
@@ -611,10 +641,12 @@ def _test_gemini_key(api_key: str) -> ConnectionTestResult:
             return ConnectionTestResult(label=label, ok=True, message=t("onboard.test_quota"))
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_gemini_fail", exc=msg))
 
+
 def _test_openai_key(api_key: str) -> ConnectionTestResult:
     label = t("onboard.test_openai")
     try:
         from openai import OpenAI
+
         client = OpenAI(api_key=api_key)
         client.models.list(limit=1)
         return ConnectionTestResult(label=label, ok=True, message=t("onboard.test_openai_ok"))
@@ -624,13 +656,15 @@ def _test_openai_key(api_key: str) -> ConnectionTestResult:
             return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_openai_unauth"))
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_openai_fail", exc=msg))
 
+
 def _test_openrouter_key(api_key: str) -> ConnectionTestResult:
     label = t("onboard.test_openrouter")
     try:
         import urllib.request
+
         req = urllib.request.Request(
             "https://openrouter.ai/api/v1/models",
-            headers={"Authorization": f"Bearer {api_key}", "User-Agent": "SlonOnboard/1.0"}
+            headers={"Authorization": f"Bearer {api_key}", "User-Agent": "SlonOnboard/1.0"},
         )
         resp = urllib.request.urlopen(req, timeout=5)
         data = resp.read()
@@ -644,6 +678,7 @@ def _test_openrouter_key(api_key: str) -> ConnectionTestResult:
             return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_openrouter_unauth"))
         return ConnectionTestResult(label=label, ok=False, message=t("onboard.test_openrouter_fail", exc=msg))
 
+
 def test_local_provider(base_url: str, provider_id: str) -> ConnectionTestResult:
     """Check if a local provider endpoint responds."""
     label = f"{provider_id} @ {base_url}"
@@ -651,6 +686,7 @@ def test_local_provider(base_url: str, provider_id: str) -> ConnectionTestResult
         return test_http_get(f"{base_url}/api/tags", timeout=2.0)
     else:
         return ConnectionTestResult(label=label, ok=True, message=t("onboard.test_generic_ok", provider=provider_id))
+
 
 def run_connection_tests(state: OnboardState) -> list[ConnectionTestResult]:
     """Run all applicable connection tests for the current state."""
@@ -662,8 +698,7 @@ def run_connection_tests(state: OnboardState) -> list[ConnectionTestResult]:
             results.append(test_provider_api_key(state.provider_id, key_value))
     if state.provider_id in LOCAL_PROVIDER_IDS:
         url = state.local_base_url or (
-            "http://127.0.0.1:11434" if state.local_provider == "ollama"
-            else "http://127.0.0.1:8080"
+            "http://127.0.0.1:11434" if state.local_provider == "ollama" else "http://127.0.0.1:8080"
         )
         results.append(test_local_provider(url, state.provider_id))
     if state.remote_transport != "none" and state.remote_base_url:
@@ -674,9 +709,11 @@ def run_connection_tests(state: OnboardState) -> list[ConnectionTestResult]:
             results.append(test_dns_lookup(host_part))
     return results
 
+
 # ---------------------------------------------------------------------------
 # Apply result -> Settings + Secrets
 # ---------------------------------------------------------------------------
+
 
 def apply_onboard_result(
     result: OnboardResult,
@@ -714,10 +751,10 @@ def apply_onboard_result(
         set_secret("openai_api_key", openai_key)
         saved.append("openai_api_key")
 
-    if result.remote_base_url and result.provider_base_url:
-        settings_data["provider_settings"] = {
+    if result.remote_base_url and result.provider_base_url:  # type: ignore[attr-defined]
+        settings_data["provider_settings"] = {  # type: ignore[assignment]
             result.provider_id: {
-                "base_url": result.provider_base_url,
+                "base_url": result.provider_base_url,  # type: ignore[attr-defined]
                 "remote_enabled": True,
             }
         }
@@ -729,12 +766,11 @@ def apply_onboard_result(
 def has_valid_config() -> bool:
     """Return True if a valid config (provider + os_system) exists."""
     from config.settings import load_settings
+
     try:
         settings = load_settings()
         return (
-            settings.provider_id is not None
-            and settings.provider_id.strip() != ""
-            and settings.os_system is not None
+            settings.provider_id is not None and settings.provider_id.strip() != "" and settings.os_system is not None
         )
     except Exception:
         return False
@@ -743,6 +779,7 @@ def has_valid_config() -> bool:
 def bootstrap_from_settings() -> Settings:
     """Load saved settings, filling in defaults for any missing fields."""
     from config.settings import load_settings
+
     try:
         settings = load_settings()
     except Exception:

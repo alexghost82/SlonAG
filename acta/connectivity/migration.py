@@ -79,6 +79,7 @@ class LANRemoteMigration:
             # Remote adapter must exist.
             if self._session._remote_adapter is None:
                 from acta.connectivity.remote import RemoteAdapter
+
                 self._session._remote_adapter = RemoteAdapter()
 
             await self._session._remote_adapter.connect()
@@ -103,9 +104,7 @@ class LANRemoteMigration:
 
     # -- Remote -> LAN --
 
-    async def migrate_to_lan(
-        self, device: Any, reason: str = "lan_restored"
-    ) -> None:
+    async def migrate_to_lan(self, device: Any, reason: str = "lan_restored") -> None:
         """Switch from remote transport to LAN transport.
 
         Closes the remote transport, establishes a LAN TLS connection,

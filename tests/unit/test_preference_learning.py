@@ -26,31 +26,31 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+from datetime import UTC
 from pathlib import Path
 from unittest import TestCase
 
 from acta.preference_learning.engine import PreferenceEngine
 from acta.preference_learning.repository import PreferenceRepository
 from acta.preference_learning.types import (
+    ConfidenceDecayPolicy,
     Evidence,
     LearnedItem,
     LearningSource,
     PreferenceAction,
     PreferenceType,
-    PriorityLevel,
     PreferenceVersion,
+    PriorityLevel,
     RetrievalContext,
-    ConfidenceDecayPolicy,
     _is_sensitive_key,
-    mask_value,
-    SENSITIVE_KEY_PATTERNS,
     _now,
+    mask_value,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_engine(tmp_path: Path, **kwargs) -> PreferenceEngine:
     """Create a fresh engine with its own DB in *tmp_path*."""
@@ -68,64 +68,71 @@ class TestPreferenceCreation(TestCase):
 
     def test_create_explicit_preference(self) -> None:
         item = self.engine.add_preference(
-            key="theme", value="dark",
+            key="theme",
+            value="dark",
             pref_type=PreferenceType.EXPLICIT,
             source=LearningSource.USER_STATED,
         )
         self.assertIsNotNone(item.active)
-        self.assertEqual(item.active.key, "theme")
-        self.assertEqual(item.active.value, "dark")
-        self.assertEqual(item.active.confidence, 1.0)
-        self.assertEqual(item.active.decay_policy, ConfidenceDecayPolicy.NONE)
+        self.assertEqual(item.require_active.key, "theme")
+        self.assertEqual(item.require_active.value, "dark")
+        self.assertEqual(item.require_active.confidence, 1.0)
+        self.assertEqual(item.require_active.decay_policy, ConfidenceDecayPolicy.NONE)
 
     def test_create_choice_preference(self) -> None:
         item = self.engine.add_preference(
-            key="preferred_language", value="Russian",
+            key="preferred_language",
+            value="Russian",
             pref_type=PreferenceType.CHOICE,
             source=LearningSource.AGENT_OBSERVED,
         )
-        self.assertEqual(item.active.confidence, 0.5)
-        self.assertEqual(item.active.decay_policy, ConfidenceDecayPolicy.LINEAR)
+        self.assertEqual(item.require_active.confidence, 0.5)
+        self.assertEqual(item.require_active.decay_policy, ConfidenceDecayPolicy.LINEAR)
 
     def test_create_habit_preference(self) -> None:
         item = self.engine.add_preference(
-            key="use_tabs", value="true",
+            key="use_tabs",
+            value="true",
             pref_type=PreferenceType.HABIT,
         )
-        self.assertEqual(item.active.type, PreferenceType.HABIT)
-        self.assertEqual(item.active.confidence, 0.5)
+        self.assertEqual(item.require_active.type, PreferenceType.HABIT)
+        self.assertEqual(item.require_active.confidence, 0.5)
 
     def test_create_corrections_preference(self) -> None:
         item = self.engine.add_preference(
-            key="no_verbose", value="true",
+            key="no_verbose",
+            value="true",
             pref_type=PreferenceType.CORRECTION,
         )
-        self.assertEqual(item.active.type, PreferenceType.CORRECTION)
+        self.assertEqual(item.require_active.type, PreferenceType.CORRECTION)
 
     def test_create_interaction_preference(self) -> None:
         item = self.engine.add_preference(
-            key="style_concise", value="true",
+            key="style_concise",
+            value="true",
             pref_type=PreferenceType.INTERACTION,
         )
-        self.assertEqual(item.active.type, PreferenceType.INTERACTION)
+        self.assertEqual(item.require_active.type, PreferenceType.INTERACTION)
 
     def test_create_project_context_preference(self) -> None:
         item = self.engine.add_preference(
-            key="project_lang", value="python",
+            key="project_lang",
+            value="python",
             pref_type=PreferenceType.PROJECT_CONTEXT,
         )
-        self.assertEqual(item.active.type, PreferenceType.PROJECT_CONTEXT)
+        self.assertEqual(item.require_active.type, PreferenceType.PROJECT_CONTEXT)
 
     def test_weak_signal_does_not_become_permanent(self) -> None:
         """A single weak signal from agent observation should not become
         a permanent high-confidence preference."""
         item = self.engine.add_preference(
-            key="maybe_theme", value="light",
+            key="maybe_theme",
+            value="light",
             pref_type=PreferenceType.CHOICE,
             source=LearningSource.AGENT_OBSERVED,
         )
         # Must start at 0.5, never auto-promote to explicit-level
-        self.assertLess(item.active.confidence, 1.0)
+        self.assertLess(item.require_active.confidence, 1.0)
         # And should decay over time (checked in TestDecay)
 
     def test_preference_persists_in_repository(self) -> None:
@@ -151,7 +158,7 @@ class TestExplicitCorrections(TestCase):
             new_value="light",
             reason="Dark mode causes eye strain",
         )
-        active = item.active
+        active = item.require_active
         self.assertEqual(active.value, "light")
         self.assertTrue(active.corrected)
         self.assertEqual(active.correction_reason, "Dark mode causes eye strain")
@@ -189,8 +196,7 @@ class TestConfidence(TestCase):
         self.engine = _make_engine(self.tmp)
 
     def test_reinforce_increases_confidence(self) -> None:
-        self.engine.add_preference(key="theme", value="dark",
-                                    pref_type=PreferenceType.CHOICE)
+        self.engine.add_preference(key="theme", value="dark", pref_type=PreferenceType.CHOICE)
         decision = self.engine.reinforce("theme", amount=0.2)
         self.assertEqual(decision.action, "reinforced")
         self.assertGreater(decision.new_confidence, decision.old_confidence)
@@ -198,8 +204,7 @@ class TestConfidence(TestCase):
     def test_reinforce_cap_at_1_0(self) -> None:
         """Explicit preference starts at confidence 1.0 and reinforcement
         is capped at 1.0 but does NOT reject — it just can't increase."""
-        self.engine.add_preference(key="theme", value="dark",
-                                    pref_type=PreferenceType.EXPLICIT)
+        self.engine.add_preference(key="theme", value="dark", pref_type=PreferenceType.EXPLICIT)
         decision = self.engine.reinforce("theme", amount=0.1)
         # Explicit starts at 1.0, reinforce adds 0.1 but min(1.0, 1.0+0.1) = 1.0
         self.assertEqual(decision.new_confidence, 1.0)
@@ -213,13 +218,11 @@ class TestConfidence(TestCase):
 
     def test_reinforcement_count_respects_limit(self) -> None:
         """With low max_reinforcements, count reaches limit."""
-        from datetime import datetime, timezone
-        
-        self.engine.add_preference(key="test", value="v",
-                                    pref_type="choice")
+
+        self.engine.add_preference(key="test", value="v", pref_type="choice")
         repo = self.engine.repo
         item = repo.list_items()[0]
-        active = item.active
+        active = item.require_active
         # Set max_reinforcements to 2 by creating a new version
         new_v = PreferenceVersion(
             id=active.id,
@@ -271,7 +274,8 @@ class TestEvidence(TestCase):
             context="chat_turn_42",
         )
         self.engine.add_preference(
-            key="theme", value="dark",
+            key="theme",
+            value="dark",
             evidence=evidence,
         )
         item = self.engine.inspect_preference("theme")
@@ -300,29 +304,28 @@ class TestProvenance(TestCase):
         self.engine = _make_engine(self.tmp)
 
     def test_user_stated_source(self) -> None:
-        item = self.engine.add_preference(
-            key="test", value="v",
+        self.engine.add_preference(
+            key="test",
+            value="v",
             source=LearningSource.USER_STATED,
         )
         self.engine.correct_preference(key="test", new_value="w")
         active = self.engine.inspect_preference("test")
-        self.assertEqual(active["versions"][1]["correction_source"],
-                         "correction_received")
+        self.assertEqual(active["versions"][1]["correction_source"], "correction_received")
 
     def test_correction_source_tracking(self) -> None:
         self.engine.add_preference(key="test", value="v")
         self.engine.correct_preference(
-            key="test", new_value="w",
+            key="test",
+            new_value="w",
             source=LearningSource.CORRECTION_RECEIVED,
         )
         active = self.engine.inspect_preference("test")
-        self.assertEqual(active["versions"][-1]["correction_source"],
-                         "correction_received")
+        self.assertEqual(active["versions"][-1]["correction_source"], "correction_received")
 
     def test_edit_source_tracking(self) -> None:
         self.engine.add_preference(key="test", value="v")
-        self.engine.edit_preference(key="test", value="w",
-                                     source=LearningSource.MANUAL_ENTRY)
+        self.engine.edit_preference(key="test", value="w", source=LearningSource.MANUAL_ENTRY)
         active = self.engine.inspect_preference("test")
         self.assertEqual(active["total_versions"], 2)
 
@@ -338,17 +341,19 @@ class TestDecay(TestCase):
     def test_linear_decay(self) -> None:
         """Linear decay: CHOICE type gets LINEAR decay by default.
         Simulate decay by setting last_use_at to 3 days ago."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
+
         from acta.preference_learning.types import _now
-        
+
         self.engine.add_preference(
-            key="theme", value="dark",
+            key="theme",
+            value="dark",
             pref_type=PreferenceType.CHOICE,
         )
         repo = PreferenceRepository(self.tmp / "preference_learning.db")
         item = repo.list_items()[0]
-        active = item.active
-        old_ts = (datetime.now(timezone.utc) - timedelta(days=3)).replace(microsecond=0).isoformat()
+        active = item.require_active
+        old_ts = (datetime.now(UTC) - timedelta(days=3)).replace(microsecond=0).isoformat()
 
         new_v = PreferenceVersion(
             id=item.id,
@@ -382,37 +387,46 @@ class TestDecay(TestCase):
         self.assertGreaterEqual(count, 1)
         item2 = repo.load(item.id)
         if item2 and item2.active:
-            self.assertLess(item2.active.confidence, 0.5)
+            self.assertLess(item2.require_active.confidence, 0.5)
 
     def test_exponential_decay(self) -> None:
         self.engine.add_preference(
-            key="theme", value="dark",
+            key="theme",
+            value="dark",
             pref_type=PreferenceType.CHOICE,
         )
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
+
         from acta.preference_learning.types import _now
-        
+
         repo = PreferenceRepository(self.tmp / "preference_learning.db")
         item = repo.list_items()[0]
-        active = item.active
-        old_ts = (datetime.now(timezone.utc) - timedelta(weeks=2)).replace(microsecond=0).isoformat()
+        active = item.require_active
+        old_ts = (datetime.now(UTC) - timedelta(weeks=2)).replace(microsecond=0).isoformat()
 
         new_v = PreferenceVersion(
-            id=item.id, version=active.version + 1,
-            type=active.type, action=active.action,
-            priority=active.priority, category=active.category,
-            key=active.key, value=active.value,
+            id=item.id,
+            version=active.version + 1,
+            type=active.type,
+            action=active.action,
+            priority=active.priority,
+            category=active.category,
+            key=active.key,
+            value=active.value,
             description=active.description,
             confidence=active.confidence,
             decay_policy=ConfidenceDecayPolicy.EXPONENTIAL,
-            created_at=active.created_at, updated_at=_now(),
-            last_use_at=old_ts, usage_count=active.usage_count,
+            created_at=active.created_at,
+            updated_at=_now(),
+            last_use_at=old_ts,
+            usage_count=active.usage_count,
             contradicted=active.contradicted,
             contradiction_evidence=list(active.contradiction_evidence),
             corrected=active.corrected,
             correction_source=active.correction_source,
             correction_reason=active.correction_reason,
-            deleted=active.deleted, tags=list(active.tags),
+            deleted=active.deleted,
+            tags=list(active.tags),
             reinforcement_count=active.reinforcement_count,
         )
         item.versions.append(new_v)
@@ -424,31 +438,40 @@ class TestDecay(TestCase):
     def test_no_decay_for_explicit(self) -> None:
         """Explicit preferences have NONE decay policy — never decay."""
         self.engine.add_preference(
-            key="theme", value="dark",
+            key="theme",
+            value="dark",
             pref_type=PreferenceType.EXPLICIT,
         )
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
+
         repo = PreferenceRepository(self.tmp / "preference_learning.db")
         item = repo.list_items()[0]
-        active = item.active
-        old_ts = (datetime.now(timezone.utc) - timedelta(days=30)).replace(microsecond=0).isoformat()
+        active = item.require_active
+        old_ts = (datetime.now(UTC) - timedelta(days=30)).replace(microsecond=0).isoformat()
 
         new_v = PreferenceVersion(
-            id=item.id, version=active.version + 1,
-            type=active.type, action=active.action,
-            priority=active.priority, category=active.category,
-            key=active.key, value=active.value,
+            id=item.id,
+            version=active.version + 1,
+            type=active.type,
+            action=active.action,
+            priority=active.priority,
+            category=active.category,
+            key=active.key,
+            value=active.value,
             description=active.description,
             confidence=active.confidence,
             decay_policy=active.decay_policy,
-            created_at=active.created_at, updated_at=_now(),
-            last_use_at=old_ts, usage_count=active.usage_count,
+            created_at=active.created_at,
+            updated_at=_now(),
+            last_use_at=old_ts,
+            usage_count=active.usage_count,
             contradicted=active.contradicted,
             contradiction_evidence=list(active.contradiction_evidence),
             corrected=active.corrected,
             correction_source=active.correction_source,
             correction_reason=active.correction_reason,
-            deleted=active.deleted, tags=list(active.tags),
+            deleted=active.deleted,
+            tags=list(active.tags),
             reinforcement_count=active.reinforcement_count,
         )
         item.versions.append(new_v)
@@ -460,7 +483,8 @@ class TestDecay(TestCase):
     def test_no_decay_without_last_use(self) -> None:
         """No decay should happen if last_use_at is empty."""
         self.engine.add_preference(
-            key="theme", value="dark",
+            key="theme",
+            value="dark",
             pref_type=PreferenceType.CHOICE,
         )
         count = self.engine.decay_confidence()
@@ -536,7 +560,7 @@ class TestSuperseding(TestCase):
         self.engine.correct_preference(key="theme", new_value="light")
         repo = PreferenceRepository(self.tmp / "preference_learning.db")
         item = repo.list_items()[0]
-        self.assertEqual(item.active.value, "light")
+        self.assertEqual(item.require_active.value, "light")
         # Old version is deleted
         self.assertTrue(item.versions[0].deleted)
 
@@ -588,24 +612,23 @@ class TestEdit(TestCase):
     def test_edit_value(self) -> None:
         self.engine.add_preference(key="theme", value="dark")
         item = self.engine.edit_preference(key="theme", value="light")
-        self.assertEqual(item.active.value, "light")
-        self.assertEqual(item.active.version, 2)
+        self.assertEqual(item.require_active.value, "light")
+        self.assertEqual(item.require_active.version, 2)
 
     def test_edit_description(self) -> None:
         self.engine.add_preference(key="theme", value="dark")
-        item = self.engine.edit_preference(
-            key="theme", description="User prefers dark UI")
-        self.assertEqual(item.active.description, "User prefers dark UI")
+        item = self.engine.edit_preference(key="theme", description="User prefers dark UI")
+        self.assertEqual(item.require_active.description, "User prefers dark UI")
 
     def test_edit_category(self) -> None:
         self.engine.add_preference(key="theme", value="dark", category="ui")
         item = self.engine.edit_preference(key="theme", category="appearance")
-        self.assertEqual(item.active.category, "appearance")
+        self.assertEqual(item.require_active.category, "appearance")
 
     def test_edit_tags(self) -> None:
         self.engine.add_preference(key="theme", value="dark", tags=["a"])
         item = self.engine.edit_preference(key="theme", tags=["b"])
-        self.assertEqual(item.active.tags, ["b"])
+        self.assertEqual(item.require_active.tags, ["b"])
 
     def test_edit_nonexistent_raises(self) -> None:
         with self.assertRaises(KeyError):
@@ -685,7 +708,7 @@ class TestPauseDisable(TestCase):
         """Forget sets confidence to 0 and marks deleted — effectively disabled."""
         self.engine.add_preference(key="theme", value="dark")
         self.engine.forget_preference("theme")
-        
+
         # Should not appear in retrieval
         ctx = RetrievalContext(current_task="test task", min_confidence=0.3)
         matches = self.engine.retrieve_for_decision(ctx)
@@ -739,10 +762,8 @@ class TestExport(TestCase):
         self.assertEqual(keys, {"a", "b"})
 
     def test_search_preferences(self) -> None:
-        self.engine.add_preference(key="ui_theme", value="dark",
-                                    tags=["interface"])
-        self.engine.add_preference(key="lang", value="python",
-                                    tags=["code"])
+        self.engine.add_preference(key="ui_theme", value="dark", tags=["interface"])
+        self.engine.add_preference(key="lang", value="python", tags=["code"])
         results = self.engine.search_preferences("ui", top_k=10)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["key"], "ui_theme")
@@ -770,8 +791,7 @@ class TestSecretFiltering(TestCase):
         self.engine = _make_engine(self.tmp)
 
     def test_sensitive_key_patterns_detected(self) -> None:
-        patterns = ["password", "api_key", "token", "secret",
-                     "credential", "private_key", "auth_token"]
+        patterns = ["password", "api_key", "token", "secret", "credential", "private_key", "auth_token"]
         for pat in patterns:
             self.assertTrue(_is_sensitive_key(pat))
 
@@ -830,25 +850,19 @@ class TestBoundedStorage(TestCase):
     def test_exceeding_limit_triggers_prune(self) -> None:
         engine = _make_engine(self.tmp, max_items=5)
         for i in range(5):
-            engine.add_preference(key=f"pref_{i}", value=f"v{i}",
-                                  pref_type=PreferenceType.CHOICE)
+            engine.add_preference(key=f"pref_{i}", value=f"v{i}", pref_type=PreferenceType.CHOICE)
         self.assertEqual(len(engine.list_all_preferences()), 5)
         # Adding a 6th preference should prune the lowest-confidence
-        engine.add_preference(key="pref_5", value="v5",
-                              pref_type=PreferenceType.CHOICE)
+        engine.add_preference(key="pref_5", value="v5", pref_type=PreferenceType.CHOICE)
         self.assertEqual(len(engine.list_all_preferences()), 5)
 
     def test_explicit_preferences_survive_prune(self) -> None:
         """Explicit preferences should not be pruned; only choices are pruned."""
         engine = _make_engine(self.tmp, max_items=3)
-        engine.add_preference(key="explicit_1", value="v1",
-                              pref_type=PreferenceType.EXPLICIT)
-        engine.add_preference(key="choice_a", value="va",
-                              pref_type=PreferenceType.CHOICE)
-        engine.add_preference(key="choice_b", value="vb",
-                              pref_type=PreferenceType.CHOICE)
-        engine.add_preference(key="choice_c", value="vc",
-                              pref_type=PreferenceType.CHOICE)
+        engine.add_preference(key="explicit_1", value="v1", pref_type=PreferenceType.EXPLICIT)
+        engine.add_preference(key="choice_a", value="va", pref_type=PreferenceType.CHOICE)
+        engine.add_preference(key="choice_b", value="vb", pref_type=PreferenceType.CHOICE)
+        engine.add_preference(key="choice_c", value="vc", pref_type=PreferenceType.CHOICE)
         self.assertEqual(len(engine.list_all_preferences()), 3)
         keys = {p["key"] for p in engine.list_all_preferences()}
         # explicit_1 must survive (highest priority to keep)
@@ -860,15 +874,11 @@ class TestBoundedStorage(TestCase):
     def test_lower_confidence_pruned_first(self) -> None:
         """Among equal-confidence items, oldest (lowest recency) is pruned first."""
         engine = _make_engine(self.tmp, max_items=3)
-        engine.add_preference(key="high", value="v1",
-                              pref_type=PreferenceType.CHOICE)
+        engine.add_preference(key="high", value="v1", pref_type=PreferenceType.CHOICE)
         engine.reinforce("high", amount=0.4)  # confidence = 0.9
-        engine.add_preference(key="old", value="v2",
-                              pref_type=PreferenceType.CHOICE)  # 0.5, oldest
-        engine.add_preference(key="mid", value="v3",
-                              pref_type=PreferenceType.CHOICE)  # 0.5
-        engine.add_preference(key="new", value="v4",
-                              pref_type=PreferenceType.CHOICE)  # 0.5, newest
+        engine.add_preference(key="old", value="v2", pref_type=PreferenceType.CHOICE)  # 0.5, oldest
+        engine.add_preference(key="mid", value="v3", pref_type=PreferenceType.CHOICE)  # 0.5
+        engine.add_preference(key="new", value="v4", pref_type=PreferenceType.CHOICE)  # 0.5, newest
         # 4th item triggers prune to 3
         self.assertEqual(len(engine.list_all_preferences()), 3)
         keys = {p["key"] for p in engine.list_all_preferences()}
@@ -889,11 +899,13 @@ class TestRetrieval(TestCase):
 
     def test_retrieval_with_task_context(self) -> None:
         self.engine.add_preference(
-            key="code_style", value="pep8",
+            key="code_style",
+            value="pep8",
             category="code",
         )
         self.engine.add_preference(
-            key="ui_theme", value="dark",
+            key="ui_theme",
+            value="dark",
             category="ui",
         )
         ctx = RetrievalContext(
@@ -910,36 +922,32 @@ class TestRetrieval(TestCase):
 
     def test_retrieval_applies_preference(self) -> None:
         self.engine.add_preference(key="lang", value="en")
-        items = self.engine.retrieve_for_decision(
-            RetrievalContext(min_confidence=0.0, max_results=10)
-        )
+        items = self.engine.retrieve_for_decision(RetrievalContext(min_confidence=0.0, max_results=10))
         self.assertEqual(len(items), 1)
-        ctx = {}
+        ctx = {}  # type: ignore[var-annotated]
         ctx = self.engine.apply_preference_to_context(items[0].item, ctx)
         self.assertEqual(ctx["_pref_lang"], "en")
 
     def test_retrieval_avoids_pref(self) -> None:
         self.engine.add_preference(
-            key="avoid_tool", value="shell",
+            key="avoid_tool",
+            value="shell",
             action=PreferenceAction.AVOID,
         )
-        items = self.engine.retrieve_for_decision(
-            RetrievalContext(min_confidence=0.0, max_results=10)
-        )
+        items = self.engine.retrieve_for_decision(RetrievalContext(min_confidence=0.0, max_results=10))
         self.assertEqual(len(items), 1)
-        ctx = {}
+        ctx = {}  # type: ignore[var-annotated]
         ctx = self.engine.apply_preference_to_context(items[0].item, ctx)
         self.assertIn("shell", ctx.get("_pref_avoid", []))
 
     def test_retrieval_prompts(self) -> None:
         self.engine.add_preference(
-            key="confirm_delete", value="yes",
+            key="confirm_delete",
+            value="yes",
             action=PreferenceAction.PROMPT,
         )
-        items = self.engine.retrieve_for_decision(
-            RetrievalContext(min_confidence=0.0, max_results=10)
-        )
-        ctx = {}
+        items = self.engine.retrieve_for_decision(RetrievalContext(min_confidence=0.0, max_results=10))
+        ctx = {}  # type: ignore[var-annotated]
         ctx = self.engine.apply_preference_to_context(items[0].item, ctx)
         prompts = ctx.get("_pref_prompt", [])
         self.assertEqual(len(prompts), 1)
@@ -959,7 +967,7 @@ class TestDeterministic(TestCase):
         self.engine.add_preference(key="t", value="a")
         self.engine.edit_preference(key="t", value="b")
         self.engine.edit_preference(key="t", value="c")
-        
+
         result1 = self.engine.inspect_preference("t")
         self.assertEqual(result1["total_versions"], 3)
         self.assertEqual(result1["versions"][0]["value"], "a")
@@ -968,8 +976,7 @@ class TestDeterministic(TestCase):
 
     def test_confidence_deterministic(self) -> None:
         """Reinforcement always produces the same result."""
-        self.engine.add_preference(key="t", value="v",
-                                    pref_type=PreferenceType.CHOICE)
+        self.engine.add_preference(key="t", value="v", pref_type=PreferenceType.CHOICE)
         self.engine.reinforce("t", amount=0.1)
         self.engine.reinforce("t", amount=0.1)
         active = self.engine.list_all_preferences()[0]
@@ -1011,11 +1018,15 @@ class TestRepository(TestCase):
             id="test-id",
             versions=[
                 PreferenceVersion(
-                    id="v1", version=1, type=PreferenceType.EXPLICIT,
+                    id="v1",
+                    version=1,
+                    type=PreferenceType.EXPLICIT,
                     action=PreferenceAction.APPLY,
                     priority=PriorityLevel.HIGH,
-                    key="theme", value="dark",
-                    confidence=1.0, created_at="2025-01-01T00:00:00+00:00",
+                    key="theme",
+                    value="dark",
+                    confidence=1.0,
+                    created_at="2025-01-01T00:00:00+00:00",
                     updated_at="2025-01-01T00:00:00+00:00",
                     decay_policy=ConfidenceDecayPolicy.NONE,
                 )
@@ -1025,8 +1036,8 @@ class TestRepository(TestCase):
         repo.save(item)
         loaded = repo.load("test-id")
         self.assertIsNotNone(loaded)
-        self.assertEqual(loaded.key, "theme")
-        self.assertEqual(loaded.value, "dark")
+        self.assertEqual(loaded.key, "theme")  # type: ignore[union-attr]
+        self.assertEqual(loaded.value, "dark")  # type: ignore[union-attr]
 
     def test_list_items_empty(self) -> None:
         repo = PreferenceRepository(self.tmp / "t.db")
@@ -1038,8 +1049,12 @@ class TestRepository(TestCase):
             id="del-me",
             versions=[
                 PreferenceVersion(
-                    id="v1", version=1, key="x", value="y",
-                    confidence=1.0, created_at=_now(),
+                    id="v1",
+                    version=1,
+                    key="x",
+                    value="y",
+                    confidence=1.0,
+                    created_at=_now(),
                     updated_at=_now(),
                     decay_policy=ConfidenceDecayPolicy.NONE,
                 )
@@ -1057,17 +1072,33 @@ class TestRepository(TestCase):
         repo = PreferenceRepository(self.tmp / "t.db")
         item1 = LearnedItem(
             id="a",
-            versions=[PreferenceVersion(id="v1", version=1, key="a", value="1",
-                                         confidence=1.0, created_at="2025-01-01T00:00:00+00:00",
-                                         updated_at="2025-01-01T00:00:00+00:00",
-                                         decay_policy=ConfidenceDecayPolicy.NONE)],
+            versions=[
+                PreferenceVersion(
+                    id="v1",
+                    version=1,
+                    key="a",
+                    value="1",
+                    confidence=1.0,
+                    created_at="2025-01-01T00:00:00+00:00",
+                    updated_at="2025-01-01T00:00:00+00:00",
+                    decay_policy=ConfidenceDecayPolicy.NONE,
+                )
+            ],
         )
         item2 = LearnedItem(
             id="b",
-            versions=[PreferenceVersion(id="v2", version=1, key="b", value="2",
-                                         confidence=1.0, created_at="2025-01-01T00:00:00+00:00",
-                                         updated_at="2025-01-01T00:00:00+00:00",
-                                         decay_policy=ConfidenceDecayPolicy.NONE)],
+            versions=[
+                PreferenceVersion(
+                    id="v2",
+                    version=1,
+                    key="b",
+                    value="2",
+                    confidence=1.0,
+                    created_at="2025-01-01T00:00:00+00:00",
+                    updated_at="2025-01-01T00:00:00+00:00",
+                    decay_policy=ConfidenceDecayPolicy.NONE,
+                )
+            ],
         )
         repo.save(item1)
         repo.save(item2)
@@ -1082,8 +1113,12 @@ class TestRepository(TestCase):
             id="del-me",
             versions=[
                 PreferenceVersion(
-                    id="v1", version=1, key="x", value="y",
-                    confidence=1.0, created_at="2025-01-01T00:00:00+00:00",
+                    id="v1",
+                    version=1,
+                    key="x",
+                    value="y",
+                    confidence=1.0,
+                    created_at="2025-01-01T00:00:00+00:00",
                     updated_at="2025-01-01T00:00:00+00:00",
                     deleted=True,
                     decay_policy=ConfidenceDecayPolicy.NONE,
@@ -1097,12 +1132,14 @@ class TestRepository(TestCase):
     def test_types_round_trip(self) -> None:
         """All types should serialize/deserialize correctly."""
         v = PreferenceVersion(
-            id="v1", version=1,
+            id="v1",
+            version=1,
             type=PreferenceType.CHOICE,
             action=PreferenceAction.PROMPT,
             priority=PriorityLevel.CRITICAL,
             category="test",
-            key="t", value="v",
+            key="t",
+            value="v",
             confidence=0.75,
             decay_policy=ConfidenceDecayPolicy.EXPONENTIAL,
             tags=["a", "b"],

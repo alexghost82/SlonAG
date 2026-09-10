@@ -34,12 +34,8 @@ def test_memory_get_and_delete_via_injected_store(
 
     # Snapshot legacy memory dir before delete — must remain untouched.
     legacy_dir = repo_root / "memory"
-    before_names = (
-        {p.name for p in legacy_dir.glob("*.json")} if legacy_dir.is_dir() else set()
-    )
-    before_mtimes = {
-        name: (legacy_dir / name).stat().st_mtime_ns for name in before_names
-    }
+    before_names = {p.name for p in legacy_dir.glob("*.json")} if legacy_dir.is_dir() else set()
+    before_mtimes = {name: (legacy_dir / name).stat().st_mtime_ns for name in before_names}
 
     deleted = handler.delete(
         principal=principal,
@@ -51,9 +47,7 @@ def test_memory_get_and_delete_via_injected_store(
     assert len(store.list_entries()) == 1
     assert store.list_entries()[0].id == "mem_2"
 
-    after_names = (
-        {p.name for p in legacy_dir.glob("*.json")} if legacy_dir.is_dir() else set()
-    )
+    after_names = {p.name for p in legacy_dir.glob("*.json")} if legacy_dir.is_dir() else set()
     assert after_names == before_names
     for name in after_names:
         assert (legacy_dir / name).stat().st_mtime_ns == before_mtimes[name]

@@ -43,26 +43,20 @@ async def test_every_wave18_scenario_can_be_measured_separately(scenario: str) -
 @pytest.mark.asyncio
 async def test_single_sample_is_rejected_as_benchmark_statistics() -> None:
     with pytest.raises(ValueError, match="at least two"):
-        await measure_async(
-            "local_text", lambda: _noop(), samples=1, definition="invalid"
-        )
+        await measure_async("local_text", lambda: _noop(), samples=1, definition="invalid")
 
 
 @pytest.mark.asyncio
 async def test_suite_requires_and_separates_all_official_scenarios() -> None:
     operations = {scenario: _noop for scenario in SCENARIOS}
     definitions = {scenario: f"{scenario} boundary" for scenario in SCENARIOS}
-    reports = await measure_suite(
-        operations, definitions=definitions, samples=2, warmup=0
-    )
+    reports = await measure_suite(operations, definitions=definitions, samples=2, warmup=0)
     assert {report.scenario for report in reports} == SCENARIOS
     assert all(report.count == 2 for report in reports)
 
     operations.pop("cloud_text")
     with pytest.raises(ValueError, match="cloud_text"):
-        await measure_suite(
-            operations, definitions=definitions, samples=2, warmup=0
-        )
+        await measure_suite(operations, definitions=definitions, samples=2, warmup=0)
 
 
 async def _noop() -> None:

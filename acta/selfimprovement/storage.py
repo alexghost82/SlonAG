@@ -32,15 +32,9 @@ def load_state(path: str | None = None) -> SelfImprovementState:
     state.approved_count = raw.get("approved_count", 0)
     state.rolled_back_count = raw.get("rolled_back_count", 0)
     state.total_user_feedback_count = raw.get("total_user_feedback_count", 0)
-    state.improvements = {
-        k: SelfImprovementRecord._record_from_dict(v)
-        for k, v in raw.get("improvements", {}).items()
-    }
+    state.improvements = {k: SelfImprovementRecord._record_from_dict(v) for k, v in raw.get("improvements", {}).items()}
     # Restore audit history
-    state.audit_history = [
-        AuditEntry.from_dict(e)
-        for e in raw.get("audit_history", [])
-    ]
+    state.audit_history = [AuditEntry.from_dict(e) for e in raw.get("audit_history", [])]
     return state
 
 
@@ -54,9 +48,7 @@ def save_state(state: SelfImprovementState, path: str | None = None) -> None:
         "approved_count": state.approved_count,
         "rolled_back_count": state.rolled_back_count,
         "total_user_feedback_count": state.total_user_feedback_count,
-        "improvements": {
-            k: v._to_dict() for k, v in state.improvements.items()
-        },
+        "improvements": {k: v._to_dict() for k, v in state.improvements.items()},
         "audit_history": [e.to_dict() for e in state.audit_history],
     }
     target.write_text(

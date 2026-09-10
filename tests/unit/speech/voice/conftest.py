@@ -15,22 +15,29 @@ class _MockSounddevice:
     class RawOutputStream:
         def __init__(self, *args, **kwargs):
             pass
+
         def start(self):
             pass
+
         def write(self, data):
             pass
+
         def stop(self):
             pass
+
         def close(self):
             pass
 
     class InputStream:
         def __init__(self, *args, **kwargs):
             pass
+
         def start(self):
             pass
+
         def stop(self):
             pass
+
         def close(self):
             pass
 
@@ -56,4 +63,5 @@ def clean_registry():
 def fake_ui():
     """Provide a mock UI for VoiceBridge tests."""
     from tests.unit.speech.voice.fakes import FakeUI
+
     return FakeUI()

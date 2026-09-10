@@ -425,7 +425,7 @@ class BrowserService:
             return f"Tab close error: {exc}"
         remaining = len(self._context.pages)  # type: ignore[union-attr]
         if (remaining > 0 and self._page
-                and self._page.is_closed()):  # type: ignore[union-attr]
+                and self._page.is_closed()):
             self._page = self._context.pages[0]  # type: ignore[union-attr]
         return f"Tab closed, {remaining} remaining"
 
@@ -650,15 +650,15 @@ class BrowserService:
     async def _do_get_cookies(
             self
     ) -> list[dict[str, object]]:
-        if self._context is None:  # type: ignore[union-attr]
+        if self._context is None:
             return []
-        return await self._context.cookies()  # type: ignore[union-attr]
+        return await self._context.cookies()
 
     async def _do_set_cookie(self, name: str, value: str,
                              domain: str | None = None,
                              path: str = "/",
                              **kwargs: Any) -> str:
-        if self._context is None:  # type: ignore[union-attr]
+        if self._context is None:
             return "No context"
         cookie: dict[str, Any] = {
             "name": name,
@@ -668,19 +668,19 @@ class BrowserService:
         if domain:
             cookie["domain"] = domain
         cookie.update(kwargs)
-        await self._context.add_cookies([cookie])  # type: ignore[union-attr]
+        await self._context.add_cookies([cookie])
         return f"Cookie set: {name}"
 
     async def _do_clear_cookies(self) -> str:
-        if self._context is None:  # type: ignore[union-attr]
+        if self._context is None:
             return "No context"
-        await self._context.clear_cookies()  # type: ignore[union-attr]
+        await self._context.clear_cookies()
         return "Cookies cleared"
 
     async def _do_enable_downloads(
             self, download_dir: str
     ) -> str:
-        if self._context is None:  # type: ignore[union-attr]
+        if self._context is None:
             return "No context"
         await self._context.set_extra_http_headers(
             {"Accept-Language": "en-US,en;q=0.9"}

@@ -8,9 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-def read_gateway_status(
-    path: str | Path, *, stale_after_seconds: float = 5.0
-) -> Mapping[str, object]:
+def read_gateway_status(path: str | Path, *, stale_after_seconds: float = 5.0) -> Mapping[str, object]:
     """Read gateway status, distinguishing not-configured vs disabled vs unavailable.
 
     States:
@@ -30,9 +28,7 @@ def read_gateway_status(
         connection = sqlite3.connect(uri, uri=True)
         connection.row_factory = sqlite3.Row
         try:
-            row = connection.execute(
-                "SELECT * FROM gateway_runtime_status WHERE singleton=1"
-            ).fetchone()
+            row = connection.execute("SELECT * FROM gateway_runtime_status WHERE singleton=1").fetchone()
         finally:
             connection.close()
     except (sqlite3.Error, OSError):
@@ -40,8 +36,10 @@ def read_gateway_status(
     if row is None:
         return {"state": "stopped"}
     result = dict(row)
-    if (str(result["state"]) in {"starting", "running", "degraded"}
-            and time.time() - float(result["heartbeat_at"]) > stale_after_seconds):
+    if (
+        str(result["state"]) in {"starting", "running", "degraded"}
+        and time.time() - float(result["heartbeat_at"]) > stale_after_seconds
+    ):
         result["state"] = "unavailable"
     return result
 

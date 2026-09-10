@@ -16,7 +16,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from acta.mcp.client import McpCallResult, McpClient
-from acta.mcp.types import McpServerConfig, McpToolSpec
+from acta.mcp.types import (
+    McpPrompt,
+    McpResource,
+    McpResourceTemplate,
+    McpServerConfig,
+    McpToolSpec,
+)
 from acta.safety.policy import SafetyPolicy
 from acta.safety.registry import register_mcp_tool
 from acta.safety.types import DecisionKind, RiskLevel, UntrustedSource
@@ -94,9 +100,9 @@ class McpIntegration:
         if self.tool_executor is not None:
             return self.tool_executor.registry
         # Fallback: create a standalone registry
-        if not hasattr(self, '_fallback_registry'):
-            self._fallback_registry = ToolRegistry()  # type: ignore[attr-defined]
-        return self._fallback_registry  # type: ignore[attr-defined]
+        if not hasattr(self, "_fallback_registry"):
+            self._fallback_registry = ToolRegistry()
+        return self._fallback_registry
 
     async def start(self) -> None:
         """Initialize the MCP client and discover tools."""
@@ -118,9 +124,7 @@ class McpIntegration:
         for spec in specs:
             existing = self._registry.list()
             if not any(s.name == spec.name for s in existing):
-                self._registry.register(
-                    _build_mcp_tool_spec(spec, self)
-                )
+                self._registry.register(_build_mcp_tool_spec(spec, self))
                 # Also register in safety policy's static _REGISTRY
                 register_mcp_tool(
                     spec.name,
@@ -168,7 +172,7 @@ class McpIntegration:
                 ok=False,
                 code="approval_required",
                 message=f"Требуется согласование для инструмента '{qualified_name}'. "
-                        f"Уровень риска: {decision.risk.name}",
+                f"Уровень риска: {decision.risk.name}",
                 data={
                     "approval_required": True,
                     "tool_name": qualified_name,
@@ -256,7 +260,6 @@ class McpIntegration:
         """Get the registered MCP tools."""
         return self.client.tools if self.client else {}
 
-
     @property
     def resources(self) -> list[McpResource]:
         """Get discovered MCP resources."""
@@ -279,7 +282,7 @@ class McpIntegration:
 
 def _build_mcp_tool_spec(mcp_spec: McpToolSpec, integration: McpIntegration) -> Any:
     """Build a ToolSpec for the MCP tool."""
-    from acta.tools.contracts import ToolSpec
+    from acta.tools.contracts import SideEffectClass, ToolSpec
 
     async def handler(**kwargs: Any) -> ToolResult:
         return await integration.invoke_tool(
@@ -292,19 +295,22 @@ def _build_mcp_tool_spec(mcp_spec: McpToolSpec, integration: McpIntegration) -> 
         name=mcp_spec.name,
         description=_untrusted_mcp_description(mcp_spec.description),
         input_schema=mcp_spec.input_schema,
-        output_schema={"type": "object", "properties": {
-            "ok": {"type": "boolean"},
-            "content": {"type": ["string", "null"]},
-            "error": {"type": ["string", "null"]},
-        }},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "ok": {"type": "boolean"},
+                "content": {"type": ["string", "null"]},
+                "error": {"type": ["string", "null"]},
+            },
+        },
         handler=handler,
         risk=RiskLevel.READ,
         timeout_seconds=integration.config.tool_timeout_seconds,
         side_effects=True,
-        side_effect_class="reversible",
+        side_effect_class=SideEffectClass.REVERSIBLE,
         cancellable=True,
-        capabilities={"mcp", "remote"},
-        scopes={integration.config.name},
+        capabilities=frozenset({"mcp", "remote"}),
+        scopes=frozenset({integration.config.name}),
     )
 
 

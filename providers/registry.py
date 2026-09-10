@@ -45,6 +45,7 @@ def clear() -> None:
     """Remove all registrations. Intended for tests."""
     _FACTORIES.clear()
 
+
 __all__ = [
     "ProviderFactory",
     "clear",
@@ -52,4 +53,3 @@ __all__ = [
     "register",
     "registered_ids",
 ]
-

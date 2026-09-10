@@ -34,6 +34,7 @@ from acta.preference_learning.types import (
 @dataclass
 class PreferenceMatch:
     """A preference that matched a retrieval context, with its evidence."""
+
     item: LearnedItem
     version: PreferenceVersion
     score: float
@@ -43,7 +44,8 @@ class PreferenceMatch:
 @dataclass
 class LearningDecision:
     """What the engine decided to do with an observed interaction."""
-    action: str                    # "created", "updated", "reinforced", "contradicted", "ignored"
+
+    action: str  # "created", "updated", "reinforced", "contradicted", "ignored"
     item_id: str = ""
     reason: str = ""
     old_confidence: float = 0.0
@@ -53,8 +55,8 @@ class LearningDecision:
 class PreferenceEngine:
     """Main API for preference learning and retrieval."""
 
-    DECAY_RATE_LINEAR = 0.05          # 5% per day
-    DECAY_FACTOR_EXPONENTIAL = 0.95   # 5% per week
+    DECAY_RATE_LINEAR = 0.05  # 5% per day
+    DECAY_FACTOR_EXPONENTIAL = 0.95  # 5% per week
 
     def __init__(self, db_path: Path, *, max_items: int = 1000) -> None:
         self.repo = PreferenceRepository(db_path)
@@ -279,9 +281,11 @@ class PreferenceEngine:
 
         if active.reinforcement_count >= active.max_reinforcements:
             return LearningDecision(
-                action="ignored", item_id=item_id,
+                action="ignored",
+                item_id=item_id,
                 reason="Max reinforcements reached",
-                old_confidence=old_conf, new_confidence=old_conf,
+                old_confidence=old_conf,
+                new_confidence=old_conf,
             )
 
         new_conf = min(1.0, old_conf + amount)
@@ -315,8 +319,11 @@ class PreferenceEngine:
         item.versions.append(new_version)
         self.repo.save(item)
         return LearningDecision(
-            action="reinforced", item_id=item_id, reason="Reinforced preference",
-            old_confidence=old_conf, new_confidence=new_conf,
+            action="reinforced",
+            item_id=item_id,
+            reason="Reinforced preference",
+            old_confidence=old_conf,
+            new_confidence=new_conf,
         )
 
     def decay_confidence(self) -> int:
@@ -346,7 +353,7 @@ class PreferenceEngine:
             elif active.decay_policy == ConfidenceDecayPolicy.EXPONENTIAL:
                 days = max(0, (now - last_dt).days)
                 weeks = days / 7.0
-                loss = 1.0 - (self.DECAY_FACTOR_EXPONENTIAL ** weeks)
+                loss = 1.0 - (self.DECAY_FACTOR_EXPONENTIAL**weeks)
             else:
                 continue
 
@@ -441,9 +448,11 @@ class PreferenceEngine:
         item.versions.append(new_version)
         self.repo.save(item)
         return LearningDecision(
-            action="contradicted", item_id=item_id,
+            action="contradicted",
+            item_id=item_id,
             reason="Contradiction registered",
-            old_confidence=old_conf, new_confidence=new_conf,
+            old_confidence=old_conf,
+            new_confidence=new_conf,
         )
 
     # ===================================================================
@@ -536,9 +545,7 @@ class PreferenceEngine:
             results.append(self._mask_sensitive(d))
         return results
 
-    def search_preferences(
-        self, query: str, *, top_k: int = 10
-    ) -> list[dict]:
+    def search_preferences(self, query: str, *, top_k: int = 10) -> list[dict]:
         """Search preferences by key, value, description, category, or tags."""
         q = query.lower()
         all_prefs = self.list_all_preferences()
@@ -578,9 +585,14 @@ class PreferenceEngine:
                 text=f"Confidence {active.confidence:.2f} from {active.type.value} preference",
                 context=f"retrieved for: {context.current_task[:80]}",
             )
-            matches.append(PreferenceMatch(
-                item=item, version=active, score=score, evidence=evidence,
-            ))
+            matches.append(
+                PreferenceMatch(
+                    item=item,
+                    version=active,
+                    score=score,
+                    evidence=evidence,
+                )
+            )
         return matches
 
     def apply_preference_to_context(self, item: LearnedItem, context: dict) -> dict:
@@ -605,26 +617,27 @@ class PreferenceEngine:
 
         return context
 
-
     # ===================================================================
     # Secret filtering & bounded storage
     # ===================================================================
 
     def _enforce_bounds(self) -> int:
         """Prune lowest-confidence non-explicit preferences if over limit.
-        
+
         Returns the number of items pruned.
         """
         items = self.repo.list_items(include_deleted=True)
-        active = [i for i in items if i.active and not i.active.deleted]
+        active = [i for i in items if i.active is not None and not i.active.deleted]
         if len(active) <= self.max_items:
             return 0
 
         # Sort by confidence ascending, prefer keeping explicit preferences
-        active.sort(key=lambda i: (
-            i.active.confidence,
-            0 if i.active.type == PreferenceType.EXPLICIT else 1,
-        ))
+        active.sort(
+            key=lambda i: (
+                i.require_active.confidence,
+                0 if i.require_active.type == PreferenceType.EXPLICIT else 1,
+            )
+        )
 
         prune_count = len(active) - self.max_items
         pruned = []
@@ -637,6 +650,7 @@ class PreferenceEngine:
     def _mask_sensitive(self, pref: dict) -> dict:
         """Mask value if the key looks like a secret."""
         from acta.preference_learning.types import _is_sensitive_key, mask_value
+
         if _is_sensitive_key(pref.get("key", "")):
             val = pref.get("value", "")
             if val:
@@ -646,6 +660,7 @@ class PreferenceEngine:
 
     def _mask_sensitive_version(self, v: dict) -> dict:
         from acta.preference_learning.types import _is_sensitive_key, mask_value
+
         if _is_sensitive_key(v.get("key", "")):
             val = v.get("value", "")
             if val:
@@ -659,13 +674,13 @@ class PreferenceEngine:
 
     def _find_existing(self, key: str) -> str | None:
         """Find an existing item by key, or None.
-        
+
         Searches ALL items (including fully forgotten ones) so that
         operations like inspect_preference and edit can still find them.
         """
         items = self.repo.list_items(include_deleted=True)
         for item in items:
-            if item.key == key and not item.active.deleted:
+            if item.key == key and item.active is not None and not item.active.deleted:
                 return item.id
         # Also find forgotten/fully-deleted items by key alone
         for item in items:
@@ -677,6 +692,7 @@ class PreferenceEngine:
 # ---------------------------------------------------------------------------
 # UUID helper (avoids circular imports)
 # ---------------------------------------------------------------------------
+
 
 def uuid4_hex() -> str:
     return _uuid.uuid4().hex

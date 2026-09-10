@@ -9,28 +9,26 @@ Covers:
 - Relevance edge cases
 - Anti-spam edge cases
 """
+
 from __future__ import annotations
 
 import time
-
-import pytest
+from pathlib import Path
 
 from acta.proactive import (
-    CooldownManager,
+    SAFE_AUTO_ACTIONS,
     EventDedup,
     EventSource,
-    ProactiveAgent,
     ProactiveAction,
+    ProactiveAgent,
     ProactiveDecision,
     ProactiveEvent,
     ProactivePersistence,
     RelevanceFilter,
     RiskLevel,
-    SAFE_AUTO_ACTIONS,
 )
-from acta.proactive.errors import CODE_OK, proactive_message
-from acta.proactive.errors import SpamDetectedError, InvalidEventError, ProactiveError
-from acta.proactive.types import CooldownEntry, ProactiveDecisionKind
+from acta.proactive.errors import CODE_OK, InvalidEventError, SpamDetectedError, proactive_message
+from acta.proactive.types import CooldownEntry
 
 
 class TestProactiveDecision:
@@ -168,25 +166,37 @@ class TestAgentSecurity:
         )
 
         dangerous_actions = [
-            "delete_all_files", "shutdown", "format_disk",
-            "disable_firewall", "modify_system_config", "reboot", "poweroff",
+            "delete_all_files",
+            "shutdown",
+            "format_disk",
+            "disable_firewall",
+            "modify_system_config",
+            "reboot",
+            "poweroff",
         ]
         for source in EventSource:
             for event_type in [
-                "execute_script", "delete_file", "shutdown", "format_disk",
-                "disable_firewall", "modify_system_config",
+                "execute_script",
+                "delete_file",
+                "shutdown",
+                "format_disk",
+                "disable_firewall",
+                "modify_system_config",
             ]:
                 for danger_action in dangerous_actions:
                     try:
-                        decision = agent.ingest(ProactiveEvent(
-                            source=source,
-                            event_type=event_type,
-                            payload={"action_name": danger_action},
-                        ))
+                        decision = agent.ingest(
+                            ProactiveEvent(
+                                source=source,
+                                event_type=event_type,
+                                payload={"action_name": danger_action},
+                            )
+                        )
                         # Should never be auto-EXECUTE for a known dangerous action name
                         if decision.action == ProactiveAction.EXECUTE:
-                            assert decision.details.get("action_name") not in dangerous_actions, \
+                            assert decision.details.get("action_name") not in dangerous_actions, (
                                 f"Unsafe auto-execution for {source}/{event_type}/{danger_action}"
+                            )
                     except Exception:
                         pass  # Spam/cooldown errors are fine
 
@@ -207,6 +217,7 @@ class TestI18n:
     def test_russian_default(self) -> None:
         """In Russian locale, messages should be Russian."""
         from i18n import set_locale
+
         set_locale("ru")
         msg = proactive_message(CODE_OK)
         assert isinstance(msg, str)

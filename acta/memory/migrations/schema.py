@@ -72,28 +72,14 @@ def apply_schema(connection: sqlite3.Connection) -> None:
     connection.execute(_RECORDS_SQL)
     connection.execute(_EMBEDDINGS_SQL)
     connection.execute(_META_SQL)
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_records_type ON memory_records(type)"
-    )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_records_key ON memory_records(key)"
-    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_memory_records_type ON memory_records(type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_memory_records_key ON memory_records(key)")
     # Scoped indexes
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_memory_records_workspace ON memory_records(workspace)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_memory_records_user ON memory_records(user_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_memory_records_session ON memory_records(session_id)")
     connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_records_workspace "
-        "ON memory_records(workspace)"
-    )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_records_user "
-        "ON memory_records(user_id)"
-    )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_records_session "
-        "ON memory_records(session_id)"
-    )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_records_dedup "
-        "ON memory_records(dedup_hash) WHERE dedup_hash IS NOT NULL"
+        "CREATE INDEX IF NOT EXISTS idx_memory_records_dedup ON memory_records(dedup_hash) WHERE dedup_hash IS NOT NULL"
     )
     row = connection.execute("SELECT version FROM memory_schema LIMIT 1").fetchone()
     if row is None:
@@ -114,9 +100,7 @@ def apply_schema(connection: sqlite3.Connection) -> None:
                 connection.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # column already added
-        connection.execute(
-            "UPDATE memory_schema SET version = ?", (3,)
-        )
+        connection.execute("UPDATE memory_schema SET version = ?", (3,))
         connection.commit()
     if current_version < 4:
         for stmt in _V4_ADD:
@@ -124,9 +108,7 @@ def apply_schema(connection: sqlite3.Connection) -> None:
                 connection.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # column already added
-        connection.execute(
-            "UPDATE memory_schema SET version = ?", (4,)
-        )
+        connection.execute("UPDATE memory_schema SET version = ?", (4,))
         connection.commit()
 
 
@@ -137,9 +119,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             connection.execute(stmt)
         except sqlite3.OperationalError:
             pass  # column already added (partial migration, retry-safe)
-    connection.execute(
-        "UPDATE memory_schema SET version = ?", (2,)
-    )
+    connection.execute("UPDATE memory_schema SET version = ?", (2,))
     connection.commit()
 
 

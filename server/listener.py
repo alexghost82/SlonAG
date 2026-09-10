@@ -150,15 +150,10 @@ class DesktopControlListener:
             raise TlsConfigError("Pass both tls_certfile and tls_keyfile, or neither")
         if self.require_tls and (cert is None or key is None):
             raise TlsConfigError(
-                "require_tls=True needs tls_certfile and tls_keyfile "
-                "(generate via server.tls.ensure_tls_material)"
+                "require_tls=True needs tls_certfile and tls_keyfile (generate via server.tls.ensure_tls_material)"
             )
-        if not ipaddress.ip_address(self.bind_host).is_loopback and (
-            cert is None or key is None
-        ):
-            raise TlsConfigError(
-                "LAN control requires TLS certificate and key for pinned iOS transport."
-            )
+        if not ipaddress.ip_address(self.bind_host).is_loopback and (cert is None or key is None):
+            raise TlsConfigError("LAN control requires TLS certificate and key for pinned iOS transport.")
         self.tls_certfile = cert
         self.tls_keyfile = key
         self.tls_certificate_fingerprint: str | None = None
@@ -179,20 +174,12 @@ class DesktopControlListener:
             return not self._pairing.is_active(device_id)
 
         self._revoked = revoked
-        self._tokens = (
-            tokens
-            if tokens is not None
-            else TokenService(signing_key=key_material, is_revoked=_is_revoked)
-        )
+        self._tokens = tokens if tokens is not None else TokenService(signing_key=key_material, is_revoked=_is_revoked)
         self._idempotency = IdempotencyStore()
         self._tasks = TaskStore()
         self._approvals = ApprovalStore()
         self._models = ModelStore()
-        self._memory = (
-            RuntimeMemoryStore(memory_backend)
-            if memory_backend is not None
-            else MemoryStore()
-        )
+        self._memory = RuntimeMemoryStore(memory_backend) if memory_backend is not None else MemoryStore()
         self._chat = ChatHandler(idempotency=self._idempotency)
         self._task_handler = TasksHandler(
             store=self._tasks,
@@ -239,14 +226,18 @@ class DesktopControlListener:
         self._thread: threading.Thread | None = None
         self._lock = threading.RLock()
 
+    def _require_gateway(self) -> Any:
+        gateway = self._gateway
+        if gateway is None:
+            raise RuntimeError("gateway is not configured")
+        return gateway
+
     def _publish_public_event(self, event: Mapping[str, object]) -> int:
         public = strip_secret_fields(dict(event))
         sequence = self._events.publish(public)
         if self._gateway is not None:
             try:
-                self._gateway.publish_control_event(
-                    public, workspace_id=self._gateway_workspace_id
-                )
+                self._require_gateway().publish_control_event(public, workspace_id=self._gateway_workspace_id)
             except Exception:
                 pass
         return sequence
@@ -307,9 +298,7 @@ class DesktopControlListener:
                     mgr = BonjourManager()
                     properties = {"tls": "1" if self.tls_enabled else "0"}
                     if self.tls_certificate_fingerprint is not None:
-                        properties["fingerprint_sha256"] = (
-                            self.tls_certificate_fingerprint
-                        )
+                        properties["fingerprint_sha256"] = self.tls_certificate_fingerprint
                     mgr.start(str(host), int(port), properties=properties)
                     self._bonjour = mgr
                 except Exception:
@@ -396,11 +385,15 @@ class DesktopControlListener:
 
             if verb == "GET" and route == f"{API_VERSION_PREFIX}/status":
                 if self._control_plane is not None:
-                    return RouteResponse(
-                        status_code=200,
-                        body=strip_secret_fields(self._control_plane.status_snapshot()),
-                    )
-                return get_status(principal=principal)
+                    body = strip_secret_fields(self._control_plane.status_snapshot())
+                    body["online"] = self.listening
+                    return RouteResponse(status_code=200, body=body)
+                from observability.status import get_runtime_status as _runtime_status
+
+                return get_status(
+                    principal=principal,
+                    provider=lambda: _runtime_status(listening=self.listening),
+                )
             if verb == "POST" and route == f"{API_VERSION_PREFIX}/pairing/revoke":
                 return self._pairing_revoke(principal, body)
             if verb == "POST" and route == f"{API_VERSION_PREFIX}/runtime/control":
@@ -420,11 +413,7 @@ class DesktopControlListener:
                     return self._runtime_task_create(principal=principal, body=body)
                 return self._task_handler.create(principal=principal, body=body)
             cancel_prefix = f"{API_VERSION_PREFIX}/tasks/"
-            if (
-                verb == "POST"
-                and route.startswith(cancel_prefix)
-                and route.endswith("/cancel")
-            ):
+            if verb == "POST" and route.startswith(cancel_prefix) and route.endswith("/cancel"):
                 task_id = unquote(route[len(cancel_prefix) : -len("/cancel")])
                 if self._control_plane is not None:
                     return self._runtime_task_cancel(
@@ -440,14 +429,8 @@ class DesktopControlListener:
             if verb == "GET" and route == f"{API_VERSION_PREFIX}/approvals":
                 return self._approval_handler.list_approvals(principal=principal)
             decision_prefix = f"{API_VERSION_PREFIX}/approvals/"
-            if (
-                verb == "POST"
-                and route.startswith(decision_prefix)
-                and route.endswith("/decision")
-            ):
-                approval_id = unquote(
-                    route[len(decision_prefix) : -len("/decision")]
-                )
+            if verb == "POST" and route.startswith(decision_prefix) and route.endswith("/decision"):
+                approval_id = unquote(route[len(decision_prefix) : -len("/decision")])
                 if self._control_plane is not None:
                     return self._runtime_approval_decide(
                         principal=principal,
@@ -507,8 +490,9 @@ class DesktopControlListener:
                 required = ("code", "device_name", "public_key")
                 if not all(isinstance(body.get(key), str) for key in required):
                     return _error(400, CODE_INVALID_REQUEST, "Invalid pairing payload.")
-                device_id = self._gateway.auth.complete_pairing(
-                    code=body["code"], device_name=body["device_name"],
+                device_id = self._require_gateway().auth.complete_pairing(
+                    code=body["code"],
+                    device_name=body["device_name"],
                     public_key=body["public_key"],
                     workspace_id=self._gateway_workspace_id,
                 )
@@ -517,16 +501,21 @@ class DesktopControlListener:
                 device_id = body.get("device_id")
                 if not isinstance(device_id, str):
                     return _error(400, CODE_INVALID_REQUEST, "device_id is required.")
-                challenge = self._gateway.auth.challenge(device_id)
-                return RouteResponse(200, {
-                    "device_id": challenge.device_id, "nonce": challenge.nonce,
-                    "expires_at": challenge.expires_at,
-                })
+                challenge = self._require_gateway().auth.challenge(device_id)
+                return RouteResponse(
+                    200,
+                    {
+                        "device_id": challenge.device_id,
+                        "nonce": challenge.nonce,
+                        "expires_at": challenge.expires_at,
+                    },
+                )
             if verb == "POST" and route == f"{prefix}/auth/proof":
                 if not all(isinstance(body.get(key), str) for key in ("device_id", "nonce", "signature")):
                     return _error(400, CODE_INVALID_REQUEST, "Invalid device proof.")
-                tokens = self._gateway.auth.exchange_proof(
-                    device_id=body["device_id"], nonce=body["nonce"],
+                tokens = self._require_gateway().auth.exchange_proof(
+                    device_id=body["device_id"],
+                    nonce=body["nonce"],
                     signature=body["signature"],
                 )
                 return RouteResponse(200, tokens.to_public_dict())
@@ -534,22 +523,27 @@ class DesktopControlListener:
                 token = body.get("refresh_token")
                 if not isinstance(token, str):
                     return _error(400, CODE_INVALID_REQUEST, "refresh_token is required.")
-                return RouteResponse(200, self._gateway.auth.refresh(token).to_public_dict())
-            principal = self._gateway.auth.authenticate(headers)
-            workspace = self._gateway.auth.workspace_for(principal.device_id)
+                return RouteResponse(200, self._require_gateway().auth.refresh(token).to_public_dict())
+            principal = self._require_gateway().auth.authenticate(headers)
+            workspace = self._require_gateway().auth.workspace_for(principal.device_id)
             if verb == "GET" and route == f"{prefix}/devices":
-                return RouteResponse(200, {"devices": [
-                    {key: value for key, value in item.items() if key != "public_key"}
-                    for item in self._gateway.auth.trusted_devices(workspace_id=workspace)
-                ]})
+                return RouteResponse(
+                    200,
+                    {
+                        "devices": [
+                            {key: value for key, value in item.items() if key != "public_key"}
+                            for item in self._require_gateway().auth.trusted_devices(workspace_id=workspace)
+                        ]
+                    },
+                )
             if verb == "POST" and route == f"{prefix}/devices/revoke":
                 target = body.get("device_id")
                 if not isinstance(target, str):
                     return _error(400, CODE_INVALID_REQUEST, "device_id is required.")
-                record = self._gateway.store.device(target)
+                record = self._require_gateway().store.device(target)
                 if record is None or record["workspace_id"] != workspace:
                     return _error(404, CODE_NOT_FOUND)
-                return RouteResponse(200, {"revoked": self._gateway.auth.revoke(target)})
+                return RouteResponse(200, {"revoked": self._require_gateway().auth.revoke(target)})
         except Exception as exc:
             return _error(401, CODE_UNAUTHORIZED, f"Gateway request rejected ({type(exc).__name__}).")
         return _error(404, CODE_NOT_FOUND, "No Gateway handler for this route.")
@@ -816,9 +810,7 @@ class DesktopControlListener:
         prompt = response.body.get("prompt")
         if isinstance(task_id, str) and isinstance(prompt, str):
             approval_id = f"remote-task:{task_id}"
-            if not any(
-                item.id == approval_id for item in self._approvals.list_approvals()
-            ):
+            if not any(item.id == approval_id for item in self._approvals.list_approvals()):
                 self._approvals.seed(
                     ApprovalInfo(
                         id=approval_id,
@@ -865,11 +857,7 @@ class DesktopControlListener:
             raw_tasks = response.body.get("tasks")
             tasks = raw_tasks if isinstance(raw_tasks, list) else []
             task = next(
-                (
-                    item
-                    for item in tasks
-                    if isinstance(item, Mapping) and item.get("id") == task_id
-                ),
+                (item for item in tasks if isinstance(item, Mapping) and item.get("id") == task_id),
                 None,
             )
             return RouteResponse(status_code=200, body=dict(task) if task else {})
@@ -893,9 +881,10 @@ class DesktopControlListener:
         decision = str(response.body.get("decision", "")).lower()
         if self._gateway is not None:
             try:
-                workspace = self._gateway.auth.workspace_for(principal.device_id)
-                durable = self._gateway.approvals.decide(
-                    approval_id=approval_id, workspace_id=workspace,
+                workspace = self._require_gateway().auth.workspace_for(principal.device_id)
+                durable = self._require_gateway().approvals.decide(
+                    approval_id=approval_id,
+                    workspace_id=workspace,
                     allow=decision in {"approve", "allow"},
                     device_id=principal.device_id,
                 )
@@ -933,21 +922,19 @@ class DesktopControlListener:
     ) -> bool:
         durable_request = None
         if self._gateway is not None:
-            durable_request = self._gateway.approvals.request(
-                workspace_id=self._gateway_workspace_id, tool_name=tool_name,
-                reason=reason, timeout=120.0,
+            durable_request = self._require_gateway().approvals.request(
+                workspace_id=self._gateway_workspace_id,
+                tool_name=tool_name,
+                reason=reason,
+                timeout=120.0,
                 tool_call_id=tool_call_id,
             )
         approval_id = (
-            durable_request.approval_id
-            if durable_request is not None
-            else f"tool:{secrets.token_urlsafe(12)}"
+            durable_request.approval_id if durable_request is not None else f"tool:{secrets.token_urlsafe(12)}"
         )
         event = threading.Event()
         result: list[bool] = []
-        safe_details = strip_secret_fields(
-            {"reason": reason, "arguments": dict(arguments)}
-        )
+        safe_details = strip_secret_fields({"reason": reason, "arguments": dict(arguments)})
         if durable_request is None:
             self._pending_tool_approvals[approval_id] = (event, result)
         self._approvals.seed(
@@ -1047,12 +1034,7 @@ class DesktopControlListener:
         idempotency_key = body.get("idempotency_key")
         if not isinstance(directory_raw, str) or not directory_raw:
             return _error(400, CODE_MISSING_FIELD, "Field 'directory' is required.")
-        if (
-            not isinstance(filename, str)
-            or not filename
-            or Path(filename).name != filename
-            or filename in {".", ".."}
-        ):
+        if not isinstance(filename, str) or not filename or Path(filename).name != filename or filename in {".", ".."}:
             return _error(400, CODE_INVALID_REQUEST, "Invalid upload filename.")
         if not isinstance(encoded, str) or not encoded:
             return _error(400, CODE_MISSING_FIELD, "Field 'content_base64' is required.")
@@ -1229,14 +1211,10 @@ def _make_handler(
                 return
             key = self.headers.get("Sec-WebSocket-Key", "").strip()
             if not key:
-                self._write_response(
-                    _error(400, CODE_INVALID_REQUEST, "Missing WebSocket key.")
-                )
+                self._write_response(_error(400, CODE_INVALID_REQUEST, "Missing WebSocket key."))
                 return
             accept = base64.b64encode(
-                hashlib.sha1(
-                    (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
-                ).digest()
+                hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
             ).decode("ascii")
             self.send_response(101, "Switching Protocols")
             self.send_header("Upgrade", "websocket")
@@ -1250,9 +1228,7 @@ def _make_handler(
                     self._write_websocket_json(
                         {
                             "type": "status",
-                            "payload": strip_secret_fields(
-                                listener._control_plane.status_snapshot()
-                            ),
+                            "payload": strip_secret_fields(listener._control_plane.status_snapshot()),
                         }
                     )
                 while listener.listening and not subscription.closed:
@@ -1273,7 +1249,7 @@ def _make_handler(
 
             try:
                 auth_headers = self._headers_map()
-                principal = listener._gateway.auth.authenticate_connection(auth_headers)
+                principal = listener._require_gateway().auth.authenticate_connection(auth_headers)
             except Exception:
                 self._write_response(_error(401, CODE_UNAUTHORIZED))
                 return
@@ -1291,21 +1267,18 @@ def _make_handler(
                 self._write_response(_error(400, CODE_INVALID_REQUEST, "Invalid replay cursor."))
                 return
             accept = base64.b64encode(
-                hashlib.sha1(
-                    (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
-                ).digest()
+                hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
             ).decode("ascii")
             try:
-                connection = asyncio.run(listener._gateway.websocket.connect(
-                    device_id=principal.device_id, after_sequence=cursor,
-                    validate_auth=lambda: listener._gateway.auth.validate_connection(
-                        auth_headers
-                    ),
-                ))
-            except GatewayProtocolError:
-                self._write_response(
-                    _error(409, CODE_INVALID_REQUEST, "Replay rejected.")
+                connection = asyncio.run(
+                    listener._require_gateway().websocket.connect(
+                        device_id=principal.device_id,
+                        after_sequence=cursor,
+                        validate_auth=lambda: listener._require_gateway().auth.validate_connection(auth_headers),
+                    )
                 )
+            except GatewayProtocolError:
+                self._write_response(_error(409, CODE_INVALID_REQUEST, "Replay rejected."))
                 return
             self.send_response(101, "Switching Protocols")
             self.send_header("Upgrade", "websocket")
@@ -1322,9 +1295,9 @@ def _make_handler(
                             **dict(item.envelope.payload),
                             "gateway_sequence": item.sequence,
                         }
-                        self.connection.sendall(encode_server_frame(
-                            json.dumps(value, ensure_ascii=False).encode("utf-8")
-                        ))
+                        self.connection.sendall(
+                            encode_server_frame(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+                        )
                     readable, _, _ = select.select([self.connection], [], [], 0.1)
                     if not readable:
                         continue
@@ -1365,16 +1338,12 @@ def _make_handler(
 
             principal = listener._optional_principal(self._headers_map())
             if principal is None or principal.revoked:
-                self._write_response(
-                    _error(401, CODE_UNAUTHORIZED)
-                )
+                self._write_response(_error(401, CODE_UNAUTHORIZED))
                 return
             try:
                 source = LiveVideoSource(fps=2.0)
             except Exception as exc:  # noqa: BLE001
-                self._write_response(
-                    _error(503, CODE_NOT_FOUND, f"live video unavailable: {exc}")
-                )
+                self._write_response(_error(503, CODE_NOT_FOUND, f"live video unavailable: {exc}"))
                 return
             self.send_response(200)
             self.send_header(
@@ -1423,43 +1392,50 @@ def _make_handler(
             from gateway.artifacts import DEFAULT_MAX_BYTES
 
             try:
-                principal = listener._gateway.auth.authenticate(self._headers_map())
-                workspace = listener._gateway.auth.workspace_for(principal.device_id)
+                principal = listener._require_gateway().auth.authenticate(self._headers_map())
+                workspace = listener._require_gateway().auth.workspace_for(principal.device_id)
                 length = int(self.headers.get("Content-Length", "0"))
                 if length < 0 or length > DEFAULT_MAX_BYTES:
                     self._write_response(_error(413, CODE_INVALID_REQUEST, "Artifact is too large."))
                     return
                 ticket = self.headers.get("X-Slon-Transfer-Ticket", "")
                 mime = self.headers.get("Content-Type", "application/octet-stream")
-                result = listener._gateway.artifacts.upload(
-                    ticket=ticket, device_id=principal.device_id,
-                    workspace_id=workspace, mime_type=mime,
+                result = listener._require_gateway().artifacts.upload(
+                    ticket=ticket,
+                    device_id=principal.device_id,
+                    workspace_id=workspace,
+                    mime_type=mime,
                     data=self.rfile.read(length),
                 )
                 self._write_response(RouteResponse(201, result))
             except Exception as exc:
-                self._write_response(_error(
-                    403, CODE_UNAUTHORIZED,
-                    f"Artifact upload rejected ({type(exc).__name__}).",
-                ))
+                self._write_response(
+                    _error(
+                        403,
+                        CODE_UNAUTHORIZED,
+                        f"Artifact upload rejected ({type(exc).__name__}).",
+                    )
+                )
 
         def _gateway_artifact_download(self) -> None:
             try:
-                principal = listener._gateway.auth.authenticate(self._headers_map())
-                workspace = listener._gateway.auth.workspace_for(principal.device_id)
+                principal = listener._require_gateway().auth.authenticate(self._headers_map())
+                workspace = listener._require_gateway().auth.workspace_for(principal.device_id)
                 ticket = self.headers.get("X-Slon-Transfer-Ticket", "")
-                data, mime = listener._gateway.artifacts.download(
-                    ticket=ticket, device_id=principal.device_id,
+                data, mime = listener._require_gateway().artifacts.download(
+                    ticket=ticket,
+                    device_id=principal.device_id,
                     workspace_id=workspace,
                 )
-                self._write_response(RouteResponse(
-                    status_code=200, body={}, raw_body=data, content_type=mime
-                ))
+                self._write_response(RouteResponse(status_code=200, body={}, raw_body=data, content_type=mime))
             except Exception as exc:
-                self._write_response(_error(
-                    403, CODE_UNAUTHORIZED,
-                    f"Artifact download rejected ({type(exc).__name__}).",
-                ))
+                self._write_response(
+                    _error(
+                        403,
+                        CODE_UNAUTHORIZED,
+                        f"Artifact download rejected ({type(exc).__name__}).",
+                    )
+                )
 
         def do_DELETE(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)

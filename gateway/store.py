@@ -174,8 +174,14 @@ class GatewayStore:
             self._db.close()
 
     def trust_device(
-        self, *, device_id: str, device_name: str, public_key: str,
-        key_fingerprint: str, workspace_id: str, created_at: float,
+        self,
+        *,
+        device_id: str,
+        device_name: str,
+        public_key: str,
+        key_fingerprint: str,
+        workspace_id: str,
+        created_at: float,
     ) -> None:
         with self.transaction():
             self._db.execute(
@@ -185,9 +191,7 @@ class GatewayStore:
 
     def device(self, device_id: str) -> Mapping[str, object] | None:
         with self._lock:
-            row = self._db.execute(
-                "SELECT * FROM trusted_devices WHERE device_id=?", (device_id,)
-            ).fetchone()
+            row = self._db.execute("SELECT * FROM trusted_devices WHERE device_id=?", (device_id,)).fetchone()
         return None if row is None else dict(row)
 
     def list_devices(self, *, workspace_id: str) -> list[Mapping[str, object]]:
@@ -208,16 +212,12 @@ class GatewayStore:
                 "UPDATE device_sessions SET disconnected_at=? WHERE device_id=? AND disconnected_at IS NULL",
                 (revoked_at, device_id),
             )
-            self._db.execute(
-                "DELETE FROM gateway_refresh_tokens WHERE device_id=?", (device_id,)
-            )
+            self._db.execute("DELETE FROM gateway_refresh_tokens WHERE device_id=?", (device_id,))
         return changed > 0
 
     def open_connection(self, connection_id: str, device_id: str, now: float) -> None:
         with self.transaction():
-            row = self._db.execute(
-                "SELECT active FROM trusted_devices WHERE device_id=?", (device_id,)
-            ).fetchone()
+            row = self._db.execute("SELECT active FROM trusted_devices WHERE device_id=?", (device_id,)).fetchone()
             if row is None or not bool(row[0]):
                 raise GatewayStoreError("device is not trusted")
             self._db.execute(
@@ -233,15 +233,19 @@ class GatewayStore:
             )
 
     def append_event(
-        self, *, workspace_id: str, session_id: str | None,
-        envelope_json: str, created_at: float,
+        self,
+        *,
+        workspace_id: str,
+        session_id: str | None,
+        envelope_json: str,
+        created_at: float,
     ) -> int:
         with self.transaction():
             cursor = self._db.execute(
                 "INSERT INTO gateway_events(workspace_id,session_id,envelope_json,created_at) VALUES (?,?,?,?)",
                 (workspace_id, session_id, envelope_json, created_at),
             )
-            sequence = int(cursor.lastrowid)
+            sequence = int(cursor.lastrowid or 0)
             cutoff = self._db.execute(
                 """SELECT sequence FROM gateway_events WHERE workspace_id=?
                 ORDER BY sequence DESC LIMIT 1 OFFSET ?""",
@@ -255,7 +259,11 @@ class GatewayStore:
             return sequence
 
     def events_after(
-        self, *, workspace_id: str, sequence: int, limit: int,
+        self,
+        *,
+        workspace_id: str,
+        sequence: int,
+        limit: int,
     ) -> list[tuple[int, str]]:
         if limit <= 0 or limit > 1000:
             raise ValueError("replay limit must be between 1 and 1000")
@@ -301,15 +309,21 @@ class GatewayStore:
         return 0 if row is None else int(row[0])
 
     def put_operation(
-        self, *, operation_id: str, kind: str, device_id: str,
-        workspace_id: str, session_id: str | None, status: str,
-        payload: Mapping[str, object], now: float,
+        self,
+        *,
+        operation_id: str,
+        kind: str,
+        device_id: str,
+        workspace_id: str,
+        session_id: str | None,
+        status: str,
+        payload: Mapping[str, object],
+        now: float,
     ) -> None:
         with self.transaction():
             self._db.execute(
                 "INSERT INTO gateway_operations VALUES (?,?,?,?,?,?,?,?,?)",
-                (operation_id, kind, device_id, workspace_id, session_id, status,
-                 _json(payload), now, now),
+                (operation_id, kind, device_id, workspace_id, session_id, status, _json(payload), now, now),
             )
 
     def update_operation(self, operation_id: str, status: str, now: float) -> bool:
@@ -323,9 +337,7 @@ class GatewayStore:
             ).rowcount
         return changed > 0
 
-    def operation(
-        self, operation_id: str, *, workspace_id: str
-    ) -> Mapping[str, object] | None:
+    def operation(self, operation_id: str, *, workspace_id: str) -> Mapping[str, object] | None:
         with self._lock:
             row = self._db.execute(
                 "SELECT * FROM gateway_operations WHERE operation_id=? AND workspace_id=?",
@@ -336,7 +348,10 @@ class GatewayStore:
         return {**dict(row), "payload": json.loads(str(row["payload_json"]))}
 
     def operations(
-        self, *, workspace_id: str, kind: str | None = None,
+        self,
+        *,
+        workspace_id: str,
+        kind: str | None = None,
     ) -> list[Mapping[str, object]]:
         sql = "SELECT * FROM gateway_operations WHERE workspace_id=?"
         values: list[object] = [workspace_id]
@@ -346,10 +361,7 @@ class GatewayStore:
         sql += " ORDER BY created_at,operation_id"
         with self._lock:
             rows = self._db.execute(sql, values).fetchall()
-        return [
-            {**dict(row), "payload": json.loads(str(row["payload_json"]))}
-            for row in rows
-        ]
+        return [{**dict(row), "payload": json.loads(str(row["payload_json"]))} for row in rows]
 
     def recover_uncertain(self, now: float) -> int:
         with self.transaction():
@@ -357,9 +369,7 @@ class GatewayStore:
                 "UPDATE gateway_operations SET status='interrupted',updated_at=? WHERE status IN ('pending','running')",
                 (now,),
             ).rowcount
-            self._db.execute(
-                "UPDATE request_results SET status='interrupted' WHERE status='pending'"
-            )
+            self._db.execute("UPDATE request_results SET status='interrupted' WHERE status='pending'")
             self._db.execute(
                 "UPDATE device_sessions SET disconnected_at=? WHERE disconnected_at IS NULL",
                 (now,),
@@ -371,42 +381,48 @@ class GatewayStore:
         return changed
 
     def put_artifact(
-        self, *, artifact_id: str, device_id: str, workspace_id: str,
-        mime_type: str, size: int, sha256: str, storage_name: str, created_at: float,
+        self,
+        *,
+        artifact_id: str,
+        device_id: str,
+        workspace_id: str,
+        mime_type: str,
+        size: int,
+        sha256: str,
+        storage_name: str,
+        created_at: float,
     ) -> None:
         with self.transaction():
             self._db.execute(
                 "INSERT INTO artifacts VALUES (?,?,?,?,?,?,?,?)",
-                (artifact_id, device_id, workspace_id, mime_type, size, sha256,
-                 storage_name, created_at),
+                (artifact_id, device_id, workspace_id, mime_type, size, sha256, storage_name, created_at),
             )
 
     def artifact(self, artifact_id: str) -> Mapping[str, object] | None:
         with self._lock:
-            row = self._db.execute(
-                "SELECT * FROM artifacts WHERE artifact_id=?", (artifact_id,)
-            ).fetchone()
+            row = self._db.execute("SELECT * FROM artifacts WHERE artifact_id=?", (artifact_id,)).fetchone()
         return None if row is None else dict(row)
 
     def put_refresh_token(
-        self, token_hash: str, *, device_id: str, device_name: str | None,
-        expires_at: float, scopes: list[str],
+        self,
+        token_hash: str,
+        *,
+        device_id: str,
+        device_name: str | None,
+        expires_at: float,
+        scopes: list[str],
     ) -> None:
         with self.transaction():
             self._db.execute(
                 "INSERT OR REPLACE INTO gateway_refresh_tokens VALUES (?,?,?,?,?)",
-                (token_hash, device_id, device_name, expires_at, _json(scopes)),
+                (token_hash, device_id, device_name, expires_at, _json(scopes)),  # type: ignore[arg-type]
             )
 
     def pop_refresh_token(self, token_hash: str) -> Mapping[str, object] | None:
         with self.transaction():
-            row = self._db.execute(
-                "SELECT * FROM gateway_refresh_tokens WHERE token_hash=?", (token_hash,)
-            ).fetchone()
+            row = self._db.execute("SELECT * FROM gateway_refresh_tokens WHERE token_hash=?", (token_hash,)).fetchone()
             if row is not None:
-                self._db.execute(
-                    "DELETE FROM gateway_refresh_tokens WHERE token_hash=?", (token_hash,)
-                )
+                self._db.execute("DELETE FROM gateway_refresh_tokens WHERE token_hash=?", (token_hash,))
         if row is None:
             return None
         return {**dict(row), "scopes": json.loads(str(row["scopes_json"]))}
@@ -414,45 +430,60 @@ class GatewayStore:
     def consume_access_jti(self, jti: str, now: float) -> bool:
         try:
             with self.transaction():
-                self._db.execute(
-                    "DELETE FROM used_access_jtis WHERE used_at<?", (now - 86_400.0,)
-                )
+                self._db.execute("DELETE FROM used_access_jtis WHERE used_at<?", (now - 86_400.0,))
                 self._db.execute("INSERT INTO used_access_jtis VALUES (?,?)", (jti, now))
             return True
         except sqlite3.IntegrityError:
             return False
 
     def create_approval(
-        self, *, approval_id: str, workspace_id: str, session_id: str | None,
-        run_id: str | None, tool_call_id: str | None, tool_name: str,
-        reason: str, created_at: float, expires_at: float,
+        self,
+        *,
+        approval_id: str,
+        workspace_id: str,
+        session_id: str | None,
+        run_id: str | None,
+        tool_call_id: str | None,
+        tool_name: str,
+        reason: str,
+        created_at: float,
+        expires_at: float,
     ) -> None:
         with self.transaction():
             self._db.execute(
                 "INSERT INTO gateway_approvals VALUES (?,?,?,?,?,?,'pending',?,?,?,?,NULL)",
-                (approval_id, workspace_id, session_id, run_id, tool_call_id,
-                 tool_name, reason, created_at, expires_at, None),
+                (
+                    approval_id,
+                    workspace_id,
+                    session_id,
+                    run_id,
+                    tool_call_id,
+                    tool_name,
+                    reason,
+                    created_at,
+                    expires_at,
+                    None,
+                ),
             )
 
     def decide_approval(
-        self, *, approval_id: str, workspace_id: str, decision: str,
-        device_id: str | None, now: float,
+        self,
+        *,
+        approval_id: str,
+        workspace_id: str,
+        decision: str,
+        device_id: str | None,
+        now: float,
     ) -> bool:
-        if decision not in {
-            "allowed", "denied", "expired", "cancelled", "interrupted"
-        }:
+        if decision not in {"allowed", "denied", "expired", "cancelled", "interrupted"}:
             raise ValueError("invalid approval decision")
-        deadline_clause = (
-            "AND expires_at>?" if decision in {"allowed", "denied"}
-            else ""
-        )
+        deadline_clause = "AND expires_at>?" if decision in {"allowed", "denied"} else ""
         with self.transaction():
             changed = self._db.execute(
                 f"""UPDATE gateway_approvals SET status=?,decided_at=?,decision_device_id=?
                 WHERE approval_id=? AND workspace_id=? AND status='pending'
                   {deadline_clause}""",
-                (decision, now, device_id, approval_id, workspace_id)
-                + ((now,) if deadline_clause else ()),
+                (decision, now, device_id, approval_id, workspace_id) + ((now,) if deadline_clause else ()),
             ).rowcount
         return changed == 1
 
@@ -466,37 +497,42 @@ class GatewayStore:
 
     def approval(self, approval_id: str) -> Mapping[str, object] | None:
         with self._lock:
-            row = self._db.execute(
-                "SELECT * FROM gateway_approvals WHERE approval_id=?", (approval_id,)
-            ).fetchone()
+            row = self._db.execute("SELECT * FROM gateway_approvals WHERE approval_id=?", (approval_id,)).fetchone()
         return None if row is None else dict(row)
 
     def update_runtime_status(
-        self, *, instance_id: str, state: str, heartbeat_at: float,
-        bind_host: str, tls_active: bool, error_code: str | None = None,
+        self,
+        *,
+        instance_id: str,
+        state: str,
+        heartbeat_at: float,
+        bind_host: str,
+        tls_active: bool,
+        error_code: str | None = None,
     ) -> None:
         if state not in {"starting", "running", "degraded", "stopped", "error"}:
             raise ValueError("invalid Gateway runtime state")
         with self.transaction():
-            connected = int(self._db.execute(
-                "SELECT COUNT(*) FROM device_sessions WHERE disconnected_at IS NULL"
-            ).fetchone()[0])
+            connected = int(
+                self._db.execute("SELECT COUNT(*) FROM device_sessions WHERE disconnected_at IS NULL").fetchone()[0]
+            )
             self._db.execute(
                 """INSERT OR REPLACE INTO gateway_runtime_status
                 VALUES (1,?,?,?,?,?,?,?)""",
-                (instance_id, state, heartbeat_at, bind_host, int(tls_active),
-                 connected, error_code),
+                (instance_id, state, heartbeat_at, bind_host, int(tls_active), connected, error_code),
             )
 
     def runtime_status(self) -> Mapping[str, object] | None:
         with self._lock:
-            row = self._db.execute(
-                "SELECT * FROM gateway_runtime_status WHERE singleton=1"
-            ).fetchone()
+            row = self._db.execute("SELECT * FROM gateway_runtime_status WHERE singleton=1").fetchone()
         return None if row is None else dict(row)
 
     def cached_response(
-        self, *, device_id: str, workspace_id: str, request_id: str,
+        self,
+        *,
+        device_id: str,
+        workspace_id: str,
+        request_id: str,
     ) -> Mapping[str, object] | None:
         with self._lock:
             row = self._db.execute(
@@ -510,7 +546,12 @@ class GatewayStore:
         return json.loads(str(row[0]))
 
     def reserve_request(
-        self, *, device_id: str, workspace_id: str, request_id: str, now: float,
+        self,
+        *,
+        device_id: str,
+        workspace_id: str,
+        request_id: str,
+        now: float,
     ) -> bool:
         with self.transaction():
             cursor = self._db.execute(
@@ -520,8 +561,13 @@ class GatewayStore:
         return cursor.rowcount > 0
 
     def cache_response(
-        self, *, device_id: str, workspace_id: str, request_id: str,
-        response: Mapping[str, object], now: float,
+        self,
+        *,
+        device_id: str,
+        workspace_id: str,
+        request_id: str,
+        response: Mapping[str, object],
+        now: float,
     ) -> bool:
         with self.transaction():
             cursor = self._db.execute(
@@ -537,9 +583,7 @@ class GatewayStore:
 
     def artifact_grant(self, grant_id: str) -> Mapping[str, object] | None:
         with self._lock:
-            row = self._db.execute(
-                "SELECT * FROM artifact_grants WHERE grant_id=?", (grant_id,)
-            ).fetchone()
+            row = self._db.execute("SELECT * FROM artifact_grants WHERE grant_id=?", (grant_id,)).fetchone()
         return None if row is None else dict(row)
 
     def consume_artifact_grant(self, grant_id: str) -> bool:

@@ -2,29 +2,26 @@
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from acta.memory import (
-    MemoryStore,
-    MemoryRecord,
-    RecordType,
-    MemoryRetriever,
-    RetrievalResult,
     ContextChunk,
-    MemoryPolicy,
+    MemoryRecord,
+    MemoryRetriever,
+    MemoryStore,
+    RecordType,
+    RetrievalResult,
 )
-from acta.memory.database import MemoryRow
 from agent.memory import (
     build_memory_context_callback,
     build_turn_complete_persist,
     extract_and_save_memory,
 )
 from agent.runtime import AgentLoop
-from agent.observation import ObservationKind
-from providers.contracts import ChatResponse, ModelInfo, ChatRequest, ToolCall
-
+from providers.contracts import ChatRequest, ChatResponse, ModelInfo, ToolCall
 
 MODEL = ModelInfo(
     provider_id="test",
@@ -217,9 +214,7 @@ async def test_agent_loop_memory_callback_injected(store: MemoryStore) -> None:
     assert cb("test") == ""  # offline mode returns empty, but loop continues
 
     responses = [
-        ChatResponse("Checking", "test", "test", (
-            ToolCall(id="c1", name="noop", arguments={}),
-        )),
+        ChatResponse("Checking", "test", "test", (ToolCall(id="c1", name="noop", arguments={}),)),
         ChatResponse("Done.", "test", "test"),
     ]
 
@@ -232,7 +227,7 @@ async def test_agent_loop_memory_callback_injected(store: MemoryStore) -> None:
     loop = AgentLoop(
         provider=mock_provider,
         model=MODEL,
-        memory_context_callback=cb,
+        memory_context_callback=cb,  # type: ignore[arg-type]
         tool_executor=lambda name, args: "ok",
     )
     result = await loop.run("Check preferences")
@@ -252,9 +247,9 @@ async def test_agent_loop_persists_on_turn_complete(store: MemoryStore) -> None:
         cb(user_input, output)
 
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="Hello from agent!", provider_id="test", model_id="test"
-    ))
+    mock_provider.chat = AsyncMock(
+        return_value=ChatResponse(text="Hello from agent!", provider_id="test", model_id="test")
+    )
 
     loop = AgentLoop(
         provider=mock_provider,
@@ -284,9 +279,9 @@ async def test_agent_loop_memory_extraction_after_complete(store: MemoryStore) -
         extracted_keys.extend(keys)
 
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="I learned your name is Alice!", provider_id="test", model_id="test"
-    ))
+    mock_provider.chat = AsyncMock(
+        return_value=ChatResponse(text="I learned your name is Alice!", provider_id="test", model_id="test")
+    )
 
     loop = AgentLoop(
         provider=mock_provider,
@@ -306,14 +301,12 @@ async def test_memory_callback_non_fatal_on_error(store: MemoryStore) -> None:
     cb = build_memory_context_callback(store)
 
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="All good.", provider_id="test", model_id="test"
-    ))
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(text="All good.", provider_id="test", model_id="test"))
 
     loop = AgentLoop(
         provider=mock_provider,
         model=MODEL,
-        memory_context_callback=cb,
+        memory_context_callback=cb,  # type: ignore[arg-type]
     )
     result = await loop.run("Test")
 
@@ -326,7 +319,7 @@ async def test_memory_callback_non_fatal_on_error(store: MemoryStore) -> None:
 
 def test_i18n_russian_keys_exist() -> None:
     """Verify i18n keys for agent errors use Russian text."""
-    from i18n import t, set_locale
+    from i18n import set_locale, t
 
     set_locale("ru")
 
@@ -343,7 +336,7 @@ def test_i18n_russian_keys_exist() -> None:
 
 def test_i18n_english_keys_exist() -> None:
     """Verify i18n keys for agent errors work in English too."""
-    from i18n import t, set_locale
+    from i18n import set_locale, t
 
     set_locale("en")
 

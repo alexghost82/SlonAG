@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -102,7 +102,7 @@ class TestRemoteAdapter:
         adapter = RemoteAdapter()
         adapter._connected = True
         mock_ws = AsyncMock()
-        mock_ws.recv.side_effect = asyncio.TimeoutError()
+        mock_ws.recv.side_effect = TimeoutError()
         adapter._connection = mock_ws
         loop = asyncio.new_event_loop()
         try:

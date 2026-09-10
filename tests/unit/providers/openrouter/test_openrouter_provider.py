@@ -24,7 +24,6 @@ from providers.openrouter import (
 from providers.openrouter.catalog import parse_models_payload
 from providers.openrouter.client import DEFAULT_API_URL, models_url_from_api_url
 from providers.registry import get, registered_ids
-
 from tests.unit.providers.openrouter.fakes import MODELS_FIXTURE, FakeResponse
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[4] / "providers" / "openrouter"
@@ -207,9 +206,7 @@ async def test_chat_and_stream_event_shape(chat_request: ChatRequest) -> None:
                     "data: [DONE]",
                 ]
             )
-        return FakeResponse(
-            payload={"choices": [{"message": {"role": "assistant", "content": "pong"}}]}
-        )
+        return FakeResponse(payload={"choices": [{"message": {"role": "assistant", "content": "pong"}}]})
 
     provider = OpenRouterChatProvider(
         api_key="test-key",
@@ -230,13 +227,15 @@ async def test_chat_and_stream_event_shape(chat_request: ChatRequest) -> None:
 
 async def test_stream_assembles_fragmented_tool_call(chat_request: ChatRequest) -> None:
     def fake_request(method: str, url: str, **kwargs: object) -> FakeResponse:
-        return FakeResponse(lines=[
-            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"or-1",'
-            '"function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
-            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
-            '"function":{"arguments":"\\"x\\"}"}}]},"finish_reason":"tool_calls"}]}',
-            "data: [DONE]",
-        ])
+        return FakeResponse(
+            lines=[
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"or-1",'
+                '"function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}',
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+                '"function":{"arguments":"\\"x\\"}"}}]},"finish_reason":"tool_calls"}]}',
+                "data: [DONE]",
+            ]
+        )
 
     provider = OpenRouterChatProvider(api_key="test-key", request=fake_request)
     events = [event async for event in provider.stream(chat_request)]

@@ -6,8 +6,8 @@ import pytest
 
 from acta.mcp.client import McpClient
 from acta.mcp.streamable_http_transport import McpStreamableHttpTransport
-from acta.mcp.types import McpServerConfig, McpTransportKind
 from acta.mcp.transport import McpStdioTransport
+from acta.mcp.types import McpServerConfig, McpTransportKind
 
 
 class TestStreamableHttpImport:
@@ -42,6 +42,7 @@ class TestStreamableHttpClientConfig:
     def test_client_selects_stdio_transport(self) -> None:
         """McpClient chooses stdio based on config."""
         import sys
+
         config = McpServerConfig(
             name="stdio_test",
             transport=McpTransportKind.STDIO,
@@ -120,6 +121,7 @@ class TestStreamableHttpTransportMethods:
         """_make_timeout creates a valid httpx Timeout object."""
         transport = McpStreamableHttpTransport("http://localhost:3001/mcp")
         import httpx
+
         timeout = transport._make_timeout()
         assert isinstance(timeout, httpx.Timeout)
         assert timeout.connect == 10.0
@@ -129,6 +131,7 @@ class TestStreamableHttpTransportMethods:
         """_make_timeout accepts read override."""
         transport = McpStreamableHttpTransport("http://localhost:3001/mcp")
         import httpx
+
         timeout = transport._make_timeout(read_override=60.0)
         assert isinstance(timeout, httpx.Timeout)
         assert timeout.read == 60.0

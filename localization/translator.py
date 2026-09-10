@@ -107,9 +107,7 @@ def tr(key: str, **kwargs: object) -> str:
     try:
         return template.format(**kwargs)
     except (KeyError, IndexError, ValueError) as exc:
-        raise ValueError(
-            f"failed to interpolate {key!r} for locale {locale!r}: {exc}"
-        ) from exc
+        raise ValueError(f"failed to interpolate {key!r} for locale {locale!r}: {exc}") from exc
 
 
 def _load_catalogs() -> dict[str, dict[str, str]]:
@@ -137,15 +135,9 @@ def _assert_matching_key_sets(catalogs: Mapping[str, Mapping[str, str]]) -> None
     if ru_keys != en_keys:
         missing_en = sorted(ru_keys - en_keys)
         missing_ru = sorted(en_keys - ru_keys)
-        raise ValueError(
-            "ru/en catalog key sets differ; "
-            f"missing in en: {missing_en}; missing in ru: {missing_ru}"
-        )
+        raise ValueError(f"ru/en catalog key sets differ; missing in en: {missing_en}; missing in ru: {missing_ru}")
     for key in ru_keys:
         ru_fields = placeholders_in(catalogs["ru"][key])
         en_fields = placeholders_in(catalogs["en"][key])
         if ru_fields != en_fields:
-            raise ValueError(
-                f"placeholder names for {key!r} differ: ru={sorted(ru_fields)} "
-                f"en={sorted(en_fields)}"
-            )
+            raise ValueError(f"placeholder names for {key!r} differ: ru={sorted(ru_fields)} en={sorted(en_fields)}")

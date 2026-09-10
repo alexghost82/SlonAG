@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import sys
 from types import SimpleNamespace
 
-from agent import planner
 from acta.safety.types import RiskLevel
 from acta.tools.contracts import ToolSpec
 from acta.tools.registry import ToolRegistry
+from agent import planner
 
 
 def _handler(**_: object) -> None:

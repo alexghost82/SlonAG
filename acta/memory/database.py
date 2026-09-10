@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import sqlite3
 from collections.abc import Sequence
@@ -36,6 +37,7 @@ class MemoryDatabase:
 
     def __init__(self, path: Path) -> None:
         from acta.memory.migrations.schema import apply_schema
+
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(self.path, timeout=5.0)
@@ -51,6 +53,7 @@ class MemoryDatabase:
 
     def insert(self, row: MemoryRow) -> None:
         from acta.memory.migrations.schema import apply_schema
+
         try:
             with self._connection:
                 self._connection.execute(
@@ -126,7 +129,7 @@ class MemoryDatabase:
             return None
         return _row_from_sql(fetched)
 
-    def list(self, record_type: str | None = None) -> list[MemoryRow]:
+    def list(self, record_type: str | None = None) -> builtins.list[MemoryRow]:
         if record_type is None:
             cursor = self._connection.execute(
                 """
@@ -205,9 +208,7 @@ class MemoryDatabase:
                 (record_id, payload),
             )
 
-    def find_similar(
-        self, vector: Sequence[float], *, top_k: int = 5
-    ) -> list[MemoryRow]:
+    def find_similar(self, vector: Sequence[float], *, top_k: int = 5) -> builtins.list[MemoryRow]:
         """Return rows ranked by cosine similarity to the query vector.
         Each returned MemoryRow gets a transient _similarity attribute."""
         rows = self._connection.execute(
@@ -266,17 +267,17 @@ def _row_from_sql(row: sqlite3.Row) -> MemoryRow:
 __all__ = ["MemoryDatabase", "MemoryRow"]
 
 
-def _dot_product(a: list[float], b: list[float]) -> float:
+def _dot_product(a: Sequence[float], b: Sequence[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
-def _magnitude(v: list[float]) -> float:
+def _magnitude(v: Sequence[float]) -> float:
     import math
 
     return math.sqrt(sum(x * x for x in v))
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
+def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     mag_a = _magnitude(a)
     mag_b = _magnitude(b)
     if mag_a == 0.0 or mag_b == 0.0:

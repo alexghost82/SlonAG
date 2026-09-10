@@ -13,7 +13,6 @@ from providers.local import (
     is_loopback_url,
 )
 from providers.local.endpoint import is_loopback_host
-
 from tests.unit.providers.local.fakes import FakeTransport, openai_transport
 
 PROVIDERS = (

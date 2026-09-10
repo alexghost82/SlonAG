@@ -129,9 +129,7 @@ def test_tasks_schemas() -> None:
     cancel = TaskCancelRequest(idempotency_key="c1")
     assert TaskCancelRequest.from_dict(cancel.to_dict()) == cancel
 
-    listed = TaskListResponse(
-        tasks=(TaskInfo(id="1", status="pending", approval_required=True),)
-    )
+    listed = TaskListResponse(tasks=(TaskInfo(id="1", status="pending", approval_required=True),))
     assert TaskListResponse.from_dict(listed.to_dict()).tasks[0].id == "1"
 
 
@@ -139,9 +137,7 @@ def test_approvals_and_models_and_screen_and_memory() -> None:
     decision = ApprovalDecisionRequest(decision="allow", idempotency_key="d1")
     assert ApprovalDecisionRequest.from_dict(decision.to_dict()) == decision
 
-    models = ModelsListResponse(
-        models=(ModelInfo(id="m1", provider_id="local", active=True),)
-    )
+    models = ModelsListResponse(models=(ModelInfo(id="m1", provider_id="local", active=True),))
     assert ModelsListResponse.from_dict(models.to_dict()).models[0].id == "m1"
 
     activate = ModelsActivateRequest(model_id="m1", idempotency_key="a1", role="chat")
@@ -159,9 +155,7 @@ def test_approvals_and_models_and_screen_and_memory() -> None:
     )
     assert ScreenCaptureResponse.from_dict(capture.to_dict()) == capture
 
-    memory = MemoryGetResponse(
-        entries=(MemoryEntry(id="mem1", kind="note", summary="hello"),)
-    )
+    memory = MemoryGetResponse(entries=(MemoryEntry(id="mem1", kind="note", summary="hello"),))
     assert MemoryGetResponse.from_dict(memory.to_dict()).entries[0].id == "mem1"
 
     delete = MemoryDeleteRequest(idempotency_key="del1")

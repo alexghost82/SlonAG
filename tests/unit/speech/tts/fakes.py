@@ -21,9 +21,7 @@ class RecordingEngine:
         speed: float,
         volume: float,
     ) -> bytes:
-        self.calls.append(
-            {"text": text, "voice": voice, "speed": speed, "volume": volume}
-        )
+        self.calls.append({"text": text, "voice": voice, "speed": speed, "volume": volume})
         return text.encode("utf-8")
 
 

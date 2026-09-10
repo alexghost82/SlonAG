@@ -13,22 +13,17 @@ Covers:
 
 from __future__ import annotations
 
-import json
-import os
-import time
 from pathlib import Path
 
 import pytest
 
-from runtime.browser.service import BrowserService, get_browser_service
+from runtime.browser.exceptions import BrowserLaunchError
+from runtime.browser.service import BrowserService
 from runtime.browser.status import (
     BrowserAvailability,
-    BrowserErrorCode,
-    BrowserStatus,
     detect_runtime_availability,
     get_runtime_status,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -39,8 +34,18 @@ _TEST_PAGE_URL = "file://" + str(_TEST_PAGE_PATH.resolve())
 @pytest.fixture()
 def service():
     """Create and start a fresh BrowserService for each test."""
+    from tests.integration.test_browser.conftest import (
+        mark_playwright_unusable,
+        skip_unless_playwright_ready,
+    )
+
+    skip_unless_playwright_ready()
     svc = BrowserService()
-    svc.start()
+    try:
+        svc.start()
+    except BrowserLaunchError as exc:
+        mark_playwright_unusable()
+        pytest.skip(f"Playwright Chromium not installed: {exc}")
     try:
         yield svc
     finally:
@@ -57,14 +62,22 @@ def ready_page(service):
 
 # ── Availability & Status ─────────────────────────────────────────────────
 
+
 class TestAvailability:
+    def test_detect_reports_missing_or_ready(self):
+        av = detect_runtime_availability()
+        assert av in (BrowserAvailability.READY, BrowserAvailability.ERROR)
+
     def test_detect_availability_when_ready(self):
         av = detect_runtime_availability()
-        # On this machine Playwright + Chromium should be installed
+        if av != BrowserAvailability.READY:
+            pytest.skip("Playwright Chromium not installed")
         assert av == BrowserAvailability.READY
 
     def test_runtime_status_when_ready(self):
         status = get_runtime_status()
+        if status.availability != BrowserAvailability.READY:
+            pytest.skip("Playwright Chromium not installed")
         assert status.availability == BrowserAvailability.READY
         assert status.engine == "chromium"
         assert status.message is None
@@ -79,6 +92,7 @@ class TestAvailability:
 
 
 # ── Navigation ────────────────────────────────────────────────────────────
+
 
 class TestNavigation:
     def test_load_local_html(self, ready_page):
@@ -106,6 +120,7 @@ class TestNavigation:
 
 
 # ── Click ─────────────────────────────────────────────────────────────────
+
 
 class TestClick:
     def test_click_submit_button(self, ready_page):
@@ -139,6 +154,7 @@ class TestClick:
 
 # ── Type / Keyboard ───────────────────────────────────────────────────────
 
+
 class TestType:
     def test_type_into_selector(self, ready_page):
         ready_page.type_text("#name", "TestName")
@@ -163,6 +179,7 @@ class TestType:
 
 # ── DOM Extraction ────────────────────────────────────────────────────────
 
+
 class TestDOM:
     def test_dom_get_text_body(self, ready_page):
         text = ready_page.dom_get_text("body", max_chars=500)
@@ -178,14 +195,13 @@ class TestDOM:
 
     def test_bounded_extraction(self, ready_page):
         """max_chars should truncate."""
-        long_text = "A" * 20000
-        ready_page.dom_evaluate(
-            "document.body.insertAdjacentText('beforeend', `<div id='big'>${'A'*20000}</div>`)")
+        ready_page.dom_evaluate("document.body.insertAdjacentText('beforeend', `<div id='big'>${'A'*20000}</div>`)")
         text = ready_page.dom_get_text("#big", max_chars=100)
         assert len(text) <= 100
 
 
 # ── Form Filling ──────────────────────────────────────────────────────────
+
 
 class TestForm:
     def test_fill_form(self, ready_page):
@@ -203,12 +219,14 @@ class TestForm:
         assert email_val == "form@test.com"
 
     def test_fill_and_submit(self, ready_page):
-        ready_page.fill_form({
-            "#name": "Alice",
-            "#email": "alice@example.com",
-            "#subject": "support",
-            "#message": "Help me!",
-        })
+        ready_page.fill_form(
+            {
+                "#name": "Alice",
+                "#email": "alice@example.com",
+                "#subject": "support",
+                "#message": "Help me!",
+            }
+        )
         ready_page.click("#submit-btn")
         result_text = ready_page.dom_get_text("#result")
         assert "Alice" in result_text
@@ -217,6 +235,7 @@ class TestForm:
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────
+
 
 class TestTabs:
     def test_list_tabs(self, ready_page):
@@ -261,6 +280,7 @@ class TestTabs:
 
 # ── Cookies ───────────────────────────────────────────────────────────────
 
+
 class TestCookies:
     def test_set_and_get_cookie(self, service):
         ready = BrowserService()
@@ -289,6 +309,7 @@ class TestCookies:
 
 # ── Screenshot ────────────────────────────────────────────────────────────
 
+
 class TestScreenshot:
     def test_screenshot_returns_png(self, ready_page):
         png_data = ready_page.screenshot()
@@ -300,10 +321,21 @@ class TestScreenshot:
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
+
 class TestLifecycle:
     def test_start_stop_twice_is_idempotent(self):
+        from tests.integration.test_browser.conftest import (
+            mark_playwright_unusable,
+            skip_unless_playwright_ready,
+        )
+
+        skip_unless_playwright_ready()
         svc = BrowserService()
-        svc.start()
+        try:
+            svc.start()
+        except BrowserLaunchError as exc:
+            mark_playwright_unusable()
+            pytest.skip(f"Playwright Chromium not installed: {exc}")
         svc.stop()
         svc.start()
         svc.stop()
@@ -319,39 +351,49 @@ class TestLifecycle:
 
 # ── Actions integration ───────────────────────────────────────────────────
 
+
 class TestBrowserControlActions:
     """Test the browser_control action function via the ToolResult contract."""
 
     def test_action_navigate(self, ready_page):
         from actions.browser_control import browser_control
+
         result = browser_control({"action": "navigate", "url": _TEST_PAGE_URL})
         assert result.ok is True
         assert result.code in ("navigate_ok",)
 
     def test_action_click(self, ready_page):
         from actions.browser_control import browser_control
-        result = browser_control({
-            "action": "click",
-            "selector": "#submit-btn",
-        })
+
+        result = browser_control(
+            {
+                "action": "click",
+                "selector": "#submit-btn",
+            }
+        )
         assert result.ok is True
 
     def test_action_fill_form(self, ready_page):
         from actions.browser_control import browser_control
-        result = browser_control({
-            "action": "fill_form",
-            "fields": {"#name": "Action Test", "#message": "Hello"},
-        })
+
+        result = browser_control(
+            {
+                "action": "fill_form",
+                "fields": {"#name": "Action Test", "#message": "Hello"},
+            }
+        )
         assert result.ok is True
 
     def test_action_status(self, service):
         from actions.browser_control import browser_control
+
         result = browser_control({"action": "status"})
         assert result.ok is True
         assert "ready" in result.message.lower() or "launched" in result.message.lower()
 
     def test_action_unknown(self, service):
         from actions.browser_control import browser_control
+
         result = browser_control({"action": "nonexistent"})
         assert result.ok is False
         assert result.code == "unknown_action"

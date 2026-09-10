@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from acta.bridge.control_plane import ControlPlaneUnavailable, DesktopControlPlane
-from i18n import t
 
 KeyProvider = Callable[[str], str | None]
 
@@ -41,9 +40,7 @@ class RuntimeStack:
     def summary_lines(self) -> list[str]:
         return list(self.status_lines)
 
-    def create_agent_loop(
-        self, *, model: Any, budget: Any | None = None, cancel_event: Any = None
-    ) -> Any:
+    def create_agent_loop(self, *, model: Any, budget: Any | None = None, cancel_event: Any = None) -> Any:
         """Create the canonical AgentLoop from composition-owned dependencies."""
         if self.router is None or self.tool_executor is None:
             raise RuntimeError("runtime stack is missing provider or tool runtime")
@@ -114,11 +111,7 @@ def build_runtime_stack(
     def _memory() -> Any:
         from acta.memory import MemoryStore
 
-        path = (
-            Path(memory_db_path)
-            if memory_db_path is not None
-            else root / "memory" / "mark_memory.sqlite3"
-        )
+        path = Path(memory_db_path) if memory_db_path is not None else root / "memory" / "mark_memory.sqlite3"
         path.parent.mkdir(parents=True, exist_ok=True)
         store = MemoryStore(path)
         legacy = root / "memory" / "long_term.json"
@@ -162,11 +155,7 @@ def build_runtime_stack(
     def _sessions() -> Any:
         from sessions import SessionManager, SessionStore
 
-        path = (
-            Path(session_db_path)
-            if session_db_path is not None
-            else root / "memory" / "slon_sessions.sqlite3"
-        )
+        path = Path(session_db_path) if session_db_path is not None else root / "memory" / "slon_sessions.sqlite3"
         manager = SessionManager(SessionStore(path))
         recovered = manager.recover()
         status.append(f"sessions: recovered_runs={recovered}")
@@ -181,6 +170,9 @@ def build_runtime_stack(
         engine = JobEngine(path)
         recovered = engine.recover_running()
         status.append(f"jobs: recovered={len(recovered)}")
+        from agent.task_queue import configure_shared_engine
+
+        configure_shared_engine(engine)
         return engine
 
     job_engine = _try("jobs", _jobs, status)
@@ -193,9 +185,7 @@ def build_runtime_stack(
         built = try_build_local_tts(repo_root=root, validate=True)
         tts_ready = bool(built.ready)
         tts_message = built.message
-        status.append(
-            f"tts: {'ready' if tts_ready else 'unavailable'} — {built.message}"
-        )
+        status.append(f"tts: {'ready' if tts_ready else 'unavailable'} — {built.message}")
     except Exception as exc:  # noqa: BLE001
         tts_message = type(exc).__name__
         status.append(f"tts: unavailable ({type(exc).__name__})")
@@ -208,9 +198,7 @@ def build_runtime_stack(
         built_stt = try_build_local_stt(repo_root=root, prefer_whisper=True)
         stt_ready = bool(built_stt.ready)
         stt_message = built_stt.message
-        status.append(
-            f"stt: {'ready' if stt_ready else 'unavailable'} — {built_stt.message}"
-        )
+        status.append(f"stt: {'ready' if stt_ready else 'unavailable'} — {built_stt.message}")
     except Exception as exc:  # noqa: BLE001
         stt_message = type(exc).__name__
         status.append(f"stt: unavailable ({type(exc).__name__})")

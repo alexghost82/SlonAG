@@ -8,12 +8,12 @@ import time
 import pytest
 
 from acta.connectivity.types import (
-    ConnectivityMode,
-    ConnectivityPolicy,
     ConnectionConnectionReason,
     ConnectionInfo,
-    ConnectionState,
     ConnectionReason,
+    ConnectionState,
+    ConnectivityMode,
+    ConnectivityPolicy,
     DeviceIdentity,
     DiscoveredDevice,
     MigrationEvent,
@@ -80,7 +80,7 @@ class TestDeviceIdentity:
     def test_is_frozen(self) -> None:
         identity = DeviceIdentity.generate("Test")
         with pytest.raises(Exception):  # frozen dataclass
-            identity.device_id = "new"
+            identity.device_id = "new"  # type: ignore[misc]
 
 
 class TestDiscoveredDevice:

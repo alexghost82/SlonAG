@@ -41,18 +41,34 @@ class BrowserStatus:
     message: str | None = None
 
 
+def _chromium_cache_dirs() -> tuple[Path, ...]:
+    home = Path.home()
+    return (
+        home / ".cache" / "ms-playwright",
+        home / "Library" / "Caches" / "ms-playwright",
+    )
+
+
+def _chromium_binaries(root: Path) -> tuple[Path, ...]:
+    return (
+        root / "chrome-linux" / "chrome",
+        root / "chrome-linux-arm64" / "chrome",
+        root / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+        root / "chrome-mac-arm64" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+        root / "chrome-win" / "chrome.exe",
+        root / "chrome-win64" / "chrome.exe",
+    )
+
+
 def _check_chromium_installed() -> bool:
     """Check if Playwright's Chromium binary is installed on disk."""
-    cache_dir = Path.home() / ".cache" / "ms-playwright"
-    if not cache_dir.exists():
-        return False
-    for d in cache_dir.iterdir():
-        if d.name.startswith("chromium-"):
-            chrome_bin = d / "chrome-linux" / "chrome"
-            if chrome_bin.exists():
-                return True
-            chrome_bin2 = d / "chrome-linux-arm64" / "chrome"
-            if chrome_bin2.exists():
+    for cache_dir in _chromium_cache_dirs():
+        if not cache_dir.exists():
+            continue
+        for d in cache_dir.iterdir():
+            if not d.name.startswith("chromium"):
+                continue
+            if any(bin_path.exists() for bin_path in _chromium_binaries(d)):
                 return True
     return False
 

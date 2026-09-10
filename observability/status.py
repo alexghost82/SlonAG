@@ -13,18 +13,18 @@ from typing import Any
 from server.schemas import StatusResponse
 
 
-def get_runtime_status() -> StatusResponse:
+def get_runtime_status(*, listening: bool | None = None) -> StatusResponse:
     """Resolve real desktop status.
 
     Returns a :class:`StatusResponse` populated from live probes:
-    - ``online``  — can the model adapter respond?
+    - ``online``  — local listener/process is up (not "has cloud")
     - ``paired``  — is a gateway pairing token present?
-    - ``network_mode`` — derived from network checks
+    - ``network_mode`` — from settings, not an 8.8.8.8 probe
     - ``provider_id`` / ``model_id`` — from live config / adapter
 
     If any probe fails, the field is defaulted conservatively.
     """
-    online = False
+    online = bool(listening)
     paired = False
     provider_id = None
     model_id = None
@@ -41,6 +41,7 @@ def get_runtime_status() -> StatusResponse:
         if settings.provider_id:
             provider_id = settings.provider_id
             model_id = getattr(settings, "model_id", None) or settings.provider_id
+        network_mode = getattr(settings, "network_mode", None) or network_mode
     except Exception:
         pass
 
@@ -68,28 +69,6 @@ def get_runtime_status() -> StatusResponse:
     except Exception:
         pass
 
-    # ── Network mode ───────────────────────────────────────────
-    try:
-        import socket
-
-        try:
-            sock = socket.create_connection(("8.8.8.8", 53), timeout=2)
-            sock.close()
-            network_mode = "internet"
-            online = True
-        except Exception:
-            network_mode = "local"
-            # Loopback check only
-            try:
-                sock = socket.create_connection(("127.0.0.1", 8765), timeout=1)
-                sock.close()
-                online = True
-            except Exception:
-                online = False
-    except Exception:
-        network_mode = "unknown"
-        online = False
-
     # ── Runtime probe (lightweight) ────────────────────────────
     try:
         from agent.runtime import get_runtime
@@ -97,8 +76,6 @@ def get_runtime_status() -> StatusResponse:
         rt = get_runtime()
         active_tasks = getattr(rt, "active_task_count", 0) or 0
         pending_approvals = getattr(rt, "pending_approvals", 0) or 0
-        if active_tasks > 0:
-            online = True
     except Exception:
         pass
 

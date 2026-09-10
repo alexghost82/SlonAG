@@ -4,6 +4,7 @@ These actions are considered safe enough that the proactive agent
 can execute them without user approval (when the permission
 boundary allows it).
 """
+
 from __future__ import annotations
 
 import logging

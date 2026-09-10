@@ -85,9 +85,7 @@ class PendingChallenge:
     expires_at: float
 
     def __repr__(self) -> str:
-        return (
-            f"PendingChallenge(code={self.code!r}, expires_at={self.expires_at!r})"
-        )
+        return f"PendingChallenge(code={self.code!r}, expires_at={self.expires_at!r})"
 
     def __str__(self) -> str:
         return self.__repr__()
@@ -277,6 +275,7 @@ __all__ = [
 
 
 # E2E test compatibility shim
+
 
 class PairingStore:
     """Minimal pairing store for LAN discovery/pairing E2E tests."""

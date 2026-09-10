@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import asyncio
 
-import cv2 as cv  # type: ignore[import-untyped]
-import numpy as np  # type: ignore[import-untyped]
+import cv2 as cv
+import numpy as np
 
 
 class RTSPFixture:
@@ -83,16 +83,13 @@ class RTSPFixture:
         """Generate deterministic test frames."""
         self._frames = []
         for i in range(self.num_frames):
-            frame = np.full((self.height, self.width, 3),
-                            [30 + i * 5, 60, 120], dtype=np.uint8)
+            frame = np.full((self.height, self.width, 3), [30 + i * 5, 60, 120], dtype=np.uint8)
             # Moving rectangle
             x = 50 + i * ((self.width - 150) // self.num_frames)
             y = 100 + i * 5
-            cv.rectangle(frame, (x, y), (x + 80, y + 60),
-                         (220, 50, 50), 2)
+            cv.rectangle(frame, (x, y), (x + 80, y + 60), (220, 50, 50), 2)
             # Frame counter
-            cv.putText(frame, f"FR{i}", (10, 30),
-                       cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv.putText(frame, f"FR{i}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
             success, buf = cv.imencode(".jpg", frame)
             if success:
@@ -111,7 +108,9 @@ class RTSPFixture:
     async def _serve(self) -> None:
         """Serve frames over TCP (simplified RTSP-like protocol)."""
         server = await asyncio.start_server(
-            self._handle_client, "0.0.0.0", self.port,
+            self._handle_client,
+            "0.0.0.0",
+            self.port,
         )
         try:
             while self._running:
@@ -120,8 +119,7 @@ class RTSPFixture:
             server.close()
             await server.wait_closed()
 
-    async def _handle_client(self, reader: asyncio.StreamReader,
-                             writer: asyncio.StreamWriter) -> None:
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Handle a single client connection.
 
         Waits for an initial HTTP request then continuously streams frames.

@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from acta.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
 from actions.desktop import (
     DesktopBackends,
     DesktopDeniedError,
     UnknownDesktopOpError,
     desktop_control,
 )
-from acta.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
 
 
 class FakeMouse:

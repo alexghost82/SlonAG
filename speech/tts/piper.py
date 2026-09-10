@@ -118,10 +118,7 @@ class PiperSpeechSynthesizer:
         stderr = getattr(completed, "stderr", b"") or b""
         if return_code != 0:
             detail = _decode_stderr(stderr)
-            raise PiperSynthesisError(
-                f"Piper exited with code {return_code}"
-                + (f": {detail}" if detail else "")
-            )
+            raise PiperSynthesisError(f"Piper exited with code {return_code}" + (f": {detail}" if detail else ""))
         if not stdout:
             raise PiperSynthesisError("Piper returned empty audio output")
         return bytes(stdout)

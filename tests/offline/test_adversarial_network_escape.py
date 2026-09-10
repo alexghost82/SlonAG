@@ -99,3 +99,11 @@ def test_loopback_still_allowed(offline_connect_guard: None) -> None:
         socket.create_connection(("127.0.0.1", 9), timeout=0.2)
     except OSError:
         pass
+
+
+def test_live_factory_fail_closed_offline(offline_connect_guard: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("config.schema.settings_forbid_cloud", lambda settings=None: True)
+    from providers.gemini.live import create_live_client
+
+    with pytest.raises(RuntimeError, match="disabled"):
+        create_live_client(api_key="test-key")

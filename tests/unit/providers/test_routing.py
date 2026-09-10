@@ -37,12 +37,15 @@ def test_incapable_cheap_model_is_rejected_instead_of_scored() -> None:
             privacy_profile="standard",
             availability=True,
         )
-    assert select_model(
-        (cheap, expensive),
-        routing_mode="local_only",
-        configured_provider_id="ollama",
-        required_capabilities={"tool_calling"},
-    ) is expensive
+    assert (
+        select_model(
+            (cheap, expensive),
+            routing_mode="local_only",
+            configured_provider_id="ollama",
+            required_capabilities={"tool_calling"},
+        )
+        is expensive
+    )
 
 
 def test_privacy_invalid_cloud_model_is_rejected() -> None:
@@ -66,17 +69,20 @@ def test_suitable_local_scores_above_cloud_when_local_is_preferred() -> None:
         "privacy_profile": "standard",
         "availability": True,
     }
-    assert score_model(local, **kwargs) > score_model(cloud, **kwargs)
+    assert score_model(local, **kwargs) > score_model(cloud, **kwargs)  # type: ignore[arg-type]
 
 
 def test_lower_cost_wins_within_valid_routing_tier() -> None:
     expensive = _model("openai", "expensive", cost=4.0)
     cheap = _model("gemini", "cheap", cost=0.5)
-    assert select_model(
-        (expensive, cheap),
-        routing_mode="cloud_first",
-        configured_provider_id="openai",
-    ) is cheap
+    assert (
+        select_model(
+            (expensive, cheap),
+            routing_mode="cloud_first",
+            configured_provider_id="openai",
+        )
+        is cheap
+    )
 
 
 def test_equal_scores_use_configured_provider_then_stable_input_order() -> None:

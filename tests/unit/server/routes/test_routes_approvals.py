@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from server.routes._common import DevicePrincipal
-from server.routes.approvals import ApprovalStore, ApprovalsHandler
+from server.routes.approvals import ApprovalsHandler, ApprovalStore
 from server.schemas import ApprovalInfo
 
 

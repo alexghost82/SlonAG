@@ -247,7 +247,11 @@ class WorkflowService:
         self.confidence.update(c)
         self.store.save_candidate(c)
 
-        status = "SUCCESS" if result.ok else f"FAILED: {result.error or result.step_results[-1].message if result.step_results else 'unknown'}"
+        status = (
+            "SUCCESS"
+            if result.ok
+            else f"FAILED: {result.error or result.step_results[-1].message if result.step_results else 'unknown'}"
+        )
         return result, status
 
     def execute_template(
@@ -332,9 +336,7 @@ class WorkflowService:
 
         candidate.parameter_slots = list(all_slots.values())
 
-    def _build_template(
-        self, candidate: WorkflowCandidate
-    ) -> WorkflowTemplate:
+    def _build_template(self, candidate: WorkflowCandidate) -> WorkflowTemplate:
         """Build a WorkflowTemplate from a parameterized candidate."""
         step_descriptors = []
         for idx, step in enumerate(candidate.steps):
@@ -355,16 +357,19 @@ class WorkflowService:
                     arg_template[key] = value
 
             required_slots = [
-                s.name for s in candidate.parameter_slots
+                s.name
+                for s in candidate.parameter_slots
                 if any(self.normalizer._key_to_slot_name(k) == s.name for k in step.args)
             ]
 
-            step_descriptors.append({
-                "tool_name": step.tool_name,
-                "arg_template": arg_template,
-                "required_slots": required_slots,
-                "safety_risk": 0,  # Filled at runtime by risk_for()
-            })
+            step_descriptors.append(
+                {
+                    "tool_name": step.tool_name,
+                    "arg_template": arg_template,
+                    "required_slots": required_slots,
+                    "safety_risk": 0,  # Filled at runtime by risk_for()
+                }
+            )
 
         return WorkflowTemplate(
             id=candidate.id,
@@ -373,7 +378,7 @@ class WorkflowService:
             description=candidate.description,
             state=candidate.state,
             parameter_slots=candidate.parameter_slots,
-            step_descriptors=step_descriptors,
+            step_descriptors=step_descriptors,  # type: ignore[arg-type]
             created_at=candidate.created_at,
             updated_at=time.time(),
         )

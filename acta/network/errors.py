@@ -33,9 +33,7 @@ _MESSAGES: dict[str, str] = {
     CODE_OFFLINE: t("network.offline"),
     CODE_TOOL_NOT_ALLOWED: t("network.tool_not_allowed"),
     CODE_UNSAFE_HOST: t("network.unsafe_host", host="_PLACEHOLDER_"),
-    CODE_PROXY_FORCED_EXTERNAL: (
-        t("network.proxy_forced_external")
-    ),
+    CODE_PROXY_FORCED_EXTERNAL: (t("network.proxy_forced_external")),
     CODE_INVALID_URL: t("network.invalid_url"),
     CODE_CLOUD_DENIED: t("network.cloud_denied"),
 }

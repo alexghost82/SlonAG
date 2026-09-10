@@ -49,7 +49,10 @@ select = ["E", "F", "W", "I", "UP"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+# CI mypy job is Python 3.12 only. Pytest still runs 3.11+3.12.
+# User decision 2026-09-10: fix the pre-existing debt on 3.12 rather than
+# keep python_version=3.11 (numpy stubs use 3.12 `type` syntax).
+python_version = "3.12"
 files = ["tests", "acta", "providers", "speech", "server", "gateway",
          "policies", "localization", "config", "sessions"]
 explicit_package_bases = true
@@ -77,12 +80,31 @@ module = [
     "zeroconf.*",
     "whisper",
     "mss",
+    "aiohttp",
+    "openai",
+    "send2trash",
+    "yaml",
+    "faster_whisper",
 ]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["actions.*", "agent.*", "or_client", "memory.*"]
+module = ["actions.*", "agent.*", "memory.*"]
 ignore_errors = true
+
+# Outside tool.mypy.files; imported by tests. Do not type-check via follow.
+[[tool.mypy.overrides]]
+module = [
+    "computer_control",
+    "computer_control.*",
+    "runtime",
+    "runtime.*",
+    "observability",
+    "observability.*",
+    "proactive_engine",
+    "proactive_engine.*",
+]
+follow_imports = "skip"
 
 [tool.coverage.run]
 source = ["."]

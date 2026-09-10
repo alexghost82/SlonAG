@@ -103,17 +103,12 @@ async def test_tool_stream_uses_non_stream_request_and_emits_canonical_call() ->
             '"done":true}',
         )
     )
-    events = [
-        event
-        async for event in OllamaChatProvider(transport=transport).stream(_request())
-    ]
+    events = [event async for event in OllamaChatProvider(transport=transport).stream(_request())]
     assert [event.type for event in events] == ["delta", "tool_call", "done"]
-    assert events[1].tool_call == ToolCall(
-        id="call-weather", name="get_weather", arguments={"city": "Rome"}
-    )
+    assert events[1].tool_call == ToolCall(id="call-weather", name="get_weather", arguments={"city": "Rome"})
     assert len(transport.calls) == 1
     assert transport.calls[0]["stream"] is True
-    assert transport.calls[0]["json_body"]["stream"] is True
+    assert transport.calls[0]["json_body"]["stream"] is True  # type: ignore[index]
 
 
 async def test_unknown_tool_capability_is_rejected_before_http() -> None:
@@ -124,9 +119,7 @@ async def test_unknown_tool_capability_is_rejected_before_http() -> None:
 
 
 async def test_text_only_payload_is_unchanged() -> None:
-    transport = FakeTransport(
-        chat={"message": {"role": "assistant", "content": "pong"}, "done": True}
-    )
+    transport = FakeTransport(chat={"message": {"role": "assistant", "content": "pong"}, "done": True})
     request = ChatRequest(
         model=_model(tool_calling=False),
         messages=(ChatMessage(role="user", content="ping"),),
@@ -148,17 +141,13 @@ async def test_native_continuation_uses_ollama_tool_name_contract() -> None:
         messages=(
             ChatMessage(role="user", content="Weather?"),
             AssistantToolCallMessage((call,)),
-            ToolResultMessage(
-                "internal-call", "get_weather", result={"temperature": 22}
-            ),
+            ToolResultMessage("internal-call", "get_weather", result={"temperature": 22}),
         ),
         tools=base.tools,
     )
-    transport = FakeTransport(
-        chat={"message": {"role": "assistant", "content": "22 C"}}
-    )
+    transport = FakeTransport(chat={"message": {"role": "assistant", "content": "22 C"}})
     await OllamaChatProvider(transport=transport).chat(request)
-    messages = transport.calls[0]["json_body"]["messages"]
+    messages = transport.calls[0]["json_body"]["messages"]  # type: ignore[index]
     assert messages[1]["tool_calls"][0]["id"] == "internal-call"
     assert messages[2]["tool_name"] == "get_weather"
     assert "tool_call_id" not in messages[2]  # Ollama native API correlates by name/order.

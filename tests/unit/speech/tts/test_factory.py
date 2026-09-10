@@ -7,7 +7,6 @@ import importlib
 from providers.contracts import TextToSpeechProvider
 from providers.registry import get, registered_ids
 from speech.tts.provider import LocalTTSProvider
-
 from tests.unit.speech.tts.fakes import RecordingEngine
 
 

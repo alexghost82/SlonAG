@@ -16,7 +16,7 @@ import pytest
 
 def test_active_procs_add_remove_serial() -> None:
     """Sequential add → discard is always consistent."""
-    from actions.shell_exec import _active_procs, _active_lock
+    from actions.shell_exec import _active_lock, _active_procs
 
     _active_procs.clear()
 
@@ -40,7 +40,7 @@ def test_active_procs_add_remove_serial() -> None:
 
 def test_active_procs_concurrent_add_remove() -> None:
     """Multiple threads adding and removing must not raise."""
-    from actions.shell_exec import _active_procs, _active_lock
+    from actions.shell_exec import _active_lock, _active_procs
 
     _active_procs.clear()
     errors: list[Exception] = []
@@ -75,7 +75,7 @@ def test_active_procs_concurrent_add_remove() -> None:
 
 def test_active_procs_concurrent_iterate_while_modify() -> None:
     """Iterating a copy of _active_procs must not race with concurrent add/discard."""
-    from actions.shell_exec import _active_procs, _active_lock
+    from actions.shell_exec import _active_lock, _active_procs
 
     _active_procs.clear()
     errors: list[Exception] = []
@@ -157,14 +157,14 @@ def test_shell_exec_logging_configured_via_get_logger() -> None:
     assert shell_exec.logger.name == "actions.shell_exec"
 
 
-def test_or_client_logging_configured_via_get_logger() -> None:
-    """or_client module uses logging.getLogger(__name__), not basicConfig."""
+def test_text_ops_logging_configured_via_get_logger() -> None:
+    """providers.text_ops uses logging.getLogger(__name__), not basicConfig."""
     import logging
 
-    import or_client
+    from providers import text_ops
 
-    assert isinstance(or_client.logger, logging.Logger)
-    assert or_client.logger.name == "or_client"
+    assert isinstance(text_ops.logger, logging.Logger)
+    assert text_ops.logger.name == "providers.text_ops"
 
 
 def test_no_basicconfig_in_library_modules() -> None:
@@ -175,7 +175,7 @@ def test_no_basicconfig_in_library_modules() -> None:
     package_root = Path(__file__).resolve().parents[3]
 
     library_modules = [
-        "or_client.py",
+        "providers/text_ops.py",
         "actions/shell_exec.py",
     ]
 
@@ -193,6 +193,5 @@ def test_no_basicconfig_in_library_modules() -> None:
                     and node.func.value.id == "logging"
                 ):
                     pytest.fail(
-                        f"{module_name} calls logging.basicConfig() — "
-                        "library modules must not configure root logging"
+                        f"{module_name} calls logging.basicConfig() — library modules must not configure root logging"
                     )

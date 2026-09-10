@@ -79,14 +79,14 @@ class ConnectivityMonitor:
                     timeout=5.0,
                 )
                 if result:
-                    self.record_pong()
+                    await self.record_pong()
                 return result
             except Exception:  # noqa: BLE001
                 return False
         elif self._session._remote_adapter is not None:
             try:
                 await self._session._remote_adapter.send("ping", {})
-                self.record_pong()
+                await self.record_pong()
                 return True
             except Exception:  # noqa: BLE001
                 return False
@@ -97,7 +97,7 @@ class ConnectivityMonitor:
         if not self._connected:
             return True
         elapsed = time.monotonic() - self._last_pong_at
-        limit = max_age or self._session.policy.heartbeat_timeout
+        limit = max_age or self._session._require_policy().heartbeat_timeout
         return elapsed > limit
 
     # -- Internal monitoring loop --
@@ -109,7 +109,7 @@ class ConnectivityMonitor:
                 await self._check_connection()
 
                 # Check heartbeat interval.
-                interval = self._session.policy.heartbeat_interval
+                interval = self._session._require_policy().heartbeat_interval
                 try:
                     await asyncio.wait_for(
                         self._stop.wait(),
@@ -157,7 +157,7 @@ class ConnectivityMonitor:
 
     async def _attempt_reconnect(self) -> None:
         """Attempt to reconnect using the current device or scan."""
-        max_attempts = self._session.policy.max_reconnect_attempts
+        max_attempts = self._session._require_policy().max_reconnect_attempts
 
         for attempt in range(1, max_attempts + 1):
             self._reconnect_attempt = attempt
@@ -181,7 +181,7 @@ class ConnectivityMonitor:
                     logger.warning("Reconnect attempt %d failed", attempt)
 
             # Delay before next attempt.
-            delay = self._session.policy.lan_reconnect_delay
+            delay = self._session._require_policy().lan_reconnect_delay
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=delay)
                 return  # stop requested during delay
@@ -220,6 +220,7 @@ class ConnectivityMonitor:
                 )
                 if self._session._migration is None:
                     from acta.connectivity.migration import LANRemoteMigration
+
                     self._session._migration = LANRemoteMigration(self._session)
                 try:
                     await self._session._migration.migrate_to_lan(

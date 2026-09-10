@@ -3,8 +3,10 @@
 import asyncio
 import threading
 import time
+
 import pytest
-from agent.steering import SteeringKind, SteeringSignal, SteeringQueue
+
+from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 
 
 def test_steering_kind_enum_members():

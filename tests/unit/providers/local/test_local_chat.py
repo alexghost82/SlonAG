@@ -9,7 +9,6 @@ from providers.local import (
     OllamaChatProvider,
     OpenAICompatibleChatProvider,
 )
-
 from tests.unit.providers.local.fakes import (
     FakeTransport,
     ollama_transport,
@@ -44,9 +43,7 @@ def _request(model: ModelInfo, role: str = "chat") -> ChatRequest:
         (LlamaCppChatProvider, openai_transport, "/v1/models"),
     ),
 )
-async def test_list_models_hits_mocked_catalog(
-    factory, make_transport, models_path: str
-) -> None:
+async def test_list_models_hits_mocked_catalog(factory, make_transport, models_path: str) -> None:
     transport = make_transport()
     provider = factory(transport=transport)
     models = await provider.list_models()

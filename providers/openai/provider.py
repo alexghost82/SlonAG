@@ -94,9 +94,7 @@ class OpenAIChatProvider:
         require_provider_match(request.model, PROVIDER_ID)
         require_capability(request.model, request.role)
         assembler = ToolCallStreamAssembler(PROVIDER_ID)
-        for event in self._http().stream_chat_completion(
-            self._chat_body(request, stream=True)
-        ):
+        for event in self._http().stream_chat_completion(self._chat_body(request, stream=True)):
             text = extract_delta_text(event)
             if text:
                 yield ChatEvent(type="delta", text=text)
@@ -207,5 +205,3 @@ def _normalize_key(api_key: str | None) -> str | None:
         return None
     stripped = api_key.strip()
     return stripped or None
-
-

@@ -68,12 +68,8 @@ class ToolSpec:
             )
         if self.side_effects is (self.side_effect_class is SideEffectClass.NONE):
             raise ValueError("side_effects and side_effect_class disagree")
-        if self.parallel_safe and not (
-            self.read_only and self.idempotent and not self.side_effects
-        ):
-            raise ValueError(
-                "parallel_safe tools must be read-only, idempotent, and side-effect free"
-            )
+        if self.parallel_safe and not (self.read_only and self.idempotent and not self.side_effects):
+            raise ValueError("parallel_safe tools must be read-only, idempotent, and side-effect free")
 
 
 @dataclass(frozen=True)

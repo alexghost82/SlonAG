@@ -83,12 +83,7 @@ def is_metadata_or_link_local_host(host: str) -> bool:
         return False
     if address in _METADATA_IPS:
         return True
-    return bool(
-        address.is_link_local
-        or address.is_unspecified
-        or address.is_multicast
-        or address.is_reserved
-    )
+    return bool(address.is_link_local or address.is_unspecified or address.is_multicast or address.is_reserved)
 
 
 def is_private_lan_host(host: str) -> bool:
@@ -106,9 +101,7 @@ def parse_ip_literal(
 ) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     """Parse an IP literal, including ambiguous decimal/hex/octal IPv4 forms."""
     dotted = _DOTTED_IPV4.fullmatch(host)
-    if dotted is not None and any(
-        len(part) > 1 and part.startswith("0") for part in dotted.groups()
-    ):
+    if dotted is not None and any(len(part) > 1 and part.startswith("0") for part in dotted.groups()):
         # Ambiguous octal-style IPv4 (browsers may treat 0177.0.0.1 as 127.0.0.1).
         return ipaddress.ip_address("127.0.0.1")
     if host.isdigit():
@@ -128,9 +121,7 @@ def parse_ip_literal(
         if g[1] is not None or g[2] is not None:
             return ipaddress.ip_address("0.0.0.0")
     try:
-        address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(
-            host
-        )
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(host)
     except ValueError:
         return None
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:

@@ -6,12 +6,8 @@ Covers:
 - Event queries
 """
 
-import time
-
-import pytest
-
 from acta.vision.temporal import TemporalAnalyzer
-from acta.vision.types import Bbox, DetectionResult, DetectionKind
+from acta.vision.types import Bbox, DetectionKind, DetectionResult
 
 
 class TestTemporalAnalyzer:

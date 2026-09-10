@@ -6,7 +6,6 @@ import pytest
 
 from config.schema import PROVIDER_IDS
 from providers.registry import clear, register
-
 from tests.unit.providers.mocks import MockChatProvider
 
 

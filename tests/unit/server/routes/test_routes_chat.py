@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from server.routes._common import DevicePrincipal
 from server.routes.chat import ChatHandler, ChatHandlerWithRuntime
-from server.schemas import CODE_APPROVAL_REQUIRED, CODE_MISSING_FIELD, CODE_UNAUTHORIZED
+from server.schemas import CODE_APPROVAL_REQUIRED, CODE_MISSING_FIELD
 
 
 def test_chat_unauthenticated_returns_401() -> None:
@@ -60,6 +60,7 @@ class _MockObservation:
         error: str | None = None,
     ) -> None:
         from agent.observation import ObservationKind
+
         self.ok = ok
         self.kind = ObservationKind(kind_str)
         self.content = content
@@ -165,7 +166,7 @@ def test_handler_with_runtime_error_message_in_russian() -> None:
     step = _MockStep(turn_index=0, tool_name="shell_exec", observation=obs)
     result = _MockAgentLoopResult(
         ok=False,
-        final_answer=None,
+        final_answer=None,  # type: ignore[arg-type]
         reason="Max turns reached",
         steps=[step],
     )
@@ -180,7 +181,7 @@ def test_handler_with_runtime_error_message_in_russian() -> None:
     assert response.status_code == 200
     observations = response.body.get("observations")
     assert observations is not None
-    assert any("Ошибка инструмента" in o for o in observations)
+    assert any("Ошибка инструмента" in o for o in observations)  # type: ignore[attr-defined]
 
 
 def test_handler_with_runtime_idempotency() -> None:

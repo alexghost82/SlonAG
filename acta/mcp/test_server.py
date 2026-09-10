@@ -115,7 +115,7 @@ class TestMcpServer:
 
     def __init__(self) -> None:
         # Force unbuffered I/O
-        sys.stdout.reconfigure(line_buffering=True)
+        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
     async def run(self) -> None:
         """Run the MCP server loop reading from stdin and writing to stdout."""
@@ -137,7 +137,7 @@ class TestMcpServer:
                 try:
                     request = json.loads(text)
                 except json.JSONDecodeError:
-                    self._write(stdout, self._error_response(None, "Parse error", f"Invalid JSON: {text[:200]}"))
+                    self._write(stdout, self._error_response(None, "Parse error", f"Invalid JSON: {text[:200]}"))  # type: ignore[arg-type]
                     continue
 
                 result = await self._handle(request)
@@ -307,9 +307,7 @@ class TestMcpServer:
         pass
 
     @staticmethod
-    def _error_response(
-        req_id: int | str | None, message: str, code: int = -32600
-    ) -> dict[str, Any]:
+    def _error_response(req_id: int | str | None, message: str, code: int = -32600) -> dict[str, Any]:
         error: dict[str, Any] = {
             "jsonrpc": "2.0",
             "error": {"code": code, "message": message},

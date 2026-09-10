@@ -8,7 +8,6 @@ from providers.local import (
     register_factories,
 )
 from providers.registry import get, registered_ids
-
 from tests.unit.providers.local.fakes import ollama_transport, openai_transport
 
 

@@ -5,15 +5,12 @@ import pytest
 from providers.contracts import ChatEvent, ChatMessage, ChatProvider, ChatRequest
 from providers.errors import CapabilityError
 from providers.registry import get
-
 from tests.unit.providers.mocks import REPLY_PREFIX, MockChatProvider, mock_model
 
 USER_TEXT = "ping from contract tests"
 
 
-async def _request_for(
-    provider: ChatProvider, *, role: str = "chat"
-) -> ChatRequest:
+async def _request_for(provider: ChatProvider, *, role: str = "chat") -> ChatRequest:
     models = await provider.list_models()
     return ChatRequest(
         model=models[0],
@@ -53,9 +50,7 @@ async def test_stream_yields_chat_events(registered_mocks) -> None:
     shapes: list[list[tuple[str, str]]] = []
     for provider_id in registered_mocks:
         provider = get(provider_id)()
-        events = [
-            event async for event in provider.stream(await _request_for(provider))
-        ]
+        events = [event async for event in provider.stream(await _request_for(provider))]
         assert events
         assert all(isinstance(event, ChatEvent) for event in events)
         assert {event.type for event in events} <= {"delta", "done"}

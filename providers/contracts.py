@@ -140,12 +140,7 @@ class ChatMessage:
 
 
 ConversationMessage: TypeAlias = (
-    UserMessage
-    | SystemMessage
-    | AssistantMessage
-    | AssistantToolCallMessage
-    | ToolResultMessage
-    | ChatMessage
+    UserMessage | SystemMessage | AssistantMessage | AssistantToolCallMessage | ToolResultMessage | ChatMessage
 )
 
 

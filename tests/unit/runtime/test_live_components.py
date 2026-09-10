@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from runtime.live_session import receive_live_session
-from runtime.audio import AudioPipeline, FreshAudioQueue, PLAYBACK_QUEUE_CHUNKS
-from runtime.tool_bridge import LiveToolBridge
-from runtime.lifecycle import run_live_lifecycle
 from acta.safety import RiskLevel
 from acta.tools import ToolRegistry, ToolSpec
 from agent.latency import TurnLatencyTracker
+from runtime.audio import PLAYBACK_QUEUE_CHUNKS, AudioPipeline, FreshAudioQueue
+from runtime.lifecycle import run_live_lifecycle
+from runtime.live_session import receive_live_session
+from runtime.tool_bridge import LiveToolBridge
 
 
 def test_audio_pipeline_owns_connection_queues_without_audio_dependency() -> None:
@@ -66,9 +66,7 @@ async def test_microphone_audio_is_captured_while_assistant_is_speaking(
         def __exit__(self, *_args) -> None:
             return None
 
-    monkeypatch.setitem(
-        sys.modules, "sounddevice", SimpleNamespace(InputStream=InputStream)
-    )
+    monkeypatch.setitem(sys.modules, "sounddevice", SimpleNamespace(InputStream=InputStream))
     pipeline = AudioPipeline(
         ui=SimpleNamespace(muted=False),
         set_speaking=lambda _value: None,
@@ -197,13 +195,15 @@ async def test_live_session_delegates_same_response_tool_batch_once() -> None:
         SimpleNamespace(id="a", name="read_a", args={"value": 1}),
         SimpleNamespace(id="b", name="read_b", args={"value": 2}),
     ]
-    session = FakeSession([
-        SimpleNamespace(
-            data=None,
-            server_content=None,
-            tool_call=SimpleNamespace(function_calls=calls),
-        )
-    ])
+    session = FakeSession(
+        [
+            SimpleNamespace(
+                data=None,
+                server_content=None,
+                tool_call=SimpleNamespace(function_calls=calls),
+            )
+        ]
+    )
     execute_tools = AsyncMock(return_value=["result-a", "result-b"])
 
     await receive_live_session(
@@ -218,9 +218,7 @@ async def test_live_session_delegates_same_response_tool_batch_once() -> None:
     )
 
     execute_tools.assert_awaited_once_with(calls)
-    session.send_tool_response.assert_awaited_once_with(
-        function_responses=["result-a", "result-b"]
-    )
+    session.send_tool_response.assert_awaited_once_with(function_responses=["result-a", "result-b"])
 
 
 @pytest.mark.asyncio
@@ -232,8 +230,10 @@ async def test_live_turn_callbacks_distinguish_interrupted_and_completed() -> No
         turn_complete=False,
     )
     interrupted = SimpleNamespace(
-        interrupted=True, input_transcription=None,
-        output_transcription=None, turn_complete=False,
+        interrupted=True,
+        input_transcription=None,
+        output_transcription=None,
+        turn_complete=False,
     )
     completed = SimpleNamespace(
         interrupted=False,
@@ -241,23 +241,26 @@ async def test_live_turn_callbacks_distinguish_interrupted_and_completed() -> No
         output_transcription=SimpleNamespace(text="new answer"),
         turn_complete=True,
     )
-    session = FakeSession([
-        SimpleNamespace(data=None, server_content=partial, tool_call=None),
-        SimpleNamespace(data=None, server_content=interrupted, tool_call=None),
-        SimpleNamespace(data=None, server_content=completed, tool_call=None),
-    ])
+    session = FakeSession(
+        [
+            SimpleNamespace(data=None, server_content=partial, tool_call=None),
+            SimpleNamespace(data=None, server_content=interrupted, tool_call=None),
+            SimpleNamespace(data=None, server_content=completed, tool_call=None),
+        ]
+    )
     starts = []
     finishes = []
 
     await receive_live_session(
-        session=session, audio_in_queue=asyncio.Queue(),
+        session=session,
+        audio_in_queue=asyncio.Queue(),
         ui=SimpleNamespace(write_log=lambda _message: None),
-        set_speaking=lambda _value: None, execute_tool=AsyncMock(),
-        update_memory=lambda *_args: None, latency_trace=TurnLatencyTracker(),
+        set_speaking=lambda _value: None,
+        execute_tool=AsyncMock(),
+        update_memory=lambda *_args: None,
+        latency_trace=TurnLatencyTracker(),
         on_turn_started=lambda: starts.append("start"),
-        on_turn_finished=lambda user, assistant, interrupted: finishes.append(
-            (user, assistant, interrupted)
-        ),
+        on_turn_finished=lambda user, assistant, interrupted: finishes.append((user, assistant, interrupted)),
     )
 
     assert starts == ["start", "start"]
@@ -280,22 +283,18 @@ async def test_live_tool_bridge_requires_real_confirmation_for_side_effects(
             description="open",
             input_schema={"type": "object"},
             output_schema=None,
-            handler=lambda arguments: calls.append(dict(arguments)) or "opened",
+            handler=lambda arguments: calls.append(dict(arguments)) or "opened",  # type: ignore[func-returns-value]
             risk=RiskLevel.CONFIRM,
         )
     )
-    control_plane = SimpleNamespace(
-        request_approval=lambda *args, **kwargs: approved
-    )
+    control_plane = SimpleNamespace(request_approval=lambda *args, **kwargs: approved)
     bridge = LiveToolBridge(
         ui=SimpleNamespace(control_plane=control_plane, current_file=None),
         speak=lambda _text: None,
         registry=registry,
     )
 
-    result = await bridge.execute(
-        "open_app", {"app_name": "Calculator"}, intent="Open calculator"
-    )
+    result = await bridge.execute("open_app", {"app_name": "Calculator"}, intent="Open calculator")
 
     assert result.ok is approved
     assert len(calls) == int(approved)
@@ -306,11 +305,7 @@ async def test_live_tool_bridge_requires_real_confirmation_for_side_effects(
     "control_plane",
     [
         None,
-        SimpleNamespace(
-            request_approval=lambda *args, **kwargs: (_ for _ in ()).throw(
-                RuntimeError("boom")
-            )
-        ),
+        SimpleNamespace(request_approval=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom"))),
     ],
 )
 async def test_live_tool_bridge_approval_failure_fails_closed(control_plane) -> None:
@@ -322,9 +317,7 @@ async def test_live_tool_bridge_approval_failure_fails_closed(control_plane) -> 
         approval_timeout_seconds=0.1,
     )
 
-    result = await bridge.execute(
-        "open_app", {"app_name": "Calculator"}, intent="approval failure"
-    )
+    result = await bridge.execute("open_app", {"app_name": "Calculator"}, intent="approval failure")
 
     assert result.ok is False
     assert calls == []
@@ -335,9 +328,7 @@ async def test_live_tool_bridge_approval_timeout_fails_closed() -> None:
     calls: list[dict[str, object]] = []
     release = threading.Event()
     registry = _side_effect_registry(calls)
-    control_plane = SimpleNamespace(
-        request_approval=lambda *args, **kwargs: release.wait(1)
-    )
+    control_plane = SimpleNamespace(request_approval=lambda *args, **kwargs: release.wait(1))
     bridge = LiveToolBridge(
         ui=SimpleNamespace(control_plane=control_plane, current_file=None),
         speak=lambda _text: None,
@@ -346,8 +337,7 @@ async def test_live_tool_bridge_approval_timeout_fails_closed() -> None:
     )
 
     result = await bridge.execute(
-        "open_app", {"app_name": "Calculator"},
-        intent="test timeout", call_id="approval-timeout"
+        "open_app", {"app_name": "Calculator"}, intent="test timeout", call_id="approval-timeout"
     )
     release.set()
 
@@ -357,8 +347,7 @@ async def test_live_tool_bridge_approval_timeout_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_live_tool_bridge_cancellation_during_approval_prevents_execution(
-) -> None:
+async def test_live_tool_bridge_cancellation_during_approval_prevents_execution() -> None:
     calls: list[dict[str, object]] = []
     approval_started = threading.Event()
     release = threading.Event()
@@ -368,18 +357,13 @@ async def test_live_tool_bridge_cancellation_during_approval_prevents_execution(
         return release.wait(1)
 
     bridge = LiveToolBridge(
-        ui=SimpleNamespace(
-            control_plane=SimpleNamespace(request_approval=approve), current_file=None
-        ),
+        ui=SimpleNamespace(control_plane=SimpleNamespace(request_approval=approve), current_file=None),
         speak=lambda _text: None,
         registry=_side_effect_registry(calls),
         approval_timeout_seconds=1,
     )
     task = asyncio.create_task(
-        bridge.execute(
-            "open_app", {"app_name": "Calculator"},
-            intent="cancel", call_id="cancelled-call"
-        )
+        bridge.execute("open_app", {"app_name": "Calculator"}, intent="cancel", call_id="cancelled-call")
     )
     await asyncio.to_thread(approval_started.wait, 1)
     task.cancel()
@@ -390,8 +374,7 @@ async def test_live_tool_bridge_cancellation_during_approval_prevents_execution(
 
     assert calls == []
     duplicate = await bridge.execute(
-        "open_app", {"app_name": "Calculator"},
-        intent="duplicate", call_id="cancelled-call"
+        "open_app", {"app_name": "Calculator"}, intent="duplicate", call_id="cancelled-call"
     )
     assert duplicate.code == "cancelled"
     assert calls == []
@@ -410,12 +393,8 @@ async def test_live_tool_bridge_deduplicates_side_effect_call_id() -> None:
     )
 
     arguments = {"app_name": "Calculator"}
-    first = await bridge.execute(
-        "open_app", arguments, intent="first", call_id="same-id"
-    )
-    second = await bridge.execute(
-        "open_app", arguments, intent="second", call_id="same-id"
-    )
+    first = await bridge.execute("open_app", arguments, intent="first", call_id="same-id")
+    second = await bridge.execute("open_app", arguments, intent="second", call_id="same-id")
 
     assert first.ok is True and second.ok is True
     assert len(calls) == 1
@@ -429,7 +408,7 @@ def _side_effect_registry(calls: list[dict[str, object]]) -> ToolRegistry:
             description="open",
             input_schema={"type": "object"},
             output_schema=None,
-            handler=lambda arguments: calls.append(dict(arguments)) or "opened",
+            handler=lambda arguments: calls.append(dict(arguments)) or "opened",  # type: ignore[func-returns-value]
             risk=RiskLevel.CONFIRM,
         )
     )
@@ -486,12 +465,10 @@ async def test_receive_live_session_routes_audio_transcript_and_tool_result() ->
 
     assert await audio_queue.get() == b"pcm"
     assert "Slon: answer" in logs
-    assert any("question" in l or "вопрос" in l for l in logs)
+    assert any("question" in line or "вопрос" in line for line in logs)
     assert any(log.startswith(prefix) for log in logs for prefix in ["SYS: latency ", "СИСТ: задержка "])
     assert len(trace.history()) == 1
-    session.send_tool_response.assert_awaited_once_with(
-        function_responses=["native-result"]
-    )
+    session.send_tool_response.assert_awaited_once_with(function_responses=["native-result"])
 
 
 def test_live_latency_tracker_resets_marks_between_turns() -> None:
@@ -548,11 +525,7 @@ async def test_live_lifecycle_cancellation_cleans_up_connection() -> None:
         async def __aexit__(self, exc_type, exc, traceback):
             return False
 
-    client = SimpleNamespace(
-        aio=SimpleNamespace(
-            live=SimpleNamespace(connect=lambda **_kwargs: Connection())
-        )
-    )
+    client = SimpleNamespace(aio=SimpleNamespace(live=SimpleNamespace(connect=lambda **_kwargs: Connection())))
     ui = SimpleNamespace(set_state=lambda _state: None, write_log=lambda _text: None)
 
     def on_connected(_session, _loop) -> None:
@@ -591,11 +564,7 @@ async def test_live_lifecycle_reconnects_when_session_task_ends() -> None:
         async def __aexit__(self, exc_type, exc, traceback):
             return False
 
-    client = SimpleNamespace(
-        aio=SimpleNamespace(
-            live=SimpleNamespace(connect=lambda **_kwargs: Connection())
-        )
-    )
+    client = SimpleNamespace(aio=SimpleNamespace(live=SimpleNamespace(connect=lambda **_kwargs: Connection())))
     ui = SimpleNamespace(set_state=lambda _state: None, write_log=lambda _text: None)
 
     def on_connected(_session, _loop) -> None:

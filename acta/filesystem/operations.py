@@ -20,6 +20,7 @@ from acta.filesystem.security import (
     SizeExceeded,
     TraversalDetected,
     _check_cancel,
+    _coerce_roots,
     _is_forbidden_system_path,
     _safe_relative,
     default_allowlist_roots,
@@ -68,18 +69,18 @@ class FileSystemResult:
         return cls(ok=False, code=code, message=message)
 
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def _format_size(size: int) -> str:
+    value = float(size)
     for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"
+        if value < 1024:
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
 
 
 def _log_message(action: str, *paths: Path, roots: tuple[Path, ...]) -> str:
@@ -91,7 +92,6 @@ def _log_message(action: str, *paths: Path, roots: tuple[Path, ...]) -> str:
 # ---------------------------------------------------------------------------
 # Read
 # ---------------------------------------------------------------------------
-
 
 
 def _validate(path_raw: str, roots, **kwargs) -> Path:
@@ -180,9 +180,7 @@ def write(
         with target.open("a" if append else "w", encoding="utf-8") as f:
             f.write(content)
         action = "Appended" if append else "Written"
-        return FileSystemResult._ok(
-            message=f"{action}: {target.name} ({byte_size} bytes)"
-        )
+        return FileSystemResult._ok(message=f"{action}: {target.name} ({byte_size} bytes)")
     except PermissionError:
         return FileSystemResult.err("permission_denied", f"Permission denied: {target}")
     except OSError as exc:
@@ -218,9 +216,7 @@ def create_file(
 
     try:
         target.write_text(content, encoding="utf-8")
-        return FileSystemResult._ok(
-            message=f"Created: {target.name} ({byte_size} bytes)"
-        )
+        return FileSystemResult._ok(message=f"Created: {target.name} ({byte_size} bytes)")
     except FileExistsError:
         # File exists — this is expected for create semantics; treat as write
         return write(path_raw, content, roots=roots, cancel_event=cancel_event)
@@ -299,9 +295,7 @@ def list_directory(
 
     if not items:
         return FileSystemResult._ok(message=f"Directory is empty: {target.name}/")
-    return FileSystemResult._ok(
-        message=f"Contents of {target.name}/ ({len(items)} items):\n" + "\n".join(items)
-    )
+    return FileSystemResult._ok(message=f"Contents of {target.name}/ ({len(items)} items):\n" + "\n".join(items))
 
 
 # ---------------------------------------------------------------------------
@@ -362,10 +356,7 @@ def search(
     query = name_pattern or extension or "files"
     if not results:
         return FileSystemResult._ok(message=f"No {query} found in {search_path.name}/")
-    return FileSystemResult._ok(
-        message=f"Found {len(results)} file(s):\n" + "\n".join(results)
-    )
-
+    return FileSystemResult._ok(message=f"Found {len(results)} file(s):\n" + "\n".join(results))
 
 
 # ---------------------------------------------------------------------------
@@ -612,21 +603,27 @@ def trash(
     if _send2trash_mod is not None:
         try:
             _send2trash_mod.send2trash(str(target))
-            return FileSystemResult._ok(message=f"Moved to Recycle Bin: {target.name}")
+            if not target.exists():
+                return FileSystemResult._ok(message=f"Moved to Recycle Bin: {target.name}")
         except (PermissionError, OSError):
-            pass  # Fall through to fallback deletion
+            pass
 
-    # Fallback: permanent deletion (already validated by security policy)
+    # Workspace trash — never permanent unlink/rmtree.
     try:
-        if target.is_dir():
-            shutil.rmtree(str(target))
-        else:
-            target.unlink()
-        return FileSystemResult._ok(message=f"Deleted: {target.name}")
-    except PermissionError:
-        return FileSystemResult.err("permission_denied", "Permission denied.")
+        trash_root = (roots[0] if roots else target.parent) / ".Trash"
+        trash_root.mkdir(parents=True, exist_ok=True)
+        dest = trash_root / target.name
+        suffix = 1
+        while dest.exists():
+            dest = trash_root / f"{target.name}.{suffix}"
+            suffix += 1
+        target.rename(dest)
+        return FileSystemResult._ok(message=f"Moved to Recycle Bin: {target.name}")
     except OSError as exc:
-        return FileSystemResult.err("trash_error", f"Cannot trash {target}: {exc}")
+        return FileSystemResult.err(
+            "trash_failed",
+            f"Could not move to trash: {exc}",
+        )
 
 
 def delete(
@@ -757,12 +754,14 @@ def filesystem_operation(
     append: bool = False,
     recursive: bool = False,
     count: int = 10,
-    roots: tuple[Path, ...] | None = None,
+    roots: tuple[Path, ...] | list[str] | None = None,
     cancel_event: threading.Event | None = None,
     **_extra: Any,
 ) -> FileSystemResult:
     """Single dispatcher for all filesystem operations."""
     _check_cancel(cancel_event)
+    if roots is not None:
+        roots = _coerce_roots(roots)
 
     # Resolve path argument (path or path_raw)
     target_path = path or path_raw

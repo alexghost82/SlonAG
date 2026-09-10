@@ -6,15 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from acta.app import STEPS, SetupWizardController, SetupWizardError, SetupWizardState
 from config.schema import DEFAULT_LANGUAGE, MODEL_ROLE_KEYS, Settings
 from localization.translator import load_catalog, set_locale, tr
-from acta.app import STEPS, SetupWizardController, SetupWizardError, SetupWizardState
 from providers.contracts import ModelInfo
 from providers.errors import CapabilityError
 
-WIZARD_SOURCE = (
-    Path(__file__).resolve().parents[3] / "mark" / "app" / "setup_wizard.py"
-)
+WIZARD_SOURCE = Path(__file__).resolve().parents[3] / "mark" / "app" / "setup_wizard.py"
 APP_INIT_SOURCE = Path(__file__).resolve().parents[3] / "mark" / "app" / "__init__.py"
 SENTINEL_KEY = "dummy-not-a-live-key-XYZ-4242"
 LOOPBACK_URL = "http://127.0.0.1:11434"
@@ -186,9 +184,7 @@ def test_supported_role_is_accepted() -> None:
     wizard.assign_role("chat", "cloud-chat")
     wizard.assign_role("vision", "cloud-vision")
     assert wizard.model_roles["chat"] == "cloud-chat"
-    assert [model.model_id for model in wizard.models_for_role("embeddings")] == [
-        "cloud-embed"
-    ]
+    assert [model.model_id for model in wizard.models_for_role("embeddings")] == ["cloud-embed"]
 
 
 def test_non_loopback_local_url_is_rejected() -> None:

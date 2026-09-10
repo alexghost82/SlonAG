@@ -150,9 +150,7 @@ class SetupWizardState:
         if self.privacy_profile is None:
             raise SetupWizardError("privacy_profile must be chosen first")
         if value not in self.allowed_providers():
-            raise SetupWizardError(
-                f"provider {value!r} is not allowed for {self.privacy_profile}"
-            )
+            raise SetupWizardError(f"provider {value!r} is not allowed for {self.privacy_profile}")
         if value != self.provider_id:
             self._clear_credentials()
         self.provider_id = value

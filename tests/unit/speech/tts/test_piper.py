@@ -81,7 +81,7 @@ def test_synthesize_invokes_cli_with_model_and_stdout(
     assert "--model" in argv
     assert str(model) in argv
     assert argv[argv.index("--output-file") + 1] == "-"
-    assert call["input"] == "Привет.".encode("utf-8")
+    assert call["input"] == "Привет.".encode()
     assert call["capture_output"] is True
 
 

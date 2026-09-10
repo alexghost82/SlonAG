@@ -43,9 +43,7 @@ class SnapshotWatchingEngine:
 
     def analyze(self, image: bytes, prompt: str, kind: str) -> str:
         self.calls.append((image, prompt, kind))
-        self.snapshots_during_call = [
-            path for path in self.temp_dir.iterdir() if path.is_file()
-        ]
+        self.snapshots_during_call = [path for path in self.temp_dir.iterdir() if path.is_file()]
         self.snapshot_bytes = [path.read_bytes() for path in self.snapshots_during_call]
         return self.text
 
@@ -61,7 +59,5 @@ class ExplodingEngine:
     def analyze(self, image: bytes, prompt: str, kind: str) -> str:
         self.calls.append((image, prompt, kind))
         if self.temp_dir is not None:
-            self.snapshots_during_call = [
-                path for path in self.temp_dir.iterdir() if path.is_file()
-            ]
+            self.snapshots_during_call = [path for path in self.temp_dir.iterdir() if path.is_file()]
         raise RuntimeError("vision engine failed")

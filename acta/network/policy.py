@@ -56,9 +56,7 @@ class NetworkPolicy:
         journal: NetworkJournal | None = None,
     ) -> None:
         self.mode = _coerce_mode(mode)
-        self.tool_allowlist: frozenset[str] = (
-            frozenset() if tool_allowlist is None else frozenset(tool_allowlist)
-        )
+        self.tool_allowlist: frozenset[str] = frozenset() if tool_allowlist is None else frozenset(tool_allowlist)
         self.allow_private_lan = bool(allow_private_lan)
         self.privacy_profile = privacy_profile
         self._environ: Mapping[str, str] | None = environ

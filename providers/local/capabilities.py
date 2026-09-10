@@ -22,9 +22,7 @@ class LocalModelCapabilities:
     context_length: int = 0
 
 
-_BOOLEAN_FIELDS = frozenset(
-    {"text", "streaming", "tool_calling", "structured_output", "vision"}
-)
+_BOOLEAN_FIELDS = frozenset({"text", "streaming", "tool_calling", "structured_output", "vision"})
 _FIELDS = _BOOLEAN_FIELDS | {"context_length"}
 
 # These entries intentionally identify model families, rather than protocols.
@@ -93,9 +91,7 @@ def _runtime_fields(metadata: Mapping[str, object]) -> dict[str, object]:
     return resolved
 
 
-def _validated_fields(
-    source: Mapping[str, object], *, strict: bool
-) -> dict[str, object]:
+def _validated_fields(source: Mapping[str, object], *, strict: bool) -> dict[str, object]:
     resolved: dict[str, object] = {}
     for key, value in source.items():
         if key not in _FIELDS:
@@ -107,11 +103,7 @@ def _validated_fields(
         )
         if not valid:
             if strict:
-                expected = (
-                    "a boolean"
-                    if key in _BOOLEAN_FIELDS
-                    else "a non-negative integer"
-                )
+                expected = "a boolean" if key in _BOOLEAN_FIELDS else "a non-negative integer"
                 raise ValueError(f"local model override {key!r} must be {expected}")
             continue
         resolved[key] = value

@@ -30,9 +30,7 @@ class MemoryStore:
     """In-process memory entries. Tests inject this; no filesystem I/O."""
 
     def __init__(self, entries: tuple[MemoryEntry, ...] | None = None) -> None:
-        self._entries: dict[str, MemoryEntry] = {
-            e.id: e for e in (entries or ())
-        }
+        self._entries: dict[str, MemoryEntry] = {e.id: e for e in (entries or ())}
 
     def list_entries(self) -> tuple[MemoryEntry, ...]:
         return tuple(self._entries.values())

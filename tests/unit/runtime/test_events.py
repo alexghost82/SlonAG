@@ -6,7 +6,7 @@ from runtime.events import RuntimeEventBus, RuntimeEventKind, UIRuntimeEventSink
 
 
 def test_runtime_events_are_ordered_monotonic_and_payload_free() -> None:
-    events = []
+    events = []  # type: ignore[var-annotated]
     bus = RuntimeEventBus()
     unsubscribe = bus.subscribe(events.append)
     bus.emit(RuntimeEventKind.THINKING, turn_id="turn-1")
@@ -21,15 +21,13 @@ def test_runtime_events_are_ordered_monotonic_and_payload_free() -> None:
     bus.emit(RuntimeEventKind.SPEAKING)
 
     assert [event.sequence for event in events] == [1, 2, 3]
-    assert [event.monotonic_at for event in events] == sorted(
-        event.monotonic_at for event in events
-    )
+    assert [event.monotonic_at for event in events] == sorted(event.monotonic_at for event in events)
     assert not hasattr(events[1], "arguments")
     assert not hasattr(events[2], "result")
 
 
 def test_failing_runtime_event_sink_is_isolated() -> None:
-    received = []
+    received = []  # type: ignore[var-annotated]
     bus = RuntimeEventBus()
     bus.subscribe(lambda _event: (_ for _ in ()).throw(RuntimeError("sink")))
     bus.subscribe(received.append)
@@ -65,13 +63,11 @@ def test_event_has_id_correlation_and_replay() -> None:
 
 
 def test_ui_runtime_event_sink_adapts_state_and_control_plane() -> None:
-    states = []
+    states = []  # type: ignore[var-annotated]
     published = []
     ui = SimpleNamespace(
         set_state=states.append,
-        control_plane=SimpleNamespace(
-            publish=lambda event, payload: published.append((event, payload))
-        ),
+        control_plane=SimpleNamespace(publish=lambda event, payload: published.append((event, payload))),
     )
     bus = RuntimeEventBus()
     bus.subscribe(UIRuntimeEventSink(ui))

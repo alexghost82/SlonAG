@@ -1,4 +1,5 @@
 """Shared fixtures for SlonAG tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,12 +18,14 @@ def repo_root(project_root: Path) -> Path:
     """Root of the SlonAG project (alias for project_root)."""
     return project_root
 
+
 @pytest.fixture(scope="session", autouse=True)
 def _mock_tkinter():
     """Mock tkinter, pyautogui, PIL, and related deps for headless Linux environments
     where tkinter is not installed.  This prevents ModuleNotFoundError / SystemExit
     in computer_control.capabilities which imports pyautogui at module level."""
-    import sys, types
+    import sys
+    import types
 
     # Build a minimal tkinter mock before anything can import it
     tk = types.ModuleType("tkinter")

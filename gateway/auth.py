@@ -42,7 +42,10 @@ class GatewayAuthService:
     """One-time pairing followed by Ed25519 possession proof and token rotation."""
 
     def __init__(
-        self, *, store: GatewayStore, signing_key: bytes,
+        self,
+        *,
+        store: GatewayStore,
+        signing_key: bytes,
         pairing: PairingService | None = None,
         clock: Callable[[], float] | None = None,
         access_ttl_seconds: float = 900.0,
@@ -51,21 +54,16 @@ class GatewayAuthService:
         self._clock = clock or time.time
         self._pairing = pairing or PairingService(clock=self._clock)
         self._lock = threading.RLock()
-        self._pairing_limit = RateLimiter(
-            capacity=10, refill_per_second=1 / 12, clock=self._clock
-        )
-        self._challenge_limit = RateLimiter(
-            capacity=8, refill_per_second=1 / 10, clock=self._clock
-        )
+        self._pairing_limit = RateLimiter(capacity=10, refill_per_second=1 / 12, clock=self._clock)
+        self._challenge_limit = RateLimiter(capacity=8, refill_per_second=1 / 10, clock=self._clock)
         self._challenges: dict[str, tuple[str, float]] = {}
         self._tokens = TokenService(
-            signing_key=signing_key, clock=self._clock,
+            signing_key=signing_key,
+            clock=self._clock,
             is_revoked=lambda device_id: not self._active(device_id),
             refresh_put=self._put_refresh,
             refresh_pop=self._pop_refresh,
-            jti_consume=lambda jti: self.store.consume_access_jti(
-                jti, float(self._clock())
-            ),
+            jti_consume=lambda jti: self.store.consume_access_jti(jti, float(self._clock())),
             access_ttl_seconds=access_ttl_seconds,
         )
 
@@ -76,7 +74,11 @@ class GatewayAuthService:
             return self._pairing.start()
 
     def complete_pairing(
-        self, *, code: str, device_name: str, public_key: str,
+        self,
+        *,
+        code: str,
+        device_name: str,
+        public_key: str,
         workspace_id: str,
     ) -> str:
         key_bytes = _decode_public_key(public_key)
@@ -86,9 +88,12 @@ class GatewayAuthService:
                 raise GatewayAuthError("pairing rate limit exceeded")
             credential = self._pairing.complete(code, device_name)
             self.store.trust_device(
-                device_id=credential.device_id, device_name=device_name.strip(),
-                public_key=public_key, key_fingerprint=fingerprint,
-                workspace_id=workspace_id, created_at=float(self._clock()),
+                device_id=credential.device_id,
+                device_name=device_name.strip(),
+                public_key=public_key,
+                key_fingerprint=fingerprint,
+                workspace_id=workspace_id,
+                created_at=float(self._clock()),
             )
         return credential.device_id
 
@@ -104,7 +109,11 @@ class GatewayAuthService:
         return DeviceChallenge(device_id, nonce, expires_at)
 
     def exchange_proof(
-        self, *, device_id: str, nonce: str, signature: str,
+        self,
+        *,
+        device_id: str,
+        nonce: str,
+        signature: str,
     ) -> IssuedTokens:
         with self._lock:
             pending = self._challenges.pop(device_id, None)
@@ -116,9 +125,7 @@ class GatewayAuthService:
         if record is None or not bool(record["active"]):
             raise GatewayAuthError("device is not trusted")
         try:
-            public = Ed25519PublicKey.from_public_bytes(
-                _decode_public_key(str(record["public_key"]))
-            )
+            public = Ed25519PublicKey.from_public_bytes(_decode_public_key(str(record["public_key"])))
             public.verify(_decode_signature(signature), nonce.encode("utf-8"))
         except (InvalidSignature, ValueError) as exc:
             raise GatewayAuthError("device key proof rejected") from exc
@@ -159,8 +166,11 @@ class GatewayAuthService:
 
     def _put_refresh(self, token_hash: str, record: _RefreshRecord) -> None:
         self.store.put_refresh_token(
-            token_hash, device_id=record.device_id, device_name=record.device_name,
-            expires_at=record.expires_at, scopes=sorted(record.scopes),
+            token_hash,
+            device_id=record.device_id,
+            device_name=record.device_name,
+            expires_at=record.expires_at,
+            scopes=sorted(record.scopes),
         )
 
     def _pop_refresh(self, token_hash: str) -> _RefreshRecord | None:
@@ -170,8 +180,8 @@ class GatewayAuthService:
         return _RefreshRecord(
             device_id=str(row["device_id"]),
             device_name=(str(row["device_name"]) if row["device_name"] is not None else None),
-            expires_at=float(row["expires_at"]),
-            scopes=frozenset(str(value) for value in row["scopes"]),
+            expires_at=float(row["expires_at"]),  # type: ignore[arg-type]
+            scopes=frozenset(str(value) for value in row["scopes"]),  # type: ignore[attr-defined]
         )
 
 

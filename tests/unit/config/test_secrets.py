@@ -9,10 +9,10 @@ import pytest
 from config.secrets import (
     SecretStoreError,
     get_secret,
+    redact_secret_text,
     set_secret,
 )
 from config.settings import load_settings, save_settings
-
 
 SENTINEL = "dummy-not-a-live-key-XYZ-4242"
 
@@ -21,7 +21,7 @@ def test_production_code_does_not_access_legacy_key_file_directly() -> None:
     root = Path(__file__).resolve().parents[3]
     forbidden_names = ("API_FILE", "API_CONFIG_PATH", "API_KEY_PATH")
     violations: list[str] = []
-    candidates = [root / "main.py", root / "or_client.py", root / "setup.py"]
+    candidates = [root / "main.py", root / "setup.py"]
     for package in ("actions", "agent", "runtime", "providers", "acta"):
         candidates.extend((root / package).rglob("*.py"))
 
@@ -61,9 +61,7 @@ def test_file_fallback_round_trip(file_fallback):
 def test_file_fallback_repairs_existing_permissions(file_fallback):
     if os.name == "nt":
         pytest.skip("POSIX modes are not applicable on Windows")
-    file_fallback.write_text(
-        '{"gemini_api_key": "' + SENTINEL + '"}', encoding="utf-8"
-    )
+    file_fallback.write_text('{"gemini_api_key": "' + SENTINEL + '"}', encoding="utf-8")
     file_fallback.chmod(0o644)
 
     assert get_secret("gemini_api_key") == SENTINEL
@@ -111,17 +109,39 @@ def test_settings_save_does_not_store_api_keys(isolated_paths):
     assert SENTINEL not in text
 
 
-def test_set_secret_does_not_use_file_when_system_store_available(
-    isolated_paths, monkeypatch
-):
+def test_redact_secret_text_strips_known_key_shapes() -> None:
+    fake = "sk-abcdefghijklmnopqrstuvwxyz123456"
+    google = "AIzaSyA-not-a-real-google-key-xyz"
+    bearer = "Bearer sk-or-v1-abcdefghijklmnopqrstuvwxyz"
+    text = f"provider failed api_key={fake} header={bearer} g={google}"
+    redacted = redact_secret_text(text)
+    assert fake not in redacted
+    assert google not in redacted
+    assert "sk-or-v1-abcdefghijklmnopqrstuvwxyz" not in redacted
+    assert "[REDACTED]" in redacted
+
+
+def test_logged_exception_does_not_contain_fake_key(caplog) -> None:
+    import logging
+
+    fake = "sk-abcdefghijklmnopqrstuvwxyz123456"
+    logger = logging.getLogger("test.secrets.redact")
+    with caplog.at_level(logging.ERROR, logger=logger.name):
+        try:
+            raise RuntimeError(f"upstream rejected key {fake}")
+        except RuntimeError as exc:
+            logger.error("%s", redact_secret_text(str(exc)))
+    assert fake not in caplog.text
+    assert fake not in redact_secret_text(str(RuntimeError(fake)))
+
+
+def test_set_secret_does_not_use_file_when_system_store_available(isolated_paths, monkeypatch):
     import config.secrets as secrets
 
     stored: dict[str, str] = {}
 
     monkeypatch.setattr(secrets, "_system_store_available", lambda: True)
-    monkeypatch.setattr(
-        secrets, "_system_set", lambda name, value: stored.update({name: value})
-    )
+    monkeypatch.setattr(secrets, "_system_set", lambda name, value: stored.update({name: value}))
     monkeypatch.setattr(secrets, "_system_get", lambda name: stored.get(name))
 
     set_secret("openai_api_key", SENTINEL)

@@ -24,7 +24,6 @@ from runtime.canonical_voice import (
     VoiceBridge,
     VoiceConfig,
 )
-
 from tests.unit.speech.voice.fakes import FakeUI
 
 
@@ -171,12 +170,16 @@ class TestVoiceBridgeAudioPlayback:
         class MockRawOutputStream:
             def __init__(self, *a, **k):
                 pass
+
             def start(self):
                 pass
+
             def write(self, data):
                 captured_write.append(data)
+
             def stop(self):
                 pass
+
             def close(self):
                 pass
 
@@ -286,9 +289,7 @@ class TestVoiceBridgeIntegration:
         stt_adapter.transcribe = AsyncMock(return_value="включи свет")
 
         tts_adapter = MagicMock()
-        tts_adapter.synthesize = AsyncMock(
-            return_value=AudioStream(data=b"response_wav")
-        )
+        tts_adapter.synthesize = AsyncMock(return_value=AudioStream(data=b"response_wav"))
         tts_adapter.interrupted = False
 
         config = VoiceConfig()
@@ -321,7 +322,7 @@ class TestVoiceBridgeIntegration:
                     bridge._agent_consumer_loop(text_q, tts_q),
                     timeout=1.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         await run_with_timeout()

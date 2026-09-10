@@ -6,7 +6,6 @@ No live sockets, no DNS, no real API keys.
 
 import subprocess
 import time
-from unittest import mock
 
 import pytest
 
@@ -61,7 +60,7 @@ def test_shell_injection_redirection():
 
 def test_ssrf_via_check_url():
     """check_url must reject metadata/loopback/private IPs."""
-    from acta.safety import check_url, UnsafeUrlError
+    from acta.safety import UnsafeUrlError, check_url
 
     blocked = [
         "http://169.254.169.254/latest/meta-data/",
@@ -83,12 +82,12 @@ def test_ssrf_via_check_url():
 
 def test_ssrf_url_encoded():
     """URL-encoded IP addresses must be rejected."""
-    from acta.safety import check_url, UnsafeUrlError
+    from acta.safety import UnsafeUrlError, check_url
 
     encoded = [
-        "http://127.0.0.1/",       # normal form
-        "http://0x7f000001/",      # hex form
-        "http://2130706433/",      # decimal form
+        "http://127.0.0.1/",  # normal form
+        "http://0x7f000001/",  # hex form
+        "http://2130706433/",  # decimal form
     ]
     for url in encoded:
         with pytest.raises(UnsafeUrlError):
@@ -129,12 +128,9 @@ def test_memory_policy_blocks_secrets():
 
 def test_file_traversal_depth():
     """Deep path traversal must not escape the root."""
-    from acta.filesystem.security import sanitize_path, PathDenied
+    from acta.filesystem.security import sanitize_path
 
-    try:
-        root = resolve_root()
-    except Exception:
-        root = None
+    root = None
 
     if root is None:
         pytest.skip("no filesystem root configured")
@@ -147,29 +143,25 @@ def test_file_traversal_depth():
     for path in traversal:
         result = sanitize_path(path)
         assert not path.startswith("../"), "traversal input"
-        assert result.lstrip("/").startswith("..") is False, (
-            f"Traversal escaped: {path!r} -> {result!r}"
-        )
+        assert result.lstrip("/").startswith("..") is False, f"Traversal escaped: {path!r} -> {result!r}"
 
 
 def test_token_replay_prevention():
     """Revoked tokens must be rejected (replay protection)."""
-    from server.auth import TokenService
-    from server.auth import DeviceCredential
+    from server.auth import DeviceCredential, TokenService
 
     revoked: set[str] = set()
     svc = TokenService(
         signing_key="test-key",
         is_revoked=lambda device_id: device_id in revoked,
     )
-    from server.auth import DeviceCredential
 
     cred = DeviceCredential(
         device_id="replay-test",
         device_secret="secret",
         device_name="test-device",
     )
-    tokens = svc.mint(cred, scopes=frozenset({"read"}))
+    svc.mint(cred, scopes=frozenset({"read"}))
     # After revocation, mint should fail for the revoked device
     revoked.add("replay-test")
     try:
@@ -181,8 +173,7 @@ def test_token_replay_prevention():
 
 def test_token_expiry():
     """Tokens with very short TTL must expire quickly."""
-    from server.auth import TokenService
-    from server.auth import DeviceCredential
+    from server.auth import DeviceCredential, TokenService
 
     svc = TokenService(
         signing_key="test-key",
@@ -195,6 +186,7 @@ def test_token_expiry():
     )
     tokens = svc.mint(cred, scopes=frozenset({"read"}))
     import time
+
     time.sleep(0.01)  # Wait past TTL
     with pytest.raises(Exception):  # Token expired
         svc.verify_access(tokens.access_token)
@@ -202,26 +194,32 @@ def test_token_expiry():
 
 def test_bounded_frame_queue():
     """BoundedFrameQueue has maxlen parameter."""
-    from acta.vision.queues import BoundedFrameQueue
     import inspect
+
+    from acta.vision.queues import BoundedFrameQueue
+
     sig = inspect.signature(BoundedFrameQueue.__init__)
     assert "maxlen" in sig.parameters
 
+
 def test_bounded_detection_queue():
     """BoundedDetectionQueue has maxlen parameter."""
-    from acta.vision.queues import BoundedDetectionQueue
     import inspect
+
+    from acta.vision.queues import BoundedDetectionQueue
+
     sig = inspect.signature(BoundedDetectionQueue.__init__)
     assert "maxlen" in sig.parameters
 
+
 def test_bounded_event_queue():
     """BoundedEventQueue has maxlen parameter."""
-    from acta.vision.queues import BoundedEventQueue
     import inspect
+
+    from acta.vision.queues import BoundedEventQueue
+
     sig = inspect.signature(BoundedEventQueue.__init__)
     assert "maxlen" in sig.parameters
-
-
 
 
 def test_loop_detector_chain():
@@ -249,18 +247,16 @@ def test_process_cleanup():
     """_kill_tree must terminate background processes."""
     from actions.shell_exec import _kill_tree
 
-    proc = subprocess.Popen(
+    subprocess.Popen(
         ["sleep", "60"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        preexec_fn=getattr(subprocess, "Popen", object).__init__.__code__.co_consts[0] if False else (
-            lambda: None
-        ),
+        preexec_fn=getattr(subprocess, "Popen", object).__init__.__code__.co_consts[0] if False else (lambda: None),
     )
-    pid = proc.pid
 
     try:
         import os
+
         try:
             proc2 = subprocess.Popen(
                 ["sleep", "60"],
@@ -286,12 +282,14 @@ def test_process_cleanup():
 
 def test_memory_store_bounded():
     """MemoryStore propose/commit workflow works."""
-    from acta.memory.repository import MemoryStore
     import tempfile
+
+    from acta.memory.repository import MemoryStore
 
     with tempfile.NamedTemporaryFile(suffix=".db") as f:
         store = MemoryStore(db_path=f.name)
         from acta.memory.repository import MemoryRecord
+
         proposal = store.propose(MemoryRecord(type="confirmed_facts", key="k1", value="v1", source="test"))
         committed = store.commit(proposal.id)
         assert committed is not None
@@ -311,8 +309,9 @@ def test_browser_js_deny_domain_set():
 
 def test_mcp_http_transport_url_validation():
     """check_url must reject unsafe URLs before transport creation."""
-    from acta.safety import check_url, UnsafeUrlError
     import pytest
+
+    from acta.safety import UnsafeUrlError, check_url
 
     # check_url validates URLs — transport creation stores the URL
     # without validating at __init__ time (validation happens on connect).
@@ -325,8 +324,7 @@ def test_mcp_http_transport_url_validation():
 
 def test_remote_auth_hmac_validation():
     """Remote auth must validate HMAC signatures."""
-    from server.auth import TokenService
-    from server.auth import DeviceCredential
+    from server.auth import DeviceCredential, TokenService
 
     svc = TokenService(signing_key="test-secret-key")
     cred = DeviceCredential(

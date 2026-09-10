@@ -3,11 +3,13 @@ from __future__ import annotations
 from i18n import t
 
 import json
+import logging
 import re
-from datetime import datetime
 from threading import Lock
 from pathlib import Path
 import sys
+
+logger = logging.getLogger(__name__)
 
 
 def get_base_dir() -> Path:
@@ -18,6 +20,7 @@ def get_base_dir() -> Path:
 
 BASE_DIR         = get_base_dir()
 MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
+_CANONICAL_DB    = BASE_DIR / "memory" / "mark_memory.sqlite3"
 _lock            = Lock()
 MAX_VALUE_LENGTH = 380
 MEMORY_MAX_CHARS = 2200
@@ -30,69 +33,50 @@ def _empty_memory() -> dict:
         "projects":      {},
         "relationships": {},
         "wishes":        {},
-        "notes":         {}
+        "notes":         {},
+        "system":        {},
+        "audit":         {},
     }
 
 
+def _canonical_store():
+    from acta.memory import MemoryStore
+
+    _CANONICAL_DB.parent.mkdir(parents=True, exist_ok=True)
+    return MemoryStore(_CANONICAL_DB)
+
+
+def _category_for(record) -> str:
+    source = str(getattr(record, "source", "") or "")
+    if source.startswith("legacy:"):
+        return source.split(":", 1)[1] or "notes"
+    from acta.memory.repository import RecordType
+
+    mapping = {
+        RecordType.PREFERENCES: "preferences",
+        RecordType.PROJECTS: "projects",
+        RecordType.CONFIRMED_FACTS: "identity",
+        RecordType.SUMMARIES: "notes",
+        RecordType.ACTION_HISTORY: "notes",
+    }
+    return mapping.get(getattr(record, "type", None), "notes")
+
+
 def load_memory() -> dict:
-    if not MEMORY_PATH.exists():
-        return _empty_memory()
-
-    with _lock:
-        try:
-            data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                base = _empty_memory()
-                for key in base:
-                    if key not in data:
-                        data[key] = {}
-                return data
-            return _empty_memory()
-        except Exception as e:
-            print(f"[Memory] ⚠️ Load error: {e}")
-            return _empty_memory()
-
-
-def _all_entries(memory: dict) -> list[tuple]:
-    entries = []
-    for cat, items in memory.items():
-        if not isinstance(items, dict):
-            continue
-        for key, entry in items.items():
-            if isinstance(entry, dict) and "value" in entry:
-                entries.append((cat, key, entry))
-    return entries
-
-
-def _trim_to_limit(memory: dict) -> dict:
-    serialized = json.dumps(memory, ensure_ascii=False)
-    if len(serialized) <= MEMORY_MAX_CHARS:
-        return memory
-
-    entries = _all_entries(memory)
-    entries.sort(key=lambda t: t[2].get("updated", "0000-00-00"))
-
-    for cat, key, _ in entries:
-        if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
-            break
-        del memory[cat][key]
-        print(f"[Memory] 🗑️  Trimmed {cat}/{key} (limit: {MEMORY_MAX_CHARS} chars)")
-
-    return memory
-
-
-def save_memory(memory: dict) -> None:
-    if not isinstance(memory, dict):
-        return
-
-    memory = _trim_to_limit(memory)
-
-    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _lock:
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8"
-        )
+    """Read the canonical SQLite store. Does not open long_term.json."""
+    result = _empty_memory()
+    try:
+        store = _canonical_store()
+        for record in store.list():
+            cat = _category_for(record)
+            result.setdefault(cat, {})
+            result[cat][record.key] = {
+                "value": record.value,
+                "updated": getattr(record, "updated_at", "") or "",
+            }
+    except Exception:
+        logger.warning("canonical memory load failed", exc_info=True)
+    return result
 
 
 def _truncate_value(val: str) -> str:
@@ -101,44 +85,69 @@ def _truncate_value(val: str) -> str:
     return val
 
 
-def _recursive_update(target: dict, updates: dict) -> bool:
-    changed = False
-    for key, value in updates.items():
-        if value is None:
+def _delete_key(store, key: str) -> None:
+    for record in store.list():
+        if record.key == key:
+            store.delete(record.id)
+
+
+def _write_entry(store, category: str, key: str, value: object) -> None:
+    from acta.memory.migrations.json import LEGACY_TYPE_MAP
+    from acta.memory.repository import (
+        MemoryProvenance,
+        MemoryRecord,
+        MemoryScope,
+        RecordType,
+    )
+
+    if value is None:
+        _delete_key(store, key)
+        return
+    raw = value.get("value") if isinstance(value, dict) else value
+    if raw is None:
+        _delete_key(store, key)
+        return
+    text = _truncate_value(str(raw)).strip()
+    if not text:
+        return
+    record_type = LEGACY_TYPE_MAP.get(str(category), RecordType.SUMMARIES)
+    proposal = store.propose(
+        MemoryRecord(
+            type=record_type,
+            key=str(key),
+            value=text,
+            source=f"legacy:{category}",
+            provenance=MemoryProvenance.SYSTEM_FACT,
+            scope=MemoryScope.WORKING,
+        )
+    )
+    store.commit(proposal.id)
+
+
+def save_memory(memory: dict) -> None:
+    """Write a dict snapshot to SQLite. Never writes long_term.json."""
+    if not isinstance(memory, dict):
+        return
+    store = _canonical_store()
+    for category, items in memory.items():
+        if not isinstance(items, dict):
             continue
-        if isinstance(value, str) and not value.strip():
-            continue
-
-        if isinstance(value, dict) and "value" not in value:
-            if key not in target or not isinstance(target[key], dict):
-                target[key] = {}
-                changed = True
-            if _recursive_update(target[key], value):
-                changed = True
-        else:
-            if isinstance(value, dict) and "value" in value:
-                new_val = _truncate_value(str(value["value"]))
-            else:
-                new_val = _truncate_value(str(value))
-
-            entry    = {"value": new_val, "updated": datetime.now().strftime("%Y-%m-%d")}
-            existing = target.get(key, {})
-            if not isinstance(existing, dict) or existing.get("value") != new_val:
-                target[key] = entry
-                changed = True
-
-    return changed
+        for key, entry in items.items():
+            _write_entry(store, str(category), str(key), entry)
 
 
 def update_memory(memory_update: dict) -> dict:
+    """Apply a partial update through acta.memory. No JSON file write."""
     if not isinstance(memory_update, dict) or not memory_update:
         return load_memory()
-
-    memory = load_memory()
-    if _recursive_update(memory, memory_update):
-        save_memory(memory)
-        print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
-    return memory
+    store = _canonical_store()
+    for category, items in memory_update.items():
+        if not isinstance(items, dict):
+            continue
+        for key, entry in items.items():
+            _write_entry(store, str(category), str(key), entry)
+    logger.info("memory updated categories=%s", list(memory_update.keys()))
+    return load_memory()
 
 
 def _memory_cloud_forbidden() -> bool:
@@ -180,7 +189,7 @@ def should_extract_memory(user_text: str, slon_text: str = "", api_key: str = ""
         return "YES" in result.upper()
 
     except Exception as e:
-        print(f"[Memory] ⚠️ Stage1 check failed: {e}")
+        logger.warning("Stage1 check failed: %s", e)
         return False
 
 
@@ -234,7 +243,7 @@ def extract_memory(user_text: str, slon_text: str = "", api_key: str = "", jarvi
         return {}
     except Exception as e:
         if "429" not in str(e):
-            print(f"[Memory] ⚠️ Extract failed: {e}")
+            logger.warning("Extract failed: %s", e)
         return {}
 
 
@@ -328,11 +337,9 @@ def remember(key: str, value: str, category: str = "notes") -> str:
 
 def forget(key: str, category: str = "notes") -> str:
     memory = load_memory()
-    cat    = memory.get(category, {})
+    cat = memory.get(category, {})
     if key in cat:
-        del cat[key]
-        memory[category] = cat
-        save_memory(memory)
+        update_memory({category: {key: None}})
         return f"Forgotten: {category}/{key}"
     return f"Not found: {category}/{key}"
 

@@ -74,8 +74,11 @@ def require_active_principal(
 
 
 def sanitize_body(body: Mapping[str, object]) -> dict[str, object]:
-    """Drop known AI key field names from response bodies."""
-    return strip_secret_fields(body)
+    """Drop known AI key field names and redact secret-like string values."""
+    from config.secrets import redact_secret_text
+
+    cleaned = strip_secret_fields(body)
+    return {key: redact_secret_text(value) if isinstance(value, str) else value for key, value in cleaned.items()}
 
 
 class IdempotencyStore:
@@ -117,9 +120,7 @@ class IdempotencyStore:
         )
         self._responses[idempotency_key] = sanitized
         self._fingerprints[idempotency_key] = dict(fingerprint)
-        self._side_effects[side_effect_key] = (
-            self._side_effects.get(side_effect_key, 0) + 1
-        )
+        self._side_effects[side_effect_key] = self._side_effects.get(side_effect_key, 0) + 1
         return RouteResponse(
             status_code=sanitized.status_code,
             body=deepcopy(sanitized.body),

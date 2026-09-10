@@ -15,50 +15,43 @@ Covers:
 - Russian i18n messages
 - ProactiveEvent and type definitions
 """
+
 from __future__ import annotations
 
 import json
-import tempfile
 import time
 from pathlib import Path
 
 import pytest
 
 from acta.proactive import (
+    SAFE_AUTO_ACTIONS,
     AntiSpamFilter,
     CooldownManager,
     EventDedup,
+    EventSource,
     PermissionBoundary,
+    ProactiveAction,
     ProactiveAgent,
     ProactiveAuthorization,
+    ProactiveDecision,
     ProactiveEvent,
     ProactivePersistence,
-    ProactiveDecision,
-    ProactiveAction,
     RelevanceFilter,
     RiskLevel,
     SafeActionExecutor,
-    EventSource,
-    SAFE_AUTO_ACTIONS,
 )
 from acta.proactive.errors import (
     CODE_ACTION_BLOCKED,
     CODE_COOLDOWN_ACTIVE,
-    CODE_DUPLICATE_EVENT,
     CODE_INVALID_EVENT,
-    CODE_OK,
     CODE_RELEVANCE_TOO_LOW,
     CODE_SPAM_DETECTED,
     ActionBlockedError,
-    CooldownActiveError,
-    DuplicateEventError,
     InvalidEventError,
-    ProactiveError,
-    RelevanceTooLowError,
     SpamDetectedError,
     proactive_message,
 )
-
 
 # ---------------------------------------------------------------------------
 # Anti-spam tests
@@ -73,19 +66,13 @@ class TestAntiSpamFilter:
 
     def test_allows_up_to_max(self) -> None:
         f = AntiSpamFilter(window_seconds=2.0, max_events_per_window=3)
-        events = [
-            ProactiveEvent(event_type="spam_type", source=EventSource.SYSTEM)
-            for _ in range(3)
-        ]
+        events = [ProactiveEvent(event_type="spam_type", source=EventSource.SYSTEM) for _ in range(3)]
         for e in events:
             assert f.check(e) is True
 
     def test_drops_over_limit(self) -> None:
         f = AntiSpamFilter(window_seconds=2.0, max_events_per_window=3)
-        events = [
-            ProactiveEvent(event_type="spam_type", source=EventSource.SYSTEM)
-            for _ in range(4)
-        ]
+        events = [ProactiveEvent(event_type="spam_type", source=EventSource.SYSTEM) for _ in range(4)]
         for e in events[:3]:
             assert f.check(e) is True
         assert f.check(events[3]) is False
@@ -534,6 +521,7 @@ class TestProactivePersistence:
         store = tmp_path / "proactive.json"
         p = ProactivePersistence(store_path=store)
         from acta.proactive.types import CooldownEntry
+
         entry = CooldownEntry(
             source_type="test_type",
             cooldown_seconds=30.0,
@@ -639,28 +627,36 @@ class TestProactiveAgent:
             cooldown_default=0,
         )
         # Use different event types so anti-spam counters are independent
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="spam_a",
-            payload={},
-        ))
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="spam_b",
-            payload={},
-        ))
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="spam_b",  # 2nd of type b
-            payload={},
-        ))
-        # 3rd of type b exceeds anti-spam limit
-        with pytest.raises(SpamDetectedError):
-            agent.ingest(ProactiveEvent(
+        agent.ingest(
+            ProactiveEvent(
+                source=EventSource.SYSTEM,
+                event_type="spam_a",
+                payload={},
+            )
+        )
+        agent.ingest(
+            ProactiveEvent(
                 source=EventSource.SYSTEM,
                 event_type="spam_b",
                 payload={},
-            ))
+            )
+        )
+        agent.ingest(
+            ProactiveEvent(
+                source=EventSource.SYSTEM,
+                event_type="spam_b",  # 2nd of type b
+                payload={},
+            )
+        )
+        # 3rd of type b exceeds anti-spam limit
+        with pytest.raises(SpamDetectedError):
+            agent.ingest(
+                ProactiveEvent(
+                    source=EventSource.SYSTEM,
+                    event_type="spam_b",
+                    payload={},
+                )
+            )
 
     def test_batch_processes_valid(self) -> None:
         agent = ProactiveAgent(
@@ -670,10 +666,7 @@ class TestProactiveAgent:
             notify_threshold=1.0,
             cooldown_default=0.1,
         )
-        events = [
-            ProactiveEvent(source=EventSource.SYSTEM, event_type=f"batch_{i}", payload={})
-            for i in range(5)
-        ]
+        events = [ProactiveEvent(source=EventSource.SYSTEM, event_type=f"batch_{i}", payload={}) for i in range(5)]
         decisions = agent.ingest_batch(events)
         assert len(decisions) > 0
 
@@ -683,10 +676,7 @@ class TestProactiveAgent:
             anti_spam_max=100,
             cooldown_default=0.1,
         )
-        events = [
-            ProactiveEvent(source=EventSource.SYSTEM, event_type=f"ok_{i}", payload={})
-            for i in range(3)
-        ]
+        events = [ProactiveEvent(source=EventSource.SYSTEM, event_type=f"ok_{i}", payload={}) for i in range(3)]
         decisions = agent.ingest_batch(events)
         assert len(decisions) >= 3
 
@@ -716,22 +706,26 @@ class TestProactiveAgent:
 
     def test_clear(self) -> None:
         agent = ProactiveAgent(anti_spam_max=100, cooldown_default=0.1)
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="clear_test",
-            payload={},
-        ))
+        agent.ingest(
+            ProactiveEvent(
+                source=EventSource.SYSTEM,
+                event_type="clear_test",
+                payload={},
+            )
+        )
         agent.clear()
         assert len(agent._cooldown.active_sources) == 0
 
     def test_persistence_path(self, tmp_path: Path) -> None:
         store = tmp_path / "proactive.json"
         agent = ProactiveAgent(store_path=str(store), cooldown_default=0.1)
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="persist_test",
-            payload={"data": "val"},
-        ))
+        agent.ingest(
+            ProactiveEvent(
+                source=EventSource.SYSTEM,
+                event_type="persist_test",
+                payload={"data": "val"},
+            )
+        )
         assert store.exists()
         data = json.loads(store.read_text(encoding="utf-8"))
         assert "decisions" in data
@@ -749,11 +743,13 @@ class TestProactiveAgent:
             on_decision=lambda d: received.append(d),
             cooldown_default=0.1,
         )
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="cb_test",
-            payload={},
-        ))
+        agent.ingest(
+            ProactiveEvent(
+                source=EventSource.SYSTEM,
+                event_type="cb_test",
+                payload={},
+            )
+        )
         assert len(received) >= 1
 
     def test_on_event_processed_callback(self) -> None:
@@ -764,11 +760,13 @@ class TestProactiveAgent:
             on_event_processed=lambda e, d: received.append((e, d)),
             cooldown_default=0.1,
         )
-        agent.ingest(ProactiveEvent(
-            source=EventSource.SYSTEM,
-            event_type="ep_test",
-            payload={},
-        ))
+        agent.ingest(
+            ProactiveEvent(
+                source=EventSource.SYSTEM,
+                event_type="ep_test",
+                payload={},
+            )
+        )
         assert len(received) >= 1
 
     def test_event_provenance(self) -> None:

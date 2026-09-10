@@ -37,10 +37,7 @@ class EmbeddingService:
         return self._embedder
 
     def must_stay_local(self) -> bool:
-        return (
-            self.privacy_profile == PRIVACY_FULLY_LOCAL
-            or self.network_mode == NETWORK_OFFLINE
-        )
+        return self.privacy_profile == PRIVACY_FULLY_LOCAL or self.network_mode == NETWORK_OFFLINE
 
     def embed(self, text: str) -> list[float] | None:
         """Return a vector, or None when embedding is skipped or blocked."""

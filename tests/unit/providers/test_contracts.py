@@ -11,7 +11,6 @@ from providers.contracts import (
     ToolCall,
     ToolDefinition,
 )
-
 from tests.unit.providers.mocks import MockChatProvider
 
 

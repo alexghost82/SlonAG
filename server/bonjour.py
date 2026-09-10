@@ -93,15 +93,15 @@ def _advertise_dns_sd(
         raise BonjourError("dns-sd not found (macOS Bonjour tools)")
     # dns-sd -R name type domain port
     arguments = [
-            dns_sd,
-            "-R",
-            name,
-            "_mark-control._tcp",
-            ".",
-            str(port),
-            "path=/v1",
-            f"host={host}",
-        ]
+        dns_sd,
+        "-R",
+        name,
+        "_mark-control._tcp",
+        ".",
+        str(port),
+        "path=/v1",
+        f"host={host}",
+    ]
     arguments.extend(f"{key}={value}" for key, value in (properties or {}).items())
     proc = subprocess.Popen(  # noqa: S603 — fixed binary from PATH
         arguments,

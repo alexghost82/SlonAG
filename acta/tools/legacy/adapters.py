@@ -81,19 +81,23 @@ def _action_handler(
     accepts_speak: bool = False,
 ) -> LegacyHandler:
     def handler(
-        args: Mapping[str, object], *, _speak: Callable[..., object] | None = None,
+        args: Mapping[str, object],
+        *,
+        _speak: Callable[..., object] | None = None,
         _player: object | None = None,
     ) -> ToolResult:
         try:
             action = getattr(import_module(module_name), function_name)
         except (ImportError, ModuleNotFoundError) as exc:
             return ToolResult(
-                ok=False, code="handler_unavailable",
+                ok=False,
+                code="handler_unavailable",
                 message=f"Handler '{module_name}.{function_name}' недоступен: {exc}",
             )
         except Exception as exc:
             return ToolResult(
-                ok=False, code="handler_error",
+                ok=False,
+                code="handler_error",
                 message=f"Ошибка при вызове '{module_name}.{function_name}': {exc}",
             )
         try:
@@ -101,11 +105,15 @@ def _action_handler(
             _speak_val: Callable[..., object] | None = None
             if accepts_speak:
                 _speak_val = _speak
+            params = dict(args)
+            workspace_roots = params.pop("roots", None)
             kwargs: dict[str, Any] = {
-                "parameters": dict(args),
+                "parameters": params,
                 "player": _player,
                 "confirmer": lambda d: d.kind not in (DecisionKind.DENY, DecisionKind.EXACT_CONFIRM),
             }
+            if workspace_roots is not None:
+                kwargs["allowlist"] = workspace_roots
             if _speak_val is not None:
                 kwargs["speak"] = _speak_val
             # Filter to only parameters the action actually accepts.
@@ -114,13 +122,12 @@ def _action_handler(
                 accepted = set(sig.parameters.keys())
             except Exception:  # pragma: no cover
                 accepted = set()
-            filtered_kwargs: dict[str, Any] = {
-                k: v for k, v in kwargs.items() if not accepted or k in accepted
-            }
+            filtered_kwargs: dict[str, Any] = {k: v for k, v in kwargs.items() if not accepted or k in accepted}
             return normalize_legacy_result(action(**filtered_kwargs))
         except Exception as exc:
             return ToolResult(
-                ok=False, code="handler_failed",
+                ok=False,
+                code="handler_failed",
                 message=f"Handler '{function_name}' завершился с ошибкой: {exc}",
             )
 
@@ -134,34 +141,18 @@ web_search_handler = _action_handler("actions.web_search", "web_search")
 browser_control_handler = _action_handler("actions.browser_control", "browser_control")
 file_controller_handler = _action_handler("actions.file_controller", "file_controller")
 desktop_control_handler = _action_handler("actions.desktop", "desktop_control")
-computer_control_handler = _action_handler(
-    "actions.computer_control", "computer_control"
-)
-computer_settings_handler = _action_handler(
-    "actions.computer_settings", "computer_settings"
-)
+computer_control_handler = _action_handler("actions.computer_control", "computer_control")
+computer_settings_handler = _action_handler("actions.computer_settings", "computer_settings")
 screen_process_handler = _action_handler("actions.screen_processor", "screen_process")
 reminder_handler = _action_handler("actions.reminder", "reminder")
 weather_report_handler = _action_handler("actions.weather_report", "weather_action")
-flight_finder_handler = _action_handler(
-    "actions.flight_finder", "flight_finder", accepts_speak=True
-)
-youtube_video_handler = _action_handler(
-    "actions.youtube_video", "youtube_video", accepts_speak=True
-)
-file_processor_handler = _action_handler(
-    "actions.file_processor", "file_processor", accepts_speak=True
-)
-game_updater_handler = _action_handler(
-    "actions.game_updater", "game_updater", accepts_speak=True
-)
+flight_finder_handler = _action_handler("actions.flight_finder", "flight_finder", accepts_speak=True)
+youtube_video_handler = _action_handler("actions.youtube_video", "youtube_video", accepts_speak=True)
+file_processor_handler = _action_handler("actions.file_processor", "file_processor", accepts_speak=True)
+game_updater_handler = _action_handler("actions.game_updater", "game_updater", accepts_speak=True)
 send_message_handler = _action_handler("actions.send_message", "send_message")
-code_helper_handler = _action_handler(
-    "actions.code_helper", "code_helper", accepts_speak=True
-)
-dev_agent_handler = _action_handler(
-    "actions.dev_agent", "dev_agent", accepts_speak=True
-)
+code_helper_handler = _action_handler("actions.code_helper", "code_helper", accepts_speak=True)
+dev_agent_handler = _action_handler("actions.dev_agent", "dev_agent", accepts_speak=True)
 
 
 def read_file_handler(args: Mapping[str, object]) -> ToolResult:
@@ -172,7 +163,7 @@ def read_file_handler(args: Mapping[str, object]) -> ToolResult:
     result = filesystem_operation(
         "read",
         path=str(args.get("path", "")),
-        max_chars=int(args.get("max_chars", 2097152)),
+        max_chars=int(args.get("max_chars", 2097152)),  # type: ignore[call-overload]
     )
     return ToolResult(
         ok=result.ok,
@@ -186,9 +177,7 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
     """Preserve the existing asynchronous task-queue bridge from ``main.py``."""
     task_queue = import_module("agent.task_queue")
     priority_value = args.get("priority", "normal")
-    priority_name = (
-        priority_value.lower() if isinstance(priority_value, str) else "normal"
-    )
+    priority_name = priority_value.lower() if isinstance(priority_value, str) else "normal"
     priority_map = {
         "low": task_queue.TaskPriority.LOW,
         "normal": task_queue.TaskPriority.NORMAL,
@@ -200,7 +189,6 @@ def agent_task_handler(args: Mapping[str, object]) -> ToolResult:
         speak=None,
     )
     return normalize_legacy_result(f"Task started (ID: {task_id}).")
-
 
 
 def _map_legacy_shell_args(args: Mapping[str, object]) -> dict[str, object]:
@@ -222,8 +210,10 @@ def shell_exec_handler(
 
     return shell_exec(_map_legacy_shell_args(args), player=_player)
 
+
 shell_exec_handler.__name__ = "shell_exec_handler"
 shell_exec_handler._accepts_legacy_context = True  # type: ignore[attr-defined]
+
 
 # cmd_control is deprecated — removed from the advertised tool catalog.
 # Kept in LEGACY_HANDLERS only so old callers don't crash on import.
@@ -238,6 +228,7 @@ def _cmd_control_deprecated_handler(args: Mapping[str, object]) -> ToolResult:
 
 # === Wave 24: Vision + STT + TTS tool handlers ===
 
+
 def vision_analyze(args: Mapping[str, object]) -> ToolResult:
     """Analyze an image (base64-encoded) using the vision engine."""
     import base64
@@ -248,12 +239,14 @@ def vision_analyze(args: Mapping[str, object]) -> ToolResult:
 
     if not image_b64 or not isinstance(image_b64, str):
         return ToolResult(
-            ok=False, code="missing_field",
+            ok=False,
+            code="missing_field",
             message="image_base64 is required and must be a string.",
         )
     if not prompt:
         return ToolResult(
-            ok=False, code="missing_field",
+            ok=False,
+            code="missing_field",
             message="prompt is required and must be non-empty.",
         )
 
@@ -261,13 +254,15 @@ def vision_analyze(args: Mapping[str, object]) -> ToolResult:
         image_bytes = base64.b64decode(image_b64)
     except Exception:
         return ToolResult(
-            ok=False, code="invalid_image",
+            ok=False,
+            code="invalid_image",
             message="image_base64 is not valid base64.",
         )
 
     if len(image_bytes) == 0:
         return ToolResult(
-            ok=False, code="missing_field",
+            ok=False,
+            code="missing_field",
             message="image_base64 decodes to empty data.",
         )
 
@@ -281,7 +276,8 @@ def vision_analyze(args: Mapping[str, object]) -> ToolResult:
             engine = build_vision_engine()
         except Exception:
             return ToolResult(
-                ok=False, code="vision_unavailable",
+                ok=False,
+                code="vision_unavailable",
                 message="Vision engine не доступен. Установите vision модель.",
             )
 
@@ -290,9 +286,9 @@ def vision_analyze(args: Mapping[str, object]) -> ToolResult:
         (Path(temp_dir) / "vision-snapshots").mkdir(parents=True, exist_ok=True)
 
         provider = LocalVisionProvider(
-            engine=engine,
+            engine=engine,  # type: ignore[arg-type]
             allow_cloud=False,
-            temp_dir=temp_dir,
+            temp_dir=temp_dir,  # type: ignore[arg-type]
             privacy_profile="fully_local",
         )
 
@@ -304,29 +300,34 @@ def vision_analyze(args: Mapping[str, object]) -> ToolResult:
                 text=True,
             ),
             image=image_bytes,
-            prompt=prompt,
-            kind=kind,
+            prompt=prompt,  # type: ignore[arg-type]
+            kind=kind,  # type: ignore[arg-type]
         )
 
         response = provider.analyze(request)
         from acta.vision.provider import VisionResponse
+
         if isinstance(response, VisionResponse):
             return ToolResult(
-                ok=True, code="vision_ok",
+                ok=True,
+                code="vision_ok",
                 message=f"Vision analysis ({kind}): {response.text[:500]}",
             )
         return ToolResult(
-            ok=False, code="vision_error",
+            ok=False,
+            code="vision_error",
             message=f"Vision analysis failed: {response}",
         )
     except ProviderError as exc:
         return ToolResult(
-            ok=False, code="vision_error",
+            ok=False,
+            code="vision_error",
             message=str(exc),
         )
     except Exception as exc:  # noqa: BLE001
         return ToolResult(
-            ok=False, code="vision_error",
+            ok=False,
+            code="vision_error",
             message=f"Vision tool error: {exc}",
         )
 
@@ -340,7 +341,8 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
 
     if not audio_b64 or not isinstance(audio_b64, str):
         return ToolResult(
-            ok=False, code="missing_field",
+            ok=False,
+            code="missing_field",
             message="audio_base64 is required and must be a string.",
         )
 
@@ -348,13 +350,15 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
         audio_bytes = base64.b64decode(audio_b64)
     except Exception:
         return ToolResult(
-            ok=False, code="invalid_audio",
+            ok=False,
+            code="invalid_audio",
             message="audio_base64 is not valid base64.",
         )
 
     if len(audio_bytes) == 0:
         return ToolResult(
-            ok=False, code="missing_field",
+            ok=False,
+            code="missing_field",
             message="audio_base64 decodes to empty data.",
         )
 
@@ -367,9 +371,10 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
 
         try:
             result = subprocess.run(
-                ["whisper", wav_path, "--model", "base", "--lang", language[:2] or "ru",
-                 "--output_format", "txt"],
-                capture_output=True, text=True, timeout=30.0,
+                ["whisper", wav_path, "--model", "base", "--lang", language[:2] or "ru", "--output_format", "txt"],  # type: ignore[index]
+                capture_output=True,
+                text=True,
+                timeout=30.0,
             )
             if result.returncode == 0:
                 text = result.stdout.strip()
@@ -379,6 +384,7 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
             pass
 
         import wave
+
         try:
             with wave.open(wav_path, "rb") as wf:
                 framerate = wf.getframerate()
@@ -386,29 +392,34 @@ def stt_listen(args: Mapping[str, object]) -> ToolResult:
                 duration = frames / framerate if framerate > 0 else 0
             if duration > 0.5:
                 return ToolResult(
-                    ok=True, code="stt_no_model",
+                    ok=True,
+                    code="stt_no_model",
                     message=f"Аудио обнаружено ({duration:.1f}с), но STT модель недоступна.",
                 )
         except Exception:
             pass
 
         return ToolResult(
-            ok=False, code="stt_no_model",
+            ok=False,
+            code="stt_no_model",
             message="STT модель недоступна. Установите whisper.",
         )
     except subprocess.TimeoutExpired:
         return ToolResult(
-            ok=False, code="stt_timeout",
+            ok=False,
+            code="stt_timeout",
             message="STT превысил лимит времени (30с).",
         )
     except Exception as exc:  # noqa: BLE001
         return ToolResult(
-            ok=False, code="stt_error",
+            ok=False,
+            code="stt_error",
             message=f"STT ошибка: {exc}",
         )
     finally:
         try:
             import os
+
             os.unlink(wav_path)
         except Exception:
             pass
@@ -421,7 +432,8 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
 
     if not text or not isinstance(text, str):
         return ToolResult(
-            ok=False, code="missing_field",
+            ok=False,
+            code="missing_field",
             message="text is required and must be a non-empty string.",
         )
 
@@ -438,11 +450,14 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
             try:
                 result = subprocess.run(
                     [str(piper_bin), "-f", wav_path],
-                    input=text.encode(), capture_output=True, timeout=30.0,
+                    input=text.encode(),
+                    capture_output=True,
+                    timeout=30.0,
                 )
                 if result.returncode == 0 and Path(wav_path).exists():
                     return ToolResult(
-                        ok=True, code="tts_ok",
+                        ok=True,
+                        code="tts_ok",
                         message=f"TTS генерация завершена ({Path(wav_path).stat().st_size} байт).",
                     )
             except FileNotFoundError:
@@ -450,6 +465,7 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
             finally:
                 try:
                     import os
+
                     os.unlink(wav_path)
                 except Exception:
                     pass
@@ -460,31 +476,37 @@ def tts_speak(args: Mapping[str, object]) -> ToolResult:
                 wav_path = f.name
 
             result = subprocess.run(
-                ["espeak", "-w", wav_path, "-v", voice, text],
-                capture_output=True, timeout=10.0,
+                ["espeak", "-w", wav_path, "-v", voice, text],  # type: ignore[list-item]
+                capture_output=True,
+                timeout=10.0,
             )
             if result.returncode == 0 and Path(wav_path).exists():
                 return ToolResult(
-                    ok=True, code="tts_ok",
+                    ok=True,
+                    code="tts_ok",
                     message=f"TTS gen ok (espeak, {Path(wav_path).stat().st_size} bytes).",
                 )
         except FileNotFoundError:
             pass
 
         return ToolResult(
-            ok=False, code="tts_unavailable",
+            ok=False,
+            code="tts_unavailable",
             message="TTS недоступна. Установите Piper или eSpeak.",
         )
     except subprocess.TimeoutExpired:
         return ToolResult(
-            ok=False, code="tts_timeout",
+            ok=False,
+            code="tts_timeout",
             message="TTS превысил лимит времени (30с).",
         )
     except Exception as exc:  # noqa: BLE001
         return ToolResult(
-            ok=False, code="tts_error",
+            ok=False,
+            code="tts_error",
             message=f"TTS ошибка: {exc}",
         )
+
 
 def legacy_handler_factory(
     handler: LegacyHandler,
@@ -507,6 +529,7 @@ def legacy_handler_factory(
     -------
     An async callable (coroutine function).
     """
+
     async def _async_handler(
         args: Mapping[str, object],
         *,
@@ -528,21 +551,19 @@ def legacy_handler_factory(
         # Uses run_in_executor to keep the handler in a thread pool.
         try:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(
-                None, partial(handler, dict(args), **filtered_kwargs)
-            )
+            return await loop.run_in_executor(None, partial(handler, dict(args), **filtered_kwargs))
         except RuntimeError:
             # No running event loop (e.g. called from a worker thread).
             # Run the coroutine synchronously with asyncio.run.
             async def _run() -> ToolResult:
                 return partial(handler, dict(args), **filtered_kwargs)()
+
             return asyncio.run(_run())
 
-    _async_handler.__name__ = f"{handler.__name__}_async" if hasattr(handler, "__name__") else "legacy_async"  # type: ignore[attr-defined]
+    _async_handler.__name__ = f"{handler.__name__}_async" if hasattr(handler, "__name__") else "legacy_async"
     _async_handler._safety_name = safety_name  # type: ignore[attr-defined]
     _async_handler._accepts_legacy_context = True  # type: ignore[attr-defined]
-    return _async_handler
-
+    return _async_handler  # type: ignore[return-value]
 
 
 LEGACY_HANDLERS: Mapping[str, LegacyHandler] = {

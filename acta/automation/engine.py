@@ -17,6 +17,7 @@ Features:
 
 Backward-compatible shim classes keep existing e2e tests passing.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,8 +28,7 @@ import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, timedelta
-from enum import StrEnum
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -37,6 +37,7 @@ from acta.automation.types import (
     AutomationExecution,
     AutomationHistoryEntry,
     AutomationJob,
+    AutomationStatus,
     ConcurrencyPolicy,
     ExecutionStatus,
     RetryPolicy,
@@ -44,6 +45,9 @@ from acta.automation.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+_MAX_HISTORY = 256
+_AUTOMATION_FIRE_TYPE = "automation_fire"
 
 
 # ── Custom JSON encoder for frozensets ────────────────────────────────
@@ -79,11 +83,13 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 # ── Timezone helper ───────────────────────────────────────────────────
 
+
 def _get_tz(tz_str: str):
     if not tz_str or tz_str in ("UTC", ""):
         return "UTC"
     try:
         from zoneinfo import ZoneInfo
+
         ZoneInfo(tz_str)  # validate
         return tz_str
     except Exception:
@@ -94,11 +100,26 @@ def _get_tz(tz_str: str):
 # ── Cron parser (RFC 5610 subset) ─────────────────────────────────────
 
 _CRON_DAY_NAMES = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
-    "may": 5, "jun": 6, "jul": 7, "aug": 8,
-    "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-    "sun": 0, "mon": 1, "tue": 2, "wed": 3,
-    "thu": 4, "fri": 5, "sat": 6, "7": 0,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+    "sun": 0,
+    "mon": 1,
+    "tue": 2,
+    "wed": 3,
+    "thu": 4,
+    "fri": 5,
+    "sat": 6,
+    "7": 0,
 }
 
 
@@ -109,9 +130,7 @@ class CronParser:
         self.expression = expression.strip()
         parts = self.expression.split()
         if len(parts) != 5:
-            raise ValueError(
-                f"Invalid cron expression (expected 5 fields): {self.expression!r}"
-            )
+            raise ValueError(f"Invalid cron expression (expected 5 fields): {self.expression!r}")
         self.minute = self._expand_field(parts[0], 0, 59)
         self.hour = self._expand_field(parts[1], 0, 23)
         self.dom = self._expand_field(parts[2], 1, 31)
@@ -145,11 +164,12 @@ class CronParser:
         result.sort()
         return result
 
-    def next_run(self, from_time: float, tz=None) -> float:
+    def next_run(self, from_time: float, tz: tzinfo | None = None) -> float:
         """Return the next matching timestamp after from_time in the given timezone."""
         if tz is None:
             try:
                 from zoneinfo import ZoneInfo
+
                 tz = ZoneInfo("UTC")
             except ImportError:
                 tz = UTC
@@ -165,8 +185,9 @@ class CronParser:
                     m = candidates[0]
                     now = now.replace(month=m, day=1, hour=0, minute=0, second=0, microsecond=0)
                 else:
-                    now = now.replace(year=now.year + 1, month=self.month[0],
-                                      day=1, hour=0, minute=0, second=0, microsecond=0)
+                    now = now.replace(
+                        year=now.year + 1, month=self.month[0], day=1, hour=0, minute=0, second=0, microsecond=0
+                    )
 
             # Advance to next valid day
             dom_restricted = self.dom != list(range(1, 32))
@@ -229,6 +250,7 @@ class CronParser:
 
 # ── Backward-compatible trigger shims ─────────────────────────────────
 
+
 class OneShotTrigger:
     def __init__(self, delay_seconds: float = 0.0) -> None:
         self.delay = delay_seconds
@@ -268,25 +290,13 @@ class CronScheduler:
             self._tasks.pop(task_id, None)
 
 
-# ── Backward-compatible enums ────────────────────────────────────────
-
-class AutomationStatus(StrEnum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-# _TriggerType is no longer needed — use TriggerType from types
-    ONE_SHOT = "one_shot"
-    RECURRING = "recurring"
-    CRON = "cron"
+# ── Backward-compatible record ───────────────────────────────────────
 
 
 @dataclass
 class AutomationRecord:
     """Legacy dataclass for backward compat with existing imports."""
+
     id: str
     name: str
     trigger_type: TriggerType
@@ -317,11 +327,13 @@ class AutomationEngine:
         self,
         *,
         store_path: Path | str | None = None,
-        executor: Callable[[AutomationJob], Awaitable[None]] | None = None,
+        executor: Callable[[AutomationJob], Awaitable[None] | None] | None = None,
         concurrency: ConcurrencyPolicy | None = None,
+        job_engine: Any | None = None,
     ) -> None:
         if store_path is None:
             import tempfile
+
             self._store_dir = Path(tempfile.mkdtemp(prefix="automation_"))
             self._store_path = self._store_dir / "store.json"
         else:
@@ -331,6 +343,13 @@ class AutomationEngine:
 
         self._executor = executor
         self._concurrency = concurrency or ConcurrencyPolicy()
+        if job_engine is None:
+            from runtime.jobs import JobEngine
+
+            self._job_engine = JobEngine(self._store_dir / "slon_jobs.sqlite3")
+            self._job_engine.recover_running()
+        else:
+            self._job_engine = job_engine
 
         self._lock = threading.RLock()
         self._jobs: dict[str, AutomationJob] = {}
@@ -409,6 +428,10 @@ class AutomationEngine:
             payload["delay_seconds"] = getattr(rule, "delay_seconds", 0.0)
         self.create(name=name, trigger_type=trigger_type, payload=payload, goal=goal)
 
+    def list_rules(self) -> list[str]:
+        """Compatibility shim: registered job names (not a second engine)."""
+        return [job.name for job in self.list_jobs()]
+
     def list_jobs(self, *, workspace_id: str | None = None) -> list[AutomationJob]:
         with self._lock:
             result = list(self._jobs.values())
@@ -485,7 +508,9 @@ class AutomationEngine:
             for job in self._jobs.values():
                 self._schedule_job(job)
             self._thread = threading.Thread(
-                target=self._loop, daemon=True, name="slon-automation",
+                target=self._loop,
+                daemon=True,
+                name="slon-automation",
             )
             self._thread.start()
 
@@ -528,9 +553,10 @@ class AutomationEngine:
             try:
                 tz_str = _get_tz(job.timezone_str)
                 if tz_str == "UTC":
-                    tz_obj = UTC
+                    tz_obj: tzinfo = UTC
                 else:
                     from zoneinfo import ZoneInfo
+
                     tz_obj = ZoneInfo(tz_str)
                 parser = CronParser(cron_expr)
                 next_ts = parser.next_run(time.time(), tz=tz_obj)
@@ -572,10 +598,7 @@ class AutomationEngine:
             return
 
         # Idempotency: only one RUNNING execution per job
-        running = [
-            e for e in self._executions.values()
-            if e.job_id == job.id and e.status == ExecutionStatus.RUNNING
-        ]
+        running = [e for e in self._executions.values() if e.job_id == job.id and e.status == ExecutionStatus.RUNNING]
         if running:
             logger.debug("Job %s already has a running execution; skipping", job.id)
             return
@@ -594,15 +617,71 @@ class AutomationEngine:
         job.last_execution_id = exec_id
         job.status = AutomationStatus.RUNNING
 
+        scheduled_ts = int(round(float(job.next_run_at or now) * 1000))
+        durable = self._job_engine.enqueue(
+            type=_AUTOMATION_FIRE_TYPE,
+            payload={
+                "automation_job_id": job.id,
+                "goal": job.goal,
+                "exec_id": exec_id,
+            },
+            idempotency_key=f"{job.id}:{scheduled_ts}",
+        )
+        from runtime.jobs import JobState
+
+        if durable.state in (
+            JobState.COMPLETED,
+            JobState.FAILED,
+            JobState.CANCELLED,
+            JobState.RUNNING,
+        ):
+            logger.debug("Job %s fire %s already %s; skip thread", job.id, durable.job_id, durable.state)
+            job.active_executions = max(0, job.active_executions - 1)
+            job.status = AutomationStatus.PENDING
+            self._executions.pop(exec_id, None)
+            return
+
         t = threading.Thread(
-            target=self._run_execution,
-            args=(job, exc_record),
+            target=self._claim_and_run,
+            args=(job, exc_record, durable.job_id),
             daemon=True,
             name=f"slon-exec-{job.id[:8]}",
         )
         t.start()
         with self._lock:
             self._exec_threads.append(t)
+
+    def _claim_and_run(self, job: AutomationJob, execution: AutomationExecution, durable_id: str) -> None:
+        """Claim the durable JobEngine row, then run the schedule executor."""
+        claimed = self._job_engine.claim_job(durable_id)
+        if claimed is None:
+            existing = self._job_engine.get(durable_id)
+            if existing is not None:
+                from runtime.jobs import JobState as _JobState
+
+                if existing.state in (_JobState.COMPLETED, _JobState.FAILED, _JobState.CANCELLED):
+                    return
+            return
+        try:
+            self._run_execution(job, execution)
+            if execution.status == ExecutionStatus.SUCCESS:
+                self._job_engine.complete(durable_id)
+            else:
+                self._job_engine.fail(
+                    durable_id,
+                    execution.error_message or "automation_fire_failed",
+                    retry=False,
+                )
+        except Exception as exc:
+            try:
+                self._job_engine.fail(durable_id, str(exc), retry=False)
+            except KeyError:
+                pass
+
+    def _append_history(self, entry: AutomationHistoryEntry) -> None:
+        self._history.append(entry)
+        if len(self._history) > _MAX_HISTORY:
+            self._history = self._history[-_MAX_HISTORY:]
 
     def _run_execution(self, job: AutomationJob, execution: AutomationExecution) -> None:
         """Run the user-provided executor for a single attempt."""
@@ -612,6 +691,7 @@ class AutomationEngine:
             if self._executor is not None:
                 # Check if the executor is a coroutine function (async def)
                 import inspect
+
                 if inspect.iscoroutinefunction(self._executor):
                     loop = asyncio.new_event_loop()
                     try:
@@ -640,7 +720,9 @@ class AutomationEngine:
             job.run_count += 1
             job.last_run_at = now
             job.last_error = None
-            job.status = AutomationStatus.COMPLETED if job.trigger_type == TriggerType.ONE_SHOT else AutomationStatus.PENDING
+            job.status = (
+                AutomationStatus.COMPLETED if job.trigger_type == TriggerType.ONE_SHOT else AutomationStatus.PENDING
+            )
 
             entry = AutomationHistoryEntry(
                 execution_id=execution.id,
@@ -652,7 +734,7 @@ class AutomationEngine:
                 attempt=execution.attempt,
                 status=ExecutionStatus.SUCCESS,
             )
-            self._history.append(entry)
+            self._append_history(entry)
 
             if job.trigger_type != TriggerType.ONE_SHOT:
                 self._schedule_job(job)
@@ -682,12 +764,10 @@ class AutomationEngine:
                 error_code=execution.error_code or "error",
                 error_message=execution.error_message or "",
             )
-            self._history.append(entry)
+            self._append_history(entry)
 
             should_retry = (
-                execution.attempt < execution.max_attempts
-                and job.side_effect_safe
-                and job.retry_policy is not None
+                execution.attempt < execution.max_attempts and job.side_effect_safe and job.retry_policy is not None
             )
 
             if should_retry:
@@ -741,13 +821,17 @@ class AutomationEngine:
                 error_code=execution.error_code or "error",
                 error_message=execution.error_message or "",
             )
-            self._history.append(entry)
+            self._append_history(entry)
             self._save()
 
     # ── recovery ──────────────────────────────────────────────────────
 
     def _recover_running(self) -> None:
         """On startup, reset RUNNING jobs to PENDING and detect missed schedules."""
+        try:
+            self._job_engine.recover_running()
+        except Exception:
+            logger.warning("JobEngine recover_running failed", exc_info=True)
         for job in self._jobs.values():
             if job.status == AutomationStatus.RUNNING:
                 logger.info("Recovery: job %s was RUNNING at shutdown — resetting to PENDING", job.id)
@@ -896,7 +980,7 @@ class AutomationEngine:
                     error_message=fields.get("error_message"),
                     result_summary=fields.get("result_summary", ""),
                 )
-                self._history.append(entry)
+                self._append_history(entry)
             except (KeyError, ValueError, TypeError) as exc:
                 logger.warning("Skipping corrupted history entry: %s", exc)
 
@@ -923,6 +1007,7 @@ class AutomationEngine:
 
 
 # ── Backward-compatible shim ─────────────────────────────────────────
+
 
 class SimpleAutomationEngine:
     """Simple dict-based automation engine for E2E tests."""

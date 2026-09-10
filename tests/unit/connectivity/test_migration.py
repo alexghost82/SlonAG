@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from acta.connectivity.migration import LANRemoteMigration
 from acta.connectivity.types import ConnectionState, TransportKind
 
@@ -46,9 +44,7 @@ class TestMigrationNotify:
     def test_notify_migration(self) -> None:
         session = MagicMock()
         migration = LANRemoteMigration(session)
-        migration._notify_migration(
-            MagicMock(from_kind=TransportKind.LAN_TLS, to_kind=TransportKind.REMOTE)
-        )
+        migration._notify_migration(MagicMock(from_kind=TransportKind.LAN_TLS, to_kind=TransportKind.REMOTE))
         session._notify_state.assert_called_once()
 
 

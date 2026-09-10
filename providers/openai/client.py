@@ -124,9 +124,7 @@ class OpenAIHttpClient:
             )
         return body
 
-    def stream_chat_completion(
-        self, payload: Mapping[str, Any]
-    ) -> Iterator[dict[str, Any]]:
+    def stream_chat_completion(self, payload: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
         response = self._request(
             "POST",
             "/chat/completions",

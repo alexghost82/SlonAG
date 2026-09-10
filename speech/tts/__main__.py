@@ -71,11 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Unknown command: {args.command}", file=sys.stderr)
         return 2
 
-    piper_dir = (
-        Path(args.dest).expanduser()
-        if args.dest is not None
-        else default_piper_dir(args.repo_root)
-    )
+    piper_dir = Path(args.dest).expanduser() if args.dest is not None else default_piper_dir(args.repo_root)
     binary = resolve_piper_binary(piper_dir)
     print(
         "Binary strategy: prefer a local MIT rhasspy/piper binary at "

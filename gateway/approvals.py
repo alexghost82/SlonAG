@@ -29,8 +29,14 @@ class DurableApprovalCoordinator:
         self._waiters: dict[str, tuple[threading.Event, list[bool]]] = {}
 
     def request(
-        self, *, workspace_id: str, tool_name: str, reason: str,
-        timeout: float, session_id: str | None = None, run_id: str | None = None,
+        self,
+        *,
+        workspace_id: str,
+        tool_name: str,
+        reason: str,
+        timeout: float,
+        session_id: str | None = None,
+        run_id: str | None = None,
         tool_call_id: str | None = None,
     ) -> ApprovalRequest:
         if not (tool_call_id or "").strip():
@@ -38,16 +44,26 @@ class DurableApprovalCoordinator:
         now = time.time()
         approval_id = str(uuid4())
         self.store.create_approval(
-            approval_id=approval_id, workspace_id=workspace_id,
-            session_id=session_id, run_id=run_id, tool_call_id=tool_call_id,
-            tool_name=tool_name, reason=reason[:1000], created_at=now,
+            approval_id=approval_id,
+            workspace_id=workspace_id,
+            session_id=session_id,
+            run_id=run_id,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            reason=reason[:1000],
+            created_at=now,
             expires_at=now + max(0.01, timeout),
         )
         with self._lock:
             self._waiters[approval_id] = (threading.Event(), [])
         return ApprovalRequest(
-            approval_id, workspace_id, session_id, run_id, tool_call_id,
-            tool_name, now + max(0.01, timeout),
+            approval_id,
+            workspace_id,
+            session_id,
+            run_id,
+            tool_call_id,  # type: ignore[arg-type]
+            tool_name,
+            now + max(0.01, timeout),
         )
 
     def wait(self, request: ApprovalRequest, *, timeout: float) -> bool:
@@ -58,14 +74,18 @@ class DurableApprovalCoordinator:
         event, result = waiter
         if not event.wait(max(0.0, timeout)):
             self.store.decide_approval(
-                approval_id=request.approval_id, workspace_id=request.workspace_id,
-                decision="expired", device_id=None, now=time.time(),
+                approval_id=request.approval_id,
+                workspace_id=request.workspace_id,
+                decision="expired",
+                device_id=None,
+                now=time.time(),
             )
         with self._lock:
             self._waiters.pop(request.approval_id, None)
         row = self.store.approval(request.approval_id)
         return bool(
-            result and result[0]
+            result
+            and result[0]
             and row is not None
             and row["status"] == "allowed"
             and row["workspace_id"] == request.workspace_id
@@ -75,12 +95,18 @@ class DurableApprovalCoordinator:
         )
 
     def decide(
-        self, *, approval_id: str, workspace_id: str, allow: bool,
+        self,
+        *,
+        approval_id: str,
+        workspace_id: str,
+        allow: bool,
         device_id: str,
     ) -> bool:
         accepted = self.store.decide_approval(
-            approval_id=approval_id, workspace_id=workspace_id,
-            decision="allowed" if allow else "denied", device_id=device_id,
+            approval_id=approval_id,
+            workspace_id=workspace_id,
+            decision="allowed" if allow else "denied",
+            device_id=device_id,
             now=time.time(),
         )
         if not accepted:
@@ -95,8 +121,11 @@ class DurableApprovalCoordinator:
 
     def cancel(self, approval_id: str, *, workspace_id: str) -> None:
         self.store.decide_approval(
-            approval_id=approval_id, workspace_id=workspace_id,
-            decision="cancelled", device_id=None, now=time.time(),
+            approval_id=approval_id,
+            workspace_id=workspace_id,
+            decision="cancelled",
+            device_id=None,
+            now=time.time(),
         )
         with self._lock:
             waiter = self._waiters.pop(approval_id, None)
@@ -117,9 +146,11 @@ __all__ = ["ApprovalRequest", "DurableApprovalCoordinator"]
 
 # E2E test compatibility shims
 
+
 @dataclass
 class ApprovalGate:
     """Approval gate for Gateway tool/result flow E2E tests."""
+
     name: str = "approval_gate"
     pending: list[dict] = None  # type: ignore[assignment]
 
@@ -129,13 +160,15 @@ class ApprovalGate:
 
     def request_approval(self, tool_call_id: str, tool_name: str, workspace_id: str = "default") -> str:
         approval_id = uuid4().hex
-        self.pending.append({
-            "approval_id": approval_id,
-            "tool_call_id": tool_call_id,
-            "tool_name": tool_name,
-            "workspace_id": workspace_id,
-            "approved": False,
-        })
+        self.pending.append(
+            {
+                "approval_id": approval_id,
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "workspace_id": workspace_id,
+                "approved": False,
+            }
+        )
         return approval_id
 
     def get_status(self, approval_id: str) -> dict:
@@ -150,8 +183,12 @@ class ApprovalGate:
                 p["approved"] = True
                 break
 
-    async def request(self, tool: str, args: dict,
-        user_id: str = "", workspace: str = "",
+    async def request(
+        self,
+        tool: str,
+        args: dict,
+        user_id: str = "",
+        workspace: str = "",
     ) -> str:
         """Alias for request_approval with E2E-friendly kwargs."""
         return self.request_approval(
@@ -163,6 +200,7 @@ class ApprovalGate:
     async def await_one(self, request_id: str, timeout: float = 5.0) -> dict | None:
         """Wait for approval with timeout. Returns status dict or None on timeout."""
         import time
+
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             status = self.get_status(request_id)

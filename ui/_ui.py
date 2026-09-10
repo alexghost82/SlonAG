@@ -48,10 +48,6 @@ try:
 except Exception:  # pragma: no cover
     try_build_local_stt = None  # type: ignore[assignment]
 try:
-    from providers.contracts import AudioRequest
-except Exception:  # pragma: no cover
-    AudioRequest = None  # type: ignore[assignment,misc]
-try:
     from server.listener import DesktopControlListener
 except Exception:  # pragma: no cover
     DesktopControlListener = None  # type: ignore[assignment,misc]
@@ -66,10 +62,9 @@ try:
 except Exception:  # pragma: no cover
     ensure_tls_material = None  # type: ignore[assignment]
 try:
-    from acta.bridge import DesktopControlPlane, build_runtime_stack
+    from acta.bridge import DesktopControlPlane
 except Exception:  # pragma: no cover
     DesktopControlPlane = None  # type: ignore[assignment,misc]
-    build_runtime_stack = None  # type: ignore[assignment]
 
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -1497,46 +1492,30 @@ class MainWindow(QMainWindow):
             self._update_status(f"save error: {exc}")
 
     def _build_runtime_from_settings(self) -> None:
-        """Rebuild RuntimeStack using current UI settings."""
+        """Ask the host to rebuild runtime; widgets do not construct RuntimeStack."""
         try:
-            def _keys(name: str) -> str | None:
-                from config.secrets import get_provider_secret
-                return get_provider_secret(name)
-
             loaded = load_settings()
             pid = getattr(loaded, "provider_id", "gemini")
             mode = getattr(loaded, "network_mode", "hybrid")
             mid = getattr(loaded, "model_id", "")
-            ps_raw = getattr(loaded, "provider_settings", {})
-            ps_dict = {}
-            if ps_raw:
-                for k, v in ps_raw.items():
-                    if hasattr(v, "to_dict"):
-                        ps_dict[k] = v.to_dict()
-                    elif isinstance(v, dict):
-                        ps_dict[k] = v
-
-            if build_runtime_stack is not None:
-                stack = build_runtime_stack(
-                    repo_root=BASE_DIR,
-                    provider_id=pid,
-                    network_mode=mode,
-                    key_provider=_keys,
-                    model_id=mid,
-                    provider_settings=ps_dict,
-                )
-                self._runtime_stack = stack
-                for line in stack.summary_lines()[:12]:
-                    self._log_sig.emit(f"SYS: bridge {line}")
-
-            # Also update control plane
             if self._control_plane is not None:
+                from runtime.commands import UiCommand, UiCommandKind
+
+                self._control_plane.dispatch(
+                    UiCommand(
+                        UiCommandKind.CHANGE_SETTINGS,
+                        {
+                            "provider_id": pid,
+                            "network_mode": mode,
+                            "model_id": mid,
+                        },
+                    )
+                )
                 self._control_plane.provider_id = pid
                 self._control_plane.network_mode = mode
-
-            self._update_status(f"runtime rebuilt: provider={pid}")
+            self._update_status(f"settings changed: provider={pid}")
         except Exception as exc:
-            self._update_status(f"runtime rebuild failed: {exc}")
+            self._update_status(f"settings change failed: {exc}")
 
 
     def _build_right_panel(self) -> QWidget:
@@ -1768,97 +1747,17 @@ class MainWindow(QMainWindow):
             self._input.setText(text)
 
     def _listen_local_stt(self) -> None:
-        if not self._local_stt_ready or self._local_stt_provider is None:
-            self._log.append_log(f"SYS: {self._local_stt_message}")
+        if self._control_plane is not None:
+            from runtime.commands import UiCommand, UiCommandKind
+
+            self._control_plane.dispatch(UiCommand(UiCommandKind.START_VOICE))
             return
-        if self._local_stt_mic is None:
-            self._log.append_log("SYS: Microphone unavailable for local STT.")
-            return
-        provider = self._local_stt_provider
-        mic = self._local_stt_mic
-
-        def _run() -> None:
-            import asyncio
-            try:
-                from providers.contracts import AudioRequest, ModelInfo
-                from speech.stt.provider import PROVIDER_ID
-
-                self._state_sig.emit("LISTENING")
-                self._log_sig.emit("SYS: Local STT recording 3s…")
-                clip = mic.record(3.0)
-                model = ModelInfo(
-                    provider_id=PROVIDER_ID,
-                    model_id="local-stt",
-                    display_name="Local STT",
-                    audio_input=True,
-                    local=True,
-                )
-                transcript = asyncio.run(
-                    provider.transcribe(AudioRequest(model=model, audio=clip.audio))
-                )
-                text = (transcript.text or "").strip()
-                if text:
-                    self._log_sig.emit(f"YOU (STT): {text}")
-                    self._stt_text_sig.emit(text)
-                else:
-                    self._log_sig.emit(
-                        "SYS: Local STT empty (install openai-whisper for offline ASR)."
-                    )
-            except Exception as exc:
-                self._log_sig.emit(f"SYS: Local STT error — {exc}")
-            finally:
-                if not self._muted:
-                    self._state_sig.emit("LISTENING")
-
-        threading.Thread(target=_run, daemon=True).start()
+        self._log.append_log("SYS: start_voice (no control plane)")
 
     def _init_runtime_bridge(self) -> None:
-        if build_runtime_stack is None:
-            self._runtime_stack = None
-            self._log_sig.emit("SYS: runtime bridge unavailable")
-            return
-        try:
-            def _keys(name: str) -> str | None:
-                return get_secret(name)
-
-            # Read full settings from disk (Wave 15+).
-            try:
-                loaded = load_settings()
-                provider_id = getattr(loaded, "provider_id", DEFAULT_PROVIDER_ID)
-                network_mode = getattr(loaded, "network_mode", "hybrid")
-                model_id = getattr(loaded, "model_id", "")
-                ps_raw = getattr(loaded, "provider_settings", {})
-            except Exception:
-                provider_id = DEFAULT_PROVIDER_ID
-                network_mode = "hybrid"
-                model_id = ""
-                ps_raw = {}
-
-            # Convert provider_settings to dict for bridge
-            ps_dict = {}
-            if ps_raw:
-                for k, v in ps_raw.items():
-                    if hasattr(v, "to_dict"):
-                        ps_dict[k] = v.to_dict()
-                    elif isinstance(v, dict):
-                        ps_dict[k] = v
-
-            stack = build_runtime_stack(
-                repo_root=BASE_DIR,
-                provider_id=provider_id,
-                network_mode=network_mode,
-                key_provider=_keys,
-                model_id=model_id,
-                provider_settings=ps_dict,
-            )
-            self._runtime_stack = stack
-            for line in stack.summary_lines()[:12]:
-                self._log_sig.emit(f"SYS: bridge {line}")
-        except Exception as exc:
-            self._runtime_stack = None
-            self._log_sig.emit(
-                f"SYS: runtime bridge failed — {type(exc).__name__}"
-            )
+        # Host (main.py) injects RuntimeStack. Widgets do not build it.
+        if self._runtime_stack is None:
+            self._log_sig.emit("SYS: runtime stack pending host inject")
 
     def _init_control_plane(self) -> None:
         self._control_plane = None

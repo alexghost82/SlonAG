@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,11 +9,9 @@ import pytest
 from acta.connectivity.session import ConnectivitySession, ConnectivitySessionError
 from acta.connectivity.types import (
     ConnectionConnectionReason,
-    ConnectionInfo,
     ConnectionState,
-    ConnectionReason,
-    ConnectivityPolicy,
     ConnectivityMode,
+    ConnectivityPolicy,
     TransportKind,
 )
 
@@ -115,7 +112,7 @@ class TestSessionConnectRemote:
         with patch.object(session, "_scan_devices", return_value=[]):
             with patch.object(session, "_connect_remote", new=AsyncMock()):
                 await session.connect()
-                session._connect_remote.assert_awaited_once()
+                session._connect_remote.assert_awaited_once()  # type: ignore[attr-defined]
 
 
 class TestSessionReconnect:

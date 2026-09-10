@@ -1,9 +1,7 @@
 """Tests for workflow_learning.confidence."""
 
-import pytest
-
 from acta.workflow_learning.confidence import ConfidenceEngine
-from acta.workflow_learning.types import WorkflowCandidate, WorkflowState, WorkflowStep
+from acta.workflow_learning.types import WorkflowCandidate, WorkflowStep
 
 
 class TestConfidenceEngine:
@@ -64,7 +62,8 @@ class TestConfidenceEngine:
             name="long",
             steps=[
                 WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True),
-            ] + [WorkflowStep(tool_name="shell_exec", args={"cmd": "echo"}, ok=True)] * 15,
+            ]
+            + [WorkflowStep(tool_name="shell_exec", args={"cmd": "echo"}, ok=True)] * 15,
             repetition_count=5,
         )
         score1 = engine.compute(c1)

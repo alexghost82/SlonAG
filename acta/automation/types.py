@@ -2,6 +2,7 @@
 
 All scheduling, execution, and history types live here so the engine
 and the action layer can share them without circular imports."""
+
 from __future__ import annotations
 
 import time
@@ -12,54 +13,55 @@ from uuid import uuid4
 
 # ── Trigger types ──────────────────────────────────────────────────────────
 
+
 class TriggerType(StrEnum):
-    ONE_SHOT = "one_shot"           # fire once, then retire
-    RECURRING = "recurring"         # fire at fixed interval
-    CRON = "cron"                   # cron expression (RFC 561)
+    ONE_SHOT = "one_shot"  # fire once, then retire
+    RECURRING = "recurring"  # fire at fixed interval
+    CRON = "cron"  # cron expression (RFC 561)
 
 
 class AutomationStatus(StrEnum):
-    PENDING    = "pending"
-    SCHEDULED  = "scheduled"        # waiting for next_run
-    RUNNING    = "running"
-    COMPLETED  = "completed"
-    FAILED     = "failed"
-    CANCELLED  = "cancelled"
+    PENDING = "pending"
+    SCHEDULED = "scheduled"  # waiting for next_run
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ExecutionStatus(StrEnum):
-    PENDING   = "pending"
-    RUNNING   = "running"
-    SUCCESS   = "success"
-    FAILED    = "failed"
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
     CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
 
 
 # ── Engine configuration ────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class RetryPolicy:
     """Max retries and back-off strategy for failed executions."""
 
-    max_attempts: int = 3                # total tries (1 original + retries)
+    max_attempts: int = 3  # total tries (1 original + retries)
     initial_delay_seconds: float = 1.0
     max_delay_seconds: float = 60.0
     backoff_multiplier: float = 2.0
-    retryable_codes: frozenset[str] = field(
-        default_factory=lambda: frozenset({"transient", "timeout", "rate_limit"})
-    )
+    retryable_codes: frozenset[str] = field(default_factory=lambda: frozenset({"transient", "timeout", "rate_limit"}))
 
 
 @dataclass(frozen=True)
 class ConcurrencyPolicy:
     """Limits on concurrent executions per job or globally."""
 
-    max_concurrent_per_job: int = 1      # one execution at a time per job
-    max_concurrent_global: int = 4               # global cap across all jobs
+    max_concurrent_per_job: int = 1  # one execution at a time per job
+    max_concurrent_global: int = 4  # global cap across all jobs
 
 
 # ── Job (schedule) ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class AutomationJob:
@@ -69,8 +71,8 @@ class AutomationJob:
     name: str = ""
     trigger_type: TriggerType = TriggerType.ONE_SHOT
     # ── trigger parameters ─────────────────────────────────────────────
-    cron_expression: str = ""            # e.g. "0 9 * * 1-5" for cron
-    interval_seconds: float = 0.0        # positive for recurring
+    cron_expression: str = ""  # e.g. "0 9 * * 1-5" for cron
+    interval_seconds: float = 0.0  # positive for recurring
     # ── execution params ───────────────────────────────────────────────
     payload: dict[str, Any] = field(default_factory=dict)  # tool args dict
     goal: str = ""
@@ -89,7 +91,7 @@ class AutomationJob:
     failure_count: int = 0
     total_attempts: int = 0
     # ── safety ───────────────────────────────────────────────────────────
-    side_effect_safe: bool = True        # True = auto-retry; False = pause on failure
+    side_effect_safe: bool = True  # True = auto-retry; False = pause on failure
     last_error: str | None = None
     # ── concurrency tracking ─────────────────────────────────────────────
     active_executions: int = 0
@@ -97,6 +99,7 @@ class AutomationJob:
 
 
 # ── Execution (run) ────────────────────────────────────────────────────────
+
 
 @dataclass
 class AutomationExecution:
@@ -115,9 +118,11 @@ class AutomationExecution:
     result_payload: dict[str, Any] = field(default_factory=dict)
     cancelled_by: str | None = None
     cancelled_at: float | None = None
+    next_retry_at: float | None = None
 
 
 # ── History entry ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class AutomationHistoryEntry:
@@ -138,9 +143,11 @@ class AutomationHistoryEntry:
 
 # E2E test compatibility shim: simplified AutomationRule for simple dict-based rules
 
+
 @dataclass
 class AutomationRule:
     """Simple automation rule for E2E tests (simpler than AutomationJob)."""
+
     name: str = ""
     trigger: str | dict[str, Any] = "manual"
     action: str | dict[str, Any] = ""

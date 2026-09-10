@@ -58,40 +58,58 @@ def _conversation() -> tuple[object, ...]:
 
 
 def test_openai_native_messages_keep_calls_results_errors_and_artifacts() -> None:
-    payloads = [message_payload(message) for message in _conversation()]
-    assert [call["id"] for call in payloads[2]["tool_calls"]] == ["call-a", "call-b"]
-    success = json.loads(payloads[3]["content"])
+    payloads = [message_payload(message) for message in _conversation()]  # type: ignore[arg-type]
+    assert [call["id"] for call in payloads[2]["tool_calls"]] == ["call-a", "call-b"]  # type: ignore[attr-defined]
+    success = json.loads(payloads[3]["content"])  # type: ignore[arg-type]
     assert success == {
         "result": {"temp": 25},
         "artifacts": [{"kind": "report", "uri": "memory://weather"}],
     }
     assert payloads[3]["tool_call_id"] == "call-a"
-    assert json.loads(payloads[4]["content"]) == {"error": "offline"}
+    assert json.loads(payloads[4]["content"]) == {"error": "offline"}  # type: ignore[arg-type]
 
 
 def test_gemini_native_messages_keep_calls_results_errors_and_artifacts() -> None:
-    contents, config = _contents_and_config(_conversation())
+    contents, config = _contents_and_config(_conversation())  # type: ignore[arg-type]
     assert config == {"system_instruction": "Be concise"}
     calls = contents[1]["parts"][1:]
     assert [part["function_call"]["id"] for part in calls] == ["call-a", "call-b"]
     response = contents[2]["parts"][0]["function_response"]
     assert response["id"] == "call-a"
     assert response["response"]["artifacts"][0]["kind"] == "report"
-    assert contents[3]["parts"][0]["function_response"]["response"] == {
-        "error": "offline"
-    }
+    assert contents[3]["parts"][0]["function_response"]["response"] == {"error": "offline"}
 
 
 def test_stream_assembler_correlates_fragmented_multiple_calls_in_order() -> None:
     assembler = ToolCallStreamAssembler("openai")
-    assembler.add({"choices": [{"delta": {"tool_calls": [
-        {"index": 1, "id": "b", "function": {"name": "second", "arguments": "{"}},
-        {"index": 0, "id": "a", "function": {"name": "first", "arguments": "{"}},
-    ]}}]})
-    assembler.add({"choices": [{"delta": {"tool_calls": [
-        {"index": 0, "function": {"arguments": "}"}},
-        {"index": 1, "function": {"arguments": "}"}},
-    ]}}]})
+    assembler.add(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 1, "id": "b", "function": {"name": "second", "arguments": "{"}},
+                            {"index": 0, "id": "a", "function": {"name": "first", "arguments": "{"}},
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+    assembler.add(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 0, "function": {"arguments": "}"}},
+                            {"index": 1, "function": {"arguments": "}"}},
+                        ]
+                    }
+                }
+            ]
+        }
+    )
     assert assembler.finish() == (
         ToolCall("a", "first", {}),
         ToolCall("b", "second", {}),
@@ -100,9 +118,19 @@ def test_stream_assembler_correlates_fragmented_multiple_calls_in_order() -> Non
 
 def test_stream_assembler_is_bounded_and_rejects_malformed_arguments() -> None:
     assembler = ToolCallStreamAssembler("openai", max_calls=1, max_bytes=20)
-    assembler.add({"choices": [{"delta": {"tool_calls": [
-        {"index": 0, "id": "a", "function": {"name": "first", "arguments": "{"}},
-    ]}}]})
+    assembler.add(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 0, "id": "a", "function": {"name": "first", "arguments": "{"}},
+                        ]
+                    }
+                }
+            ]
+        }
+    )
     with pytest.raises(ProviderError, match="malformed"):
         assembler.finish()
 
@@ -111,10 +139,10 @@ def test_stream_assembler_is_bounded_and_rejects_malformed_arguments() -> None:
 async def test_local_native_continuation_reaches_second_request() -> None:
     transport = FakeTransport(chat={"choices": [{"message": {"content": "done"}}]})
     provider = OpenAICompatibleChatProvider(transport=transport)
-    request = ChatRequest(model=_model("local"), messages=_conversation())
+    request = ChatRequest(model=_model("local"), messages=_conversation())  # type: ignore[arg-type]
     response = await provider.chat(request)
     assert response.text == "done"
-    messages = transport.calls[0]["json_body"]["messages"]
+    messages = transport.calls[0]["json_body"]["messages"]  # type: ignore[index]
     assert messages[2]["tool_calls"][0]["id"] == "call-a"
     assert messages[3]["tool_call_id"] == "call-a"
     assert json.loads(messages[4]["content"]) == {"error": "offline"}

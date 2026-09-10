@@ -26,8 +26,12 @@ class SequencedEnvelope:
 
 class GatewayConnection:
     def __init__(
-        self, *, context: GatewayContext, store: GatewayStore,
-        router: GatewayRouter, is_active: Callable[[str], bool],
+        self,
+        *,
+        context: GatewayContext,
+        store: GatewayStore,
+        router: GatewayRouter,
+        is_active: Callable[[str], bool],
         on_close: Callable[[str], None] | None = None,
         validate_auth: Callable[[], object] | None = None,
         max_pending: int = 128,
@@ -75,12 +79,8 @@ class GatewayConnection:
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
                 raise GatewayProtocolError("invalid_cursor", "Replay cursor is invalid.")
             if sequence > self.highest_delivered:
-                raise GatewayProtocolError(
-                    "invalid_cursor", "Replay cursor was not delivered on this connection."
-                )
-            self.store.set_cursor(
-                self.context.device_id, "events", sequence, time.time()
-            )
+                raise GatewayProtocolError("invalid_cursor", "Replay cursor was not delivered on this connection.")
+            self.store.set_cursor(self.context.device_id, "events", sequence, time.time())
             return response_envelope(request, "system.acknowledged", {"sequence": sequence})
         return await self.router.dispatch(self.context, request)
 
@@ -94,7 +94,10 @@ class GatewayConnection:
             self._on_close(self.context.connection_id)
 
     def heartbeat(
-        self, *, now: float | None = None, ping_interval: float = 20.0,
+        self,
+        *,
+        now: float | None = None,
+        ping_interval: float = 20.0,
         timeout: float = 60.0,
     ) -> bool:
         """Return True when transport should send a ping; close stale peers."""
@@ -118,15 +121,20 @@ class GatewayConnection:
                 self._validate_auth()
             except Exception as exc:
                 self.close()
-                raise GatewayProtocolError(
-                    "unauthorized", "Gateway connection authorization expired."
-                ) from exc
+                from runtime.metrics import inc
+
+                inc("gateway_auth_failures")
+                raise GatewayProtocolError("unauthorized", "Gateway connection authorization expired.") from exc
 
 
 class GatewayWebSocketRuntime:
     def __init__(
-        self, *, store: GatewayStore, router: GatewayRouter,
-        is_active: Callable[[str], bool], workspace_for: Callable[[str], str],
+        self,
+        *,
+        store: GatewayStore,
+        router: GatewayRouter,
+        is_active: Callable[[str], bool],
+        workspace_for: Callable[[str], str],
         max_pending: int = 128,
         replay_limit: int = 1000,
     ) -> None:
@@ -140,28 +148,37 @@ class GatewayWebSocketRuntime:
         self._lock = threading.RLock()
 
     async def connect(
-        self, *, device_id: str, after_sequence: int | None = None,
+        self,
+        *,
+        device_id: str,
+        after_sequence: int | None = None,
         validate_auth: Callable[[], object] | None = None,
     ) -> GatewayConnection:
         if not self.is_active(device_id):
+            from runtime.metrics import inc
+
+            inc("gateway_auth_failures")
             raise GatewayProtocolError("unauthorized", "Device is not trusted.")
         workspace_id = self.workspace_for(device_id)
         connection_id = str(uuid4())
+        from runtime.metrics import inc
+
+        inc("gateway_connections")
         self.store.open_connection(connection_id, device_id, time.time())
         connection = GatewayConnection(
             context=GatewayContext(device_id, workspace_id, connection_id),
-            store=self.store, router=self.router, is_active=self.is_active,
+            store=self.store,
+            router=self.router,
+            is_active=self.is_active,
             on_close=self._remove_connection,
             validate_auth=validate_auth,
             max_pending=self.max_pending,
         )
-        cursor = (
-            self.store.cursor(device_id, "events")
-            if after_sequence is None else after_sequence
-        )
+        cursor = self.store.cursor(device_id, "events") if after_sequence is None else after_sequence
         try:
             replay = self.store.events_after(
-                workspace_id=workspace_id, sequence=cursor,
+                workspace_id=workspace_id,
+                sequence=cursor,
                 limit=min(self.replay_limit, self.max_pending),
             )
         except GatewayStoreError as exc:
@@ -188,8 +205,10 @@ class GatewayWebSocketRuntime:
 
     def publish_now(self, workspace_id: str, envelope: GatewayEnvelope) -> int:
         sequence = self.store.append_event(
-            workspace_id=workspace_id, session_id=envelope.session_id,
-            envelope_json=envelope.to_json().decode("utf-8"), created_at=time.time(),
+            workspace_id=workspace_id,
+            session_id=envelope.session_id,
+            envelope_json=envelope.to_json().decode("utf-8"),
+            created_at=time.time(),
         )
         item = SequencedEnvelope(sequence, envelope)
         with self._lock:
@@ -210,6 +229,8 @@ class GatewayWebSocketRuntime:
 
 
 __all__ = [
-    "GatewayBackpressureError", "GatewayConnection", "GatewayWebSocketRuntime",
+    "GatewayBackpressureError",
+    "GatewayConnection",
+    "GatewayWebSocketRuntime",
     "SequencedEnvelope",
 ]

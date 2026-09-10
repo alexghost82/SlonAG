@@ -21,8 +21,7 @@ class DetectionBackend(ABC):
         return False
 
     @abstractmethod
-    def detect(self, frame: bytes, width: int, height: int) -> list[DetectionResult]:
-        ...
+    def detect(self, frame: bytes, width: int, height: int) -> list[DetectionResult]: ...
 
 
 class OCRBackend(ABC):
@@ -33,11 +32,11 @@ class OCRBackend(ABC):
         return False
 
     @abstractmethod
-    def ocr(self, frame: bytes, width: int, height: int) -> list[dict[str, Any]]:
-        ...
+    def ocr(self, frame: bytes, width: int, height: int) -> list[dict[str, Any]]: ...
 
 
 # ── Dummy backends (always available) ──────────────────────────────
+
 
 class DummyObjectDetector(DetectionBackend):
     @staticmethod
@@ -68,6 +67,7 @@ class DummyOCR(OCRBackend):
 
 # ── OpenCV person detector ───────────────────────────────────────
 
+
 class OpenCVPersonDetector(DetectionBackend):
     """OpenCV HOG-based person detector."""
 
@@ -77,10 +77,10 @@ class OpenCVPersonDetector(DetectionBackend):
     def can_run() -> bool:
         if OpenCVPersonDetector._hog is None:
             try:
-                import cv2  # type: ignore
-                OpenCVPersonDetector._hog = cv2.HOGDescriptor()
-                OpenCVPersonDetector._hog.setSVMDetector(
-                    cv2.HOGDescriptor_getDefaultPeopleDetector())
+                import cv2
+
+                OpenCVPersonDetector._hog = cv2.HOGDescriptor()  # type: ignore[attr-defined]
+                OpenCVPersonDetector._hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())  # type: ignore[attr-defined]
             except Exception:
                 OpenCVPersonDetector._hog = False
         return OpenCVPersonDetector._hog is not False
@@ -89,21 +89,24 @@ class OpenCVPersonDetector(DetectionBackend):
         if not self.can_run():
             return []
         try:
-            import cv2  # type: ignore
-            import numpy as np  # type: ignore
+            import cv2
+            import numpy as np
+
             img = cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 return []
-            rects, weights = OpenCVPersonDetector._hog.detectMultiScale(img)
+            rects, weights = OpenCVPersonDetector._hog.detectMultiScale(img)  # type: ignore[union-attr]
             results: list[DetectionResult] = []
             for (x, y, w, h), score in zip(rects, weights):
                 conf = float(max(score, 0.0))
-                results.append(DetectionResult(
-                    kind=DetectionKind.PERSON, label="person",
-                    confidence=conf,
-                    bbox=Bbox(x_min=x / width, y_min=y / height,
-                              x_max=(x + w) / width, y_max=(y + h) / height),
-                ))
+                results.append(
+                    DetectionResult(
+                        kind=DetectionKind.PERSON,
+                        label="person",
+                        confidence=conf,
+                        bbox=Bbox(x_min=x / width, y_min=y / height, x_max=(x + w) / width, y_max=(y + h) / height),
+                    )
+                )
             return results
         except Exception:
             return []
@@ -127,10 +130,11 @@ class OpenCVObjectDetector(DetectionBackend):
         if self._cascades:
             return
         try:
-            import cv2  # type: ignore
+            import cv2
+
             for p in self.cascade_paths:
                 try:
-                    c = cv2.CascadeClassifier(p)
+                    c = cv2.CascadeClassifier(p)  # type: ignore[attr-defined]
                     if not c.empty:
                         self._cascades.append(c)
                 except Exception:
@@ -143,27 +147,31 @@ class OpenCVObjectDetector(DetectionBackend):
         if not self._cascades:
             return []
         try:
-            import cv2  # type: ignore
-            import numpy as np  # type: ignore
+            import cv2
+            import numpy as np
+
             img = cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 return []
             results: list[DetectionResult] = []
             for c in self._cascades:
                 rects = c.detectMultiScale(img, scaleFactor=1.1, minNeighbors=3)
-                for (x, y, w, h) in rects:
-                    results.append(DetectionResult(
-                        kind=DetectionKind.OBJECT, label="detected_object",
-                        confidence=0.8,
-                        bbox=Bbox(x_min=x / width, y_min=y / height,
-                                  x_max=(x + w) / width, y_max=(y + h) / height),
-                    ))
+                for x, y, w, h in rects:
+                    results.append(
+                        DetectionResult(
+                            kind=DetectionKind.OBJECT,
+                            label="detected_object",
+                            confidence=0.8,
+                            bbox=Bbox(x_min=x / width, y_min=y / height, x_max=(x + w) / width, y_max=(y + h) / height),
+                        )
+                    )
             return results
         except Exception:
             return []
 
 
 # ── Tesseract OCR ────────────────────────────────────────────────
+
 
 class TesseractOCR(OCRBackend):
     """Tesseract OCR backend."""
@@ -175,6 +183,7 @@ class TesseractOCR(OCRBackend):
         if TesseractOCR._tesseract is None:
             try:
                 import pytesseract  # type: ignore
+
                 TesseractOCR._tesseract = pytesseract
             except Exception:
                 TesseractOCR._tesseract = False
@@ -184,8 +193,9 @@ class TesseractOCR(OCRBackend):
         if not self.can_run():
             return []
         try:
-            import cv2  # type: ignore
-            import numpy as np  # type: ignore
+            import cv2
+            import numpy as np
+
             img = cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
                 return []
@@ -199,21 +209,31 @@ class TesseractOCR(OCRBackend):
                 parts = line.split()
                 if len(parts) >= 5:
                     char = parts[0]
-                    l, t, r, b = int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4])
-                    results.append({
-                        "text": char,
-                        "confidence": 0.9,
-                        "bbox": {
-                            "x_min": l / width, "y_min": 1 - t / height,
-                            "x_max": r / width, "y_max": 1 - b / height,
-                        },
-                    })
+                    left, top, right, bottom = (
+                        int(parts[1]),
+                        int(parts[2]),
+                        int(parts[3]),
+                        int(parts[4]),
+                    )
+                    results.append(
+                        {
+                            "text": char,
+                            "confidence": 0.9,
+                            "bbox": {
+                                "x_min": left / width,
+                                "y_min": 1 - top / height,
+                                "x_max": right / width,
+                                "y_max": 1 - bottom / height,
+                            },
+                        }
+                    )
             return results
         except Exception:
             return []
 
 
 # ── Backend resolver ─────────────────────────────────────────────
+
 
 def build_person_detector() -> DetectionBackend:
     if OpenCVPersonDetector.can_run():

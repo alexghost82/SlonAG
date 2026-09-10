@@ -6,24 +6,18 @@ process-tree cleanup, platform handling, and Russian error messages.
 
 from __future__ import annotations
 
-import asyncio
 import os
-import signal
-import subprocess
-import sys
 import threading
-import time
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 
 from acta.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
 from acta.tools.contracts import ToolResult
 
-shell_exec_mod = None
-ShellExecResult = None
+shell_exec_mod: Any = None
+ShellExecResult: Any = None
 
 
 @pytest.fixture(autouse=True)
@@ -32,6 +26,7 @@ def _import_shell_exec():
     if shell_exec_mod is None:
         from actions import shell_exec as mod
         from actions.shell_exec import ShellExecResult as SER
+
         shell_exec_mod = mod
         ShellExecResult = SER
 
@@ -39,6 +34,7 @@ def _import_shell_exec():
 # ---------------------------------------------------------------------------
 # 1. Basic execution
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_success_stdout() -> None:
     """Happy path: command with stdout."""
@@ -81,7 +77,6 @@ def test_shell_exec_stderr() -> None:
 
 
 def test_shell_exec_no_output() -> None:
-
     """Command with no stdout/stderr produces '(нет вывода)'."""
     result = shell_exec_mod.shell_exec(
         {"command": "true"},
@@ -95,6 +90,7 @@ def test_shell_exec_no_output() -> None:
 # 2. Timeout
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_timeout() -> None:
     """Short timeout causes non-zero exit; tool returns ok=False."""
     result = shell_exec_mod.shell_exec(
@@ -106,13 +102,14 @@ def test_shell_exec_timeout() -> None:
     data = result.data
     if isinstance(data, dict):
         # Timeout is clamped to min 1.0s
-        assert data.get("timeout_seconds") >= 1.0
+        assert data.get("timeout_seconds") >= 1.0  # type: ignore[operator]
         assert data.get("timed_out") is True
 
 
 # ---------------------------------------------------------------------------
 # 3. Process-tree termination (kill_tree)
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_process_tree_cleanup() -> None:
     """Subprocess tree is cleaned up after execution."""
@@ -141,6 +138,7 @@ def test_shell_exec_timeout_kills_tree() -> None:
 # 4. Output limits
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_stdout_cap() -> None:
     """stdout_max caps output and appends truncation marker."""
     big_text = "A" * 100000  # 100 KB
@@ -152,19 +150,15 @@ def test_shell_exec_stdout_cap() -> None:
     assert "A" in result.message
     # Check that output was truncated (marker present)
     from i18n import _
+
     truncated_marker = _("shell_exec.output_truncated")
     assert truncated_marker in result.message
 
 
-def test_shell_exec_stderr() -> None:
-    """Redirection at start of command is blocked as a command injection vector."""
-    # _is_blocked blocks special first chars and prefixes
-    assert shell_exec_mod._is_blocked("> /tmp/file") is True
-    assert shell_exec_mod._is_blocked("< /etc/shadow") is True
-    assert shell_exec_mod._is_blocked(">> /tmp/append") is True
 # ---------------------------------------------------------------------------
 # 5. Invalid CWD
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_invalid_cwd() -> None:
     """Non-existent CWD returns ToolResult(ok=False, code='invalid_cwd')."""
@@ -189,6 +183,7 @@ def test_shell_exec_valid_cwd_under_home() -> None:
 # ---------------------------------------------------------------------------
 # 6. Blocked commands
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "cmd",
@@ -218,9 +213,9 @@ def test_shell_exec_blocked(cmd: str) -> None:
 # 7. Rejected command (safety deny)
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_denied_by_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     """When SafetyPolicy denies, tool returns ok=False, code='denied'."""
-    import acta.safety.policy as pol
 
     fake_decision = SafetyDecision(
         kind=DecisionKind.DENY,
@@ -246,6 +241,7 @@ def test_shell_exec_denied_by_policy(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # 8. Missing/invalid arguments
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_missing_command() -> None:
     """No command or arguments returns appropriate error."""
@@ -299,6 +295,7 @@ def test_shell_exec_non_list_arguments() -> None:
 # 9. User denial via confirmer
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_user_denied() -> None:
     """User declining confirmation returns code='user_denied'."""
     result = shell_exec_mod.shell_exec(
@@ -324,6 +321,7 @@ def test_shell_exec_user_accepted() -> None:
 # 10. Cancellation
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_cancel_during_approval(monkeypatch: pytest.MonkeyPatch) -> None:
     """A cancel event set before approval returns cancelled."""
     pass  # Full cancellation tested through ToolExecutor.execute() below
@@ -332,6 +330,7 @@ def test_shell_exec_cancel_during_approval(monkeypatch: pytest.MonkeyPatch) -> N
 # ---------------------------------------------------------------------------
 # 11. Platform handling
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_platform_echo() -> None:
     """Echo works on all platforms."""
@@ -358,6 +357,7 @@ def test_shell_exec_platform_pwd() -> None:
 # 12. Russian error messages
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_russian_error_blocked() -> None:
     """Blocked commands return Russian error."""
     result = shell_exec_mod.shell_exec(
@@ -381,6 +381,7 @@ def test_shell_exec_russian_error_invalid_cwd() -> None:
 # 13. Stdin support
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_stdin() -> None:
     """stdin is piped to the subprocess."""
     result = shell_exec_mod.shell_exec(
@@ -394,6 +395,7 @@ def test_shell_exec_stdin() -> None:
 # ---------------------------------------------------------------------------
 # 14. ToolResult structure
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_result_data() -> None:
     """Successful call returns structured data dict."""
@@ -426,15 +428,17 @@ def test_shell_exec_result_has_all_fields() -> None:
 # 15. Integration: full pipeline (ToolResult → model continuation)
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_full_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Model tool call → ToolRegistry → SafetyPolicy → ToolExecutor → ToolResult."""
-    from acta.tools.registry import ToolRegistry
-    from acta.tools.executor import ToolExecutor
     from acta.safety.policy import SafetyPolicy
-    from acta.tools.contracts import ToolSpec
 
     # Ensure shell_exec is in the safety registry
     from acta.safety.registry import _REGISTRY, ArgSchema, SafetyRule
+    from acta.tools.contracts import ToolSpec
+    from acta.tools.executor import ToolExecutor
+    from acta.tools.registry import ToolRegistry
+
     if "shell_exec" not in _REGISTRY:
         _REGISTRY["shell_exec"] = SafetyRule(
             risk=RiskLevel.CONFIRM,
@@ -473,16 +477,16 @@ def test_shell_exec_full_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
 # 16. Integration: cancellation through ToolExecutor
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_executor_cancel_during_exec(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cancellation event during approval propagates."""
     cancel_evt = threading.Event()
     cancel_evt.set()  # Pre-cancelled
 
-    from acta.tools.registry import ToolRegistry
     from acta.safety.policy import SafetyPolicy
-    from acta.tools.contracts import ToolSpec
+    from acta.tools.contracts import RiskLevel, ToolSpec
     from acta.tools.executor import ToolExecutor
-    from acta.tools.contracts import RiskLevel
+    from acta.tools.registry import ToolRegistry
 
     registry = ToolRegistry()
     spec = ToolSpec(
@@ -514,15 +518,14 @@ def test_shell_exec_executor_cancel_during_exec(monkeypatch: pytest.MonkeyPatch)
 # 17. Legacy cmd_control deprecation shim
 # ---------------------------------------------------------------------------
 
+
 def test_cmd_control_deprecated_shim() -> None:
     """cmd_control delegates to shell_exec but is marked deprecated."""
     try:
         from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
     except Exception as exc:
         pytest.skip(f"Legacy adapter import broken (pre-existing): {exc}")
-    result = _cmd_control_deprecated_handler(
-        {"command": "echo legacy-test", "cwd": str(Path.cwd())}
-    )
+    result = _cmd_control_deprecated_handler({"command": "echo legacy-test", "cwd": str(Path.cwd())})
     assert result.ok is False
     assert "deprecated" in result.message.lower()
     assert result.code == "deprecated"  # deprecated tool still returns ok=True
@@ -534,9 +537,7 @@ def test_cmd_control_legacy_args() -> None:
         from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
     except Exception as exc:
         pytest.skip(f"Legacy adapter import broken (pre-existing): {exc}")
-    result = _cmd_control_deprecated_handler(
-        {"cmd": "echo legacy-cmd", "cwd": str(Path.cwd())}
-    )
+    result = _cmd_control_deprecated_handler({"cmd": "echo legacy-cmd", "cwd": str(Path.cwd())})
     assert result.ok is False
     assert "deprecated" in result.message.lower()
     assert result.code == "deprecated"  # deprecated tool still returns ok=True
@@ -545,6 +546,7 @@ def test_cmd_control_legacy_args() -> None:
 # ---------------------------------------------------------------------------
 # 18. Output truncation markers are detectable
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_output_truncation_marker() -> None:
     """Huge output is truncated with a marker.
@@ -563,6 +565,7 @@ def test_shell_exec_output_truncation_marker() -> None:
         tmp.unlink(missing_ok=True)
     assert result.ok is True
     from i18n import _
+
     marker = _("shell_exec.output_truncated")
     assert marker in result.message
 
@@ -571,13 +574,13 @@ def test_shell_exec_output_truncation_marker() -> None:
 # 19. Environment allowlist
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_env_allowlist() -> None:
     """env_allowlist restricts which os.environ keys are visible."""
     os.environ["SHELL_EXEC_TEST_VAR"] = "secret_value"
     try:
         result = shell_exec_mod.shell_exec(
-            {"arguments": ["sh", "-c", "echo $TEST_VAR"],
-             "env_allowlist": ["SHELL_EXEC_TEST_VAR"]},
+            {"arguments": ["sh", "-c", "echo $TEST_VAR"], "env_allowlist": ["SHELL_EXEC_TEST_VAR"]},
             current_cwd=str(Path.cwd()),
         )
         assert result.ok is True
@@ -588,6 +591,7 @@ def test_shell_exec_env_allowlist() -> None:
 # ---------------------------------------------------------------------------
 # 20. Kill tree default
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_kill_tree_default() -> None:
     """kill_tree defaults to True."""
@@ -602,6 +606,7 @@ def test_shell_exec_kill_tree_default() -> None:
 # 21. Timeout clamping
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_timeout_clamped() -> None:
     """Timeout outside [1, 300] is clamped."""
     result = shell_exec_mod.shell_exec(
@@ -611,7 +616,8 @@ def test_shell_exec_timeout_clamped() -> None:
     assert result.ok is True
     data = result.data
     if isinstance(data, dict):
-        assert data.get("timeout_seconds") >= 1.0  # clamped to min
+        timeout = data.get("timeout_seconds")
+        assert isinstance(timeout, (int, float)) and timeout >= 1.0
 
 
 def test_shell_exec_timeout_high_clamped() -> None:
@@ -627,14 +633,15 @@ def test_shell_exec_timeout_high_clamped() -> None:
 # 22. Cancellation via ToolExecutor
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_executor_integration() -> None:
     """Full integration: ToolExecutor.execute with a real command."""
-    from acta.tools.registry import ToolRegistry
-    from acta.tools.executor import ToolExecutor
     from acta.safety.policy import SafetyPolicy
-    from acta.tools.contracts import ToolSpec
-
     from acta.safety.registry import _REGISTRY, ArgSchema, SafetyRule
+    from acta.tools.contracts import ToolSpec
+    from acta.tools.executor import ToolExecutor
+    from acta.tools.registry import ToolRegistry
+
     if "shell_exec" not in _REGISTRY:
         _REGISTRY["shell_exec"] = SafetyRule(
             risk=RiskLevel.CONFIRM,
@@ -671,6 +678,7 @@ def test_shell_exec_executor_integration() -> None:
 # 23. Result data structure
 # ---------------------------------------------------------------------------
 
+
 def test_shell_exec_data_fields() -> None:
     """data dict has all expected keys."""
     result = shell_exec_mod.shell_exec(
@@ -692,15 +700,18 @@ def test_shell_exec_data_fields() -> None:
 # 24. ToolSpec contract compliance
 # ---------------------------------------------------------------------------
 
+
 def test_tool_name_constant() -> None:
     """TOOL_NAME matches the canonical registry name."""
     from actions.shell_exec import TOOL_NAME
+
     assert TOOL_NAME == "shell_exec"
 
 
 # ---------------------------------------------------------------------------
 # 25. CWD: /tmp is accepted
 # ---------------------------------------------------------------------------
+
 
 def test_shell_exec_cwd_tmp() -> None:
     """CWD under /tmp is accepted."""

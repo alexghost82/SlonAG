@@ -58,6 +58,7 @@ class McpStreamableHttpTransport:
     def _make_timeout(self, read_override: float | None = None) -> Any:
         """Create an httpx Timeout with consistent keyword params."""
         import httpx
+
         return httpx.Timeout(
             connect=self._connect_timeout,
             read=read_override if read_override is not None else self._read_timeout,
@@ -80,37 +81,48 @@ class McpStreamableHttpTransport:
         )
 
         try:
-            async with streamable_http_client(
-                self.url, http_client=http_client
-            ) as (read_stream, write_stream, session_id):
-                self._write_stream = write_stream
-                self._session_id = session_id
-
-                # Start the reader loop in background
-                self._reader_task = asyncio.create_task(self._reader_loop(read_stream))
-
-                # Verify connection by sending initialize request
-                try:
-                    result = await self._send_request(
-                        "initialize",
-                        {
-                            "protocolVersion": "2025-03-26",
-                            "capabilities": {},
-                            "clientInfo": {
-                                "name": "slonag",
-                                "version": "0.1.0",
-                            },
-                        },
-                        timeout=15.0,
-                    )
-                    if not isinstance(result, dict):
-                        raise ValueError("initialize вернул результат не в формате dict")
-                except Exception:
-                    # Server may not support initialize; transport is still valid
-                    pass
-
+            await asyncio.wait_for(
+                http_client.get(self.url),
+                timeout=self._connect_timeout,
+            )
         except Exception as exc:
+            try:
+                await http_client.aclose()
+            except Exception:
+                pass
             raise RuntimeError(t("mcp.session_failed", exc=str(exc))) from exc
+
+        try:
+            await asyncio.wait_for(
+                self._open_streamable_session(http_client, streamable_http_client),
+                timeout=self._connect_timeout,
+            )
+        except Exception as exc:
+            try:
+                await http_client.aclose()
+            except Exception:
+                pass
+            raise RuntimeError(t("mcp.session_failed", exc=str(exc))) from exc
+
+    async def _open_streamable_session(self, http_client: Any, streamable_http_client: Any) -> None:
+        async with streamable_http_client(self.url, http_client=http_client) as (read_stream, write_stream, session_id):
+            self._write_stream = write_stream
+            self._session_id = session_id
+            self._reader_task = asyncio.create_task(self._reader_loop(read_stream))
+            result = await self._send_request(
+                "initialize",
+                {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "slonag",
+                        "version": "0.1.0",
+                    },
+                },
+                timeout=self._connect_timeout,
+            )
+            if not isinstance(result, dict):
+                raise ValueError("initialize вернул результат не в формате dict")
 
     async def _reader_loop(self, read_stream: Any) -> None:
         """Read SSE messages from server and dispatch JSON-RPC responses."""
@@ -141,11 +153,7 @@ class McpStreamableHttpTransport:
                 if future is not None and not future.done():
                     if "error" in data:
                         error = data["error"]
-                        future.set_exception(
-                            RuntimeError(
-                                f"MCP error: {error.get('message', 'неизвестная ошибка')}"
-                            )
-                        )
+                        future.set_exception(RuntimeError(f"MCP error: {error.get('message', 'неизвестная ошибка')}"))
                     else:
                         future.set_result(data.get("result"))
         except Exception:
@@ -182,9 +190,7 @@ class McpStreamableHttpTransport:
             if self._session_id:
                 headers["MCP-Session-Id"] = self._session_id
 
-            async with httpx.AsyncClient(
-                timeout=self._make_timeout(read_override=timeout)
-            ) as client:
+            async with httpx.AsyncClient(timeout=self._make_timeout(read_override=timeout)) as client:
                 resp = await client.post(
                     self.url,
                     content=payload_bytes,
@@ -223,9 +229,7 @@ class McpStreamableHttpTransport:
             "params": {"reason": "отмена клиентом"},
         }
         try:
-            self._write_stream.send_nowait(
-                json.dumps(payload).encode("utf-8")
-            )
+            self._write_stream.send_nowait(json.dumps(payload).encode("utf-8"))
         except Exception:
             pass
 

@@ -12,9 +12,7 @@ from tests.unit.providers.local.fakes import FakeTransport
 
 
 def test_unknown_model_uses_conservative_defaults() -> None:
-    assert resolve_local_capabilities("local", "unknown", None) == (
-        LocalModelCapabilities()
-    )
+    assert resolve_local_capabilities("local", "unknown", None) == (LocalModelCapabilities())
 
 
 def test_sources_merge_per_field_and_runtime_has_highest_priority() -> None:
@@ -40,9 +38,7 @@ def test_known_model_fact_does_not_make_unknown_models_optimistic() -> None:
 
 
 def test_runtime_capability_list_is_model_specific_evidence() -> None:
-    capabilities = resolve_local_capabilities(
-        "ollama", "custom", {"capabilities": ["completion", "tools", "vision"]}
-    )
+    capabilities = resolve_local_capabilities("ollama", "custom", {"capabilities": ["completion", "tools", "vision"]})
     assert capabilities.tool_calling is True
     assert capabilities.vision is True
     assert capabilities.structured_output is False
@@ -89,9 +85,7 @@ async def test_openai_catalog_metadata_populates_model_info() -> None:
 
 
 async def test_ollama_catalog_without_model_evidence_stays_conservative() -> None:
-    transport = FakeTransport(
-        models={"models": [{"name": "private-model", "details": {"family": "llama"}}]}
-    )
+    transport = FakeTransport(models={"models": [{"name": "private-model", "details": {"family": "llama"}}]})
     model = (await OllamaChatProvider(transport=transport).list_models())[0]
 
     assert model.text is True

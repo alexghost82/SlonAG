@@ -9,11 +9,7 @@ These tests verify that:
 
 from __future__ import annotations
 
-import importlib
-import subprocess
 from pathlib import Path
-
-import pytest
 
 
 class TestToolRegistryConsistency:
@@ -25,13 +21,11 @@ class TestToolRegistryConsistency:
 
         registry = build_builtin_registry()
         for spec in registry.list():
-            assert callable(spec.handler), (
-                f"Tool '{spec.name}' is registered but handler is not callable"
-            )
+            assert callable(spec.handler), f"Tool '{spec.name}' is registered but handler is not callable"
 
     def test_no_fake_descriptions(self) -> None:
         """No tool description should contain 'fake', 'stub', 'placeholder'."""
-        from acta.tools.builtin import build_builtin_registry, _DESCRIPTIONS
+        from acta.tools.builtin import _DESCRIPTIONS, build_builtin_registry
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -39,50 +33,36 @@ class TestToolRegistryConsistency:
         for name in registered_names:
             desc = _DESCRIPTIONS.get(name, "")
             assert desc, f"Tool '{name}' has no description"
-            assert "fake" not in desc.lower(), (
-                f"Tool '{name}' description contains 'fake': {desc}"
-            )
-            assert "stub" not in desc.lower(), (
-                f"Tool '{name}' description contains 'stub': {desc}"
-            )
-            assert "placeholder" not in desc.lower(), (
-                f"Tool '{name}' description contains 'placeholder': {desc}"
-            )
+            assert "fake" not in desc.lower(), f"Tool '{name}' description contains 'fake': {desc}"
+            assert "stub" not in desc.lower(), f"Tool '{name}' description contains 'stub': {desc}"
+            assert "placeholder" not in desc.lower(), f"Tool '{name}' description contains 'placeholder': {desc}"
 
     def test_cmd_control_not_advertised(self) -> None:
         """cmd_control must NOT be advertised (deprecated)."""
-        from acta.tools.builtin import build_builtin_registry, _DESCRIPTIONS
+        from acta.tools.builtin import _DESCRIPTIONS, build_builtin_registry
         from acta.tools.legacy import LEGACY_HANDLERS
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
 
         # Should NOT be in descriptions
-        assert "cmd_control" not in _DESCRIPTIONS, (
-            "cmd_control is still in _DESCRIPTIONS but should be removed"
-        )
+        assert "cmd_control" not in _DESCRIPTIONS, "cmd_control is still in _DESCRIPTIONS but should be removed"
         # Should NOT be in registry (explicitly skipped)
-        assert "cmd_control" not in registered_names, (
-            "cmd_control is still in the tool registry"
-        )
+        assert "cmd_control" not in registered_names, "cmd_control is still in the tool registry"
         # LEGACY_HANDLERS still has it for backward compat (no crash)
-        assert "cmd_control" in LEGACY_HANDLERS, (
-            "cmd_control should still be in LEGACY_HANDLERS for backward compat"
-        )
+        assert "cmd_control" in LEGACY_HANDLERS, "cmd_control should still be in LEGACY_HANDLERS for backward compat"
 
     def test_safety_only_tools_not_in_builtin_registry(self) -> None:
         """Tools that exist only in safety policy should NOT be in builtin registry."""
-        from acta.tools.builtin import build_builtin_registry
         from acta.safety.registry import registered_tools
+        from acta.tools.builtin import build_builtin_registry
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
-        safety_tools = registered_tools()
+        registered_tools()
 
         # save_memory is safety-only (no handler in builtins)
-        assert "save_memory" not in registered_names, (
-            "save_memory is safety-only — should not be in builtin registry"
-        )
+        assert "save_memory" not in registered_names, "save_memory is safety-only — should not be in builtin registry"
         # shutdown_slon/shutdown_jarvis are BIOMETRIC safety-only tools
         assert "shutdown_slon" not in registered_names, (
             "shutdown_slon is safety-only (BIOMETRIC) — should not be in builtin registry"
@@ -93,7 +73,7 @@ class TestToolRegistryConsistency:
 
     def test_vision_tool_gated_by_capability(self) -> None:
         """vision_analyze should only register when vision engine is available."""
-        from acta.tools.builtin import build_builtin_registry, _check_vision
+        from acta.tools.builtin import _check_vision, build_builtin_registry
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -102,13 +82,12 @@ class TestToolRegistryConsistency:
         in_registry = "vision_analyze" in registered_names
 
         assert has_vision == in_registry, (
-            f"vision_analyze registry membership ({in_registry}) "
-            f"must match vision backend availability ({has_vision})"
+            f"vision_analyze registry membership ({in_registry}) must match vision backend availability ({has_vision})"
         )
 
     def test_stt_tool_gated_by_capability(self) -> None:
         """stt_listen should only register when STT binary is available."""
-        from acta.tools.builtin import build_builtin_registry, _check_stt
+        from acta.tools.builtin import _check_stt, build_builtin_registry
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -117,13 +96,12 @@ class TestToolRegistryConsistency:
         in_registry = "stt_listen" in registered_names
 
         assert has_stt == in_registry, (
-            f"stt_listen registry membership ({in_registry}) "
-            f"must match STT backend availability ({has_stt})"
+            f"stt_listen registry membership ({in_registry}) must match STT backend availability ({has_stt})"
         )
 
     def test_tts_tool_gated_by_capability(self) -> None:
         """tts_speak should only register when TTS binary is available."""
-        from acta.tools.builtin import build_builtin_registry, _check_tts
+        from acta.tools.builtin import _check_tts, build_builtin_registry
 
         registry = build_builtin_registry()
         registered_names = {s.name for s in registry.list()}
@@ -132,14 +110,12 @@ class TestToolRegistryConsistency:
         in_registry = "tts_speak" in registered_names
 
         assert has_tts == in_registry, (
-            f"tts_speak registry membership ({in_registry}) "
-            f"must match TTS backend availability ({has_tts})"
+            f"tts_speak registry membership ({in_registry}) must match TTS backend availability ({has_tts})"
         )
 
     def test_tool_handler_returns_tool_result(self) -> None:
         """All handlers should be callable (even if they return errors)."""
         from acta.tools.builtin import build_builtin_registry
-        from acta.tools.contracts import ToolResult
 
         registry = build_builtin_registry()
 
@@ -149,15 +125,11 @@ class TestToolRegistryConsistency:
             # Call with empty args — should not raise, just return a result
             try:
                 result = handler({})
-                assert hasattr(result, 'ok'), (
-                    f"'{spec.name}' handler must return ToolResult with 'ok' field"
-                )
+                assert hasattr(result, "ok"), f"'{spec.name}' handler must return ToolResult with 'ok' field"
             except Exception as exc:
                 # It's OK if handler raises for some tools (e.g. shell_exec
                 # with no command), but the handler itself must be callable
-                assert callable(handler), (
-                    f"'{spec.name}' handler raised {exc} but is still callable"
-                )
+                assert callable(handler), f"'{spec.name}' handler raised {exc} but is still callable"
 
 
 class TestGatewayRoutesConsistency:
@@ -177,18 +149,17 @@ class TestGatewayRoutesConsistency:
             if isinstance(node, ast.FunctionDef) and node.name == "_health":
                 has_health_method = True
                 break
-        assert has_health_method, (
-            "_health method not found in gateway/service.py"
-        )
+        assert has_health_method, "_health method not found in gateway/service.py"
 
         # Check that system.health is registered in __init__ or router calls
-        assert 'system.health' in source or '"system.health"' in source or "system.health" in source, (
+        assert "system.health" in source or '"system.health"' in source or "system.health" in source, (
             '"system.health" route not found in gateway/service.py'
         )
 
     def test_read_gateway_status_distinct_states(self) -> None:
         """read_gateway_status must distinguish states, not always return 'disabled'."""
         import tempfile
+
         from gateway.status import read_gateway_status
 
         # State when DB does not exist: should be "not-configured", not "disabled"
@@ -231,14 +202,12 @@ class TestMCPIntegrationConsistency:
         config = McpServerConfig(
             name="test",
             command="echo",
-            transport="stdio",
+            transport="stdio",  # type: ignore[arg-type]
         )
         integration = McpIntegration.create(config)
         # client is None by default
         tools = integration.available_tools
-        assert tools == {}, (
-            "available_tools should return empty dict when client is None"
-        )
+        assert tools == {}, "available_tools should return empty dict when client is None"
 
     def test_mcp_resources_property_is_null_safe(self) -> None:
         """resources must return [] when client is None."""
@@ -248,13 +217,11 @@ class TestMCPIntegrationConsistency:
         config = McpServerConfig(
             name="test",
             command="echo",
-            transport="stdio",
+            transport="stdio",  # type: ignore[arg-type]
         )
         integration = McpIntegration.create(config)
         resources = integration.resources
-        assert resources == [], (
-            "resources should return empty list when client is None"
-        )
+        assert resources == [], "resources should return empty list when client is None"
 
 
 class TestDeprecatedToolConsistency:
@@ -265,12 +232,8 @@ class TestDeprecatedToolConsistency:
         from acta.tools.legacy.adapters import _cmd_control_deprecated_handler
 
         result = _cmd_control_deprecated_handler({})
-        assert result.ok is False, (
-            "cmd_control must return ok=False"
-        )
-        assert result.code == "deprecated", (
-            f"cmd_control must return code='deprecated', got: {result.code}"
-        )
+        assert result.ok is False, "cmd_control must return ok=False"
+        assert result.code == "deprecated", f"cmd_control must return code='deprecated', got: {result.code}"
         assert "deprecated" in result.message.lower(), (
             f"cmd_control message must mention 'deprecated': {result.message}"
         )
@@ -285,17 +248,12 @@ class TestModelCatalogConsistency:
     def test_no_mock_model_in_default_catalog(self) -> None:
         """ModelStore must not advertise a fake 'mock-model' by default."""
         from server.routes.models import ModelStore
-        from providers.contracts import ModelInfo
 
         store = ModelStore()
         models = store.list_models()
         for m in models:
-            assert m.id != "mock-model", (
-                "ModelStore must not advertise 'mock-model' — it is a fake"
-            )
-            assert m.display_name != "Mock Local", (
-                "ModelStore must not advertise 'Mock Local' — it is a fake"
-            )
+            assert m.id != "mock-model", "ModelStore must not advertise 'mock-model' — it is a fake"
+            assert m.display_name != "Mock Local", "ModelStore must not advertise 'Mock Local' — it is a fake"
 
 
 class TestActionHandlerConsistency:
@@ -307,9 +265,5 @@ class TestActionHandlerConsistency:
 
         handler = _action_handler("actions.nonexistent_module_fake_xyz", "missing_func")
         result = handler({})
-        assert result.ok is False, (
-            f"Handler should return ok=False on import error, got ok={result.ok}"
-        )
-        assert result.code in ("handler_unavailable", "handler_error"), (
-            f"Expected error code, got: {result.code}"
-        )
+        assert result.ok is False, f"Handler should return ok=False on import error, got ok={result.ok}"
+        assert result.code in ("handler_unavailable", "handler_error"), f"Expected error code, got: {result.code}"

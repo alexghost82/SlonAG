@@ -4,6 +4,7 @@ Ensures the proactive agent cannot execute dangerous or user-affecting
 actions without explicit user approval. Uses a whitelist/denylist
 pattern.
 """
+
 from __future__ import annotations
 
 from acta.proactive.errors import (
@@ -64,8 +65,7 @@ class PermissionBoundary:
             action_name = details.get("action_name", details.get("intent", ""))
             if action_name not in self._allow_list:
                 raise ActionBlockedError(
-                    f"Action '{action_name}' is not in the auto-execute allowlist. "
-                    "Requires user approval."
+                    f"Action '{action_name}' is not in the auto-execute allowlist. Requires user approval."
                 )
 
     def evaluate(self, decision: ProactiveDecision) -> ProactiveDecision:

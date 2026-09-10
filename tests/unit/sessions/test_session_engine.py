@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+from acta.tools import ToolExecutor, ToolRegistry, ToolSpec
 from providers.contracts import (
     AssistantToolCallMessage,
     ChatResponse,
@@ -29,8 +31,6 @@ from sessions.binding import SessionAgentBinding
 from sessions.manager import SessionNotFoundError, SessionStateError
 from sessions.store import SessionInactiveError
 from sessions.transcript import entry_fields, messages_from_entries
-from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
-from acta.tools import ToolExecutor, ToolRegistry, ToolSpec
 
 
 def _manager(tmp_path: Path) -> SessionManager:
@@ -39,8 +39,10 @@ def _manager(tmp_path: Path) -> SessionManager:
 
 def _create(manager: SessionManager, workspace: str = "a"):
     return manager.create(
-        title="Conversation", agent_id="slon",
-        model_policy=ModelPolicy("test", "model"), workspace_id=workspace,
+        title="Conversation",
+        agent_id="slon",
+        model_policy=ModelPolicy("test", "model"),
+        workspace_id=workspace,
     )
 
 
@@ -50,8 +52,12 @@ def test_create_persist_reopen_and_workspace_isolation(tmp_path: Path) -> None:
     first = _create(manager, "workspace-a")
     second = _create(manager, "workspace-b")
     manager.append_event(
-        first.id, workspace_id="workspace-a", turn_id="turn-a",
-        kind=TranscriptKind.TEXT, role="user", text="hello",
+        first.id,
+        workspace_id="workspace-a",
+        turn_id="turn-a",
+        kind=TranscriptKind.TEXT,
+        role="user",
+        text="hello",
     )
     store.close()
 
@@ -74,8 +80,11 @@ def test_state_transitions_close_idempotent_and_reject_work(tmp_path: Path) -> N
     assert manager.close(session.id, workspace_id="a").status is SessionStatus.CLOSED
     with pytest.raises(SessionStateError):
         manager.append_event(
-            session.id, workspace_id="a", turn_id=run.turn_id,
-            kind=TranscriptKind.TEXT, text="late",
+            session.id,
+            workspace_id="a",
+            turn_id=run.turn_id,
+            kind=TranscriptKind.TEXT,
+            text="late",
         )
     resumed = manager.resume(session.id, workspace_id="a")
     assert resumed.status is SessionStatus.ACTIVE
@@ -94,8 +103,12 @@ def test_concurrent_transcript_append_is_transactionally_ordered(tmp_path: Path)
     def append(index: int) -> None:
         barrier.wait()
         manager.append_event(
-            session.id, workspace_id="a", turn_id=f"turn-{index}",
-            kind=TranscriptKind.TEXT, role="user", text=str(index),
+            session.id,
+            workspace_id="a",
+            turn_id=f"turn-{index}",
+            kind=TranscriptKind.TEXT,
+            role="user",
+            text=str(index),
         )
 
     threads = [threading.Thread(target=append, args=(index,)) for index in range(8)]
@@ -112,18 +125,18 @@ def test_typed_tool_transcript_round_trip_preserves_correlation(tmp_path: Path) 
     manager = _manager(tmp_path)
     session = _create(manager)
     messages = (
-        AssistantToolCallMessage((
-            ToolCall("call-a", "read_file", {"path": "a"}),
-            ToolCall("call-b", "read_file", {"path": "b"}),
-        )),
+        AssistantToolCallMessage(
+            (
+                ToolCall("call-a", "read_file", {"path": "a"}),
+                ToolCall("call-b", "read_file", {"path": "b"}),
+            )
+        ),
         ToolResultMessage("call-a", "read_file", result="A"),
         ToolResultMessage("call-b", "read_file", error="missing"),
     )
     for message in messages:
         for fields in entry_fields(message):
-            manager.append_event(
-                session.id, workspace_id="a", turn_id="turn-tools", **fields
-            )
+            manager.append_event(session.id, workspace_id="a", turn_id="turn-tools", **fields)
     hydrated = messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
     assert hydrated == messages
 
@@ -131,12 +144,8 @@ def test_typed_tool_transcript_round_trip_preserves_correlation(tmp_path: Path) 
 def test_orphan_tool_call_hydrates_as_error_without_replay(tmp_path: Path) -> None:
     manager = _manager(tmp_path)
     session = _create(manager)
-    for fields in entry_fields(AssistantToolCallMessage((
-        ToolCall("uncertain", "side_effect", {}),
-    ))):
-        manager.append_event(
-            session.id, workspace_id="a", turn_id="crashed", **fields
-        )
+    for fields in entry_fields(AssistantToolCallMessage((ToolCall("uncertain", "side_effect", {}),))):
+        manager.append_event(session.id, workspace_id="a", turn_id="crashed", **fields)
     hydrated = messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
     assert isinstance(hydrated[-1], ToolResultMessage)
     assert hydrated[-1].tool_call_id == "uncertain"
@@ -147,22 +156,29 @@ def test_interrupted_assistant_partial_is_not_hydrated_as_completed(tmp_path: Pa
     manager = _manager(tmp_path)
     session = _create(manager)
     manager.append_event(
-        session.id, workspace_id="a", turn_id="interrupted",
-        kind=TranscriptKind.TEXT, state=TranscriptState.INTERRUPTED,
-        role="assistant", text="partial answer",
+        session.id,
+        workspace_id="a",
+        turn_id="interrupted",
+        kind=TranscriptKind.TEXT,
+        state=TranscriptState.INTERRUPTED,
+        role="assistant",
+        text="partial answer",
     )
-    assert messages_from_entries(
-        manager.get(session.id, workspace_id="a").transcript
-    ) == ()
+    assert messages_from_entries(manager.get(session.id, workspace_id="a").transcript) == ()
 
 
 def test_orphan_or_duplicate_tool_results_are_rejected(tmp_path: Path) -> None:
     manager = _manager(tmp_path)
     session = _create(manager)
     manager.append_event(
-        session.id, workspace_id="a", turn_id="bad",
-        kind=TranscriptKind.TOOL_RESULT, role="tool",
-        tool_call_id="orphan", tool_name="read", data={"result": "x"},
+        session.id,
+        workspace_id="a",
+        turn_id="bad",
+        kind=TranscriptKind.TOOL_RESULT,
+        role="tool",
+        tool_call_id="orphan",
+        tool_name="read",
+        data={"result": "x"},
     )
     with pytest.raises(ValueError, match="orphan"):
         messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
@@ -172,14 +188,24 @@ def test_tool_result_name_must_match_correlated_call(tmp_path: Path) -> None:
     manager = _manager(tmp_path)
     session = _create(manager)
     manager.append_event(
-        session.id, workspace_id="a", turn_id="bad-name",
-        kind=TranscriptKind.TOOL_CALL, role="assistant",
-        tool_call_id="call", tool_name="read", data={},
+        session.id,
+        workspace_id="a",
+        turn_id="bad-name",
+        kind=TranscriptKind.TOOL_CALL,
+        role="assistant",
+        tool_call_id="call",
+        tool_name="read",
+        data={},
     )
     manager.append_event(
-        session.id, workspace_id="a", turn_id="bad-name",
-        kind=TranscriptKind.TOOL_RESULT, role="tool",
-        tool_call_id="call", tool_name="write", data={"result": "x"},
+        session.id,
+        workspace_id="a",
+        turn_id="bad-name",
+        kind=TranscriptKind.TOOL_RESULT,
+        role="tool",
+        tool_call_id="call",
+        tool_name="write",
+        data={"result": "x"},
     )
     with pytest.raises(ValueError, match="name does not match"):
         messages_from_entries(manager.get(session.id, workspace_id="a").transcript)
@@ -190,14 +216,24 @@ def test_live_tool_transcript_append_is_idempotent_by_call_id(tmp_path: Path) ->
     session = _create(manager)
     for _ in range(2):
         manager.append_event(
-            session.id, workspace_id="a", turn_id="turn",
-            kind=TranscriptKind.TOOL_CALL, role="assistant",
-            tool_call_id="same", tool_name="read", data={},
+            session.id,
+            workspace_id="a",
+            turn_id="turn",
+            kind=TranscriptKind.TOOL_CALL,
+            role="assistant",
+            tool_call_id="same",
+            tool_name="read",
+            data={},
         )
         manager.append_event(
-            session.id, workspace_id="a", turn_id="turn",
-            kind=TranscriptKind.TOOL_RESULT, role="tool",
-            tool_call_id="same", tool_name="read", data={"result": "ok"},
+            session.id,
+            workspace_id="a",
+            turn_id="turn",
+            kind=TranscriptKind.TOOL_RESULT,
+            role="tool",
+            tool_call_id="same",
+            tool_name="read",
+            data={"result": "ok"},
         )
     transcript = manager.get(session.id, workspace_id="a").transcript
     assert len(transcript) == 2
@@ -209,8 +245,12 @@ def test_store_rejects_stale_append_and_run_after_close(tmp_path: Path) -> None:
     manager.close(session.id, workspace_id="a")
     with pytest.raises(SessionStateError):
         manager.append_event(
-            session.id, workspace_id="a", turn_id="late",
-            kind=TranscriptKind.TEXT, role="user", text="late",
+            session.id,
+            workspace_id="a",
+            turn_id="late",
+            kind=TranscriptKind.TEXT,
+            role="user",
+            text="late",
         )
     with pytest.raises(SessionStateError):
         manager.start_run(session.id, workspace_id="a")
@@ -233,9 +273,7 @@ def test_store_does_not_close_archived_session(tmp_path: Path) -> None:
     manager.archive(session.id, workspace_id="a")
 
     with pytest.raises(SessionInactiveError):
-        manager.store.close_session(
-            session.id, workspace_id="a", updated_at="late"
-        )
+        manager.store.close_session(session.id, workspace_id="a", updated_at="late")
     assert manager.get(session.id, workspace_id="a").status is SessionStatus.ARCHIVED
 
 
@@ -245,9 +283,13 @@ def test_restart_recovery_interrupts_active_runs_and_streams(tmp_path: Path) -> 
     session = _create(manager)
     run = manager.start_run(session.id, workspace_id="a")
     manager.append_event(
-        session.id, workspace_id="a", turn_id=run.turn_id,
-        kind=TranscriptKind.TEXT, state=TranscriptState.STREAMING,
-        role="assistant", text="partial",
+        session.id,
+        workspace_id="a",
+        turn_id=run.turn_id,
+        kind=TranscriptKind.TEXT,
+        state=TranscriptState.STREAMING,
+        role="assistant",
+        text="partial",
     )
     manager.store.close()
 
@@ -290,7 +332,8 @@ def test_online_backup_reopens_with_integrity(tmp_path: Path) -> None:
 
 
 def test_failed_backup_validation_preserves_target_and_removes_temporary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = _manager(tmp_path)
     target = tmp_path / "backup.sqlite3"
@@ -323,7 +366,9 @@ async def test_two_session_agent_bindings_keep_history_and_models_isolated(
     provider = Provider()
     stack = SimpleNamespace(
         create_agent_loop=lambda model, budget=None, cancel_event=None: AgentLoop(
-            model=model, provider=provider, budget=budget,
+            model=model,
+            provider=provider,  # type: ignore[arg-type]
+            budget=budget,
             cancel_event=cancel_event,
         )
     )
@@ -362,16 +407,25 @@ async def test_close_during_approval_is_scoped_and_fails_closed(tmp_path: Path) 
 
         def authorize(self, name, arguments, **_kwargs):
             return SafetyDecision(
-                DecisionKind.CONFIRM, name, RiskLevel.CONFIRM,
-                UntrustedSource.USER, "effect", dict(arguments),
+                DecisionKind.CONFIRM,
+                name,
+                RiskLevel.CONFIRM,
+                UntrustedSource.USER,
+                "effect",
+                dict(arguments),
             )
 
     registry = ToolRegistry()
-    registry.register(ToolSpec(
-        name="side_effect", description="effect", input_schema={"type": "object"},
-        output_schema=None, handler=lambda args: handler_calls.append(args),
-        risk=RiskLevel.CONFIRM,
-    ))
+    registry.register(
+        ToolSpec(
+            name="side_effect",
+            description="effect",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda args: handler_calls.append(args),
+            risk=RiskLevel.CONFIRM,
+        )
+    )
 
     def confirm(_decision) -> bool:
         approval_started.set()
@@ -379,9 +433,7 @@ async def test_close_during_approval_is_scoped_and_fails_closed(tmp_path: Path) 
 
     executor = ToolExecutor(registry, Policy(), confirmer=confirm)  # type: ignore[arg-type]
     responses = [
-        ChatResponse("", "test", "model", (
-            ToolCall("same-provider-id", "side_effect", {}),
-        )),
+        ChatResponse("", "test", "model", (ToolCall("same-provider-id", "side_effect", {}),)),
         ChatResponse("done", "test", "model"),
     ]
 
@@ -391,15 +443,18 @@ async def test_close_during_approval_is_scoped_and_fails_closed(tmp_path: Path) 
 
     from agent.runtime import AgentLoop
 
-    stack = SimpleNamespace(create_agent_loop=lambda model, budget=None, cancel_event=None: AgentLoop(
-        model=model, provider=Provider(), tool_executor=executor,
-        budget=budget, cancel_event=cancel_event,
-    ))
+    stack = SimpleNamespace(
+        create_agent_loop=lambda model, budget=None, cancel_event=None: AgentLoop(
+            model=model,
+            provider=Provider(),  # type: ignore[arg-type]
+            tool_executor=executor,
+            budget=budget,
+            cancel_event=cancel_event,
+        )
+    )
     binding = SessionAgentBinding(manager, stack)
     model = ModelInfo("test", "model", "Model", text=True, tool_calling=True)
-    task = asyncio.create_task(
-        binding.run(session_a.id, "effect", workspace_id="a", model=model)
-    )
+    task = asyncio.create_task(binding.run(session_a.id, "effect", workspace_id="a", model=model))
     await asyncio.to_thread(approval_started.wait, 1)
     manager.close(session_a.id, workspace_id="a")
     with pytest.raises(asyncio.CancelledError):
@@ -424,34 +479,50 @@ async def test_same_tool_call_id_is_isolated_between_sessions(tmp_path: Path) ->
 
         def authorize(self, name, arguments, **_kwargs):
             return SafetyDecision(
-                DecisionKind.ALLOW, name, RiskLevel.READ,
-                UntrustedSource.USER, "read", dict(arguments),
+                DecisionKind.ALLOW,
+                name,
+                RiskLevel.READ,
+                UntrustedSource.USER,
+                "read",
+                dict(arguments),
             )
 
     registry = ToolRegistry()
-    registry.register(ToolSpec(
-        name="read", description="read", input_schema={"type": "object"},
-        output_schema=None,
-        handler=lambda arguments: handler_calls.append(dict(arguments)) or "ok",
-        risk=RiskLevel.READ, read_only=True, idempotent=True,
-        side_effects=False, parallel_safe=True,
-    ))
+    registry.register(
+        ToolSpec(
+            name="read",
+            description="read",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda arguments: handler_calls.append(dict(arguments)) or "ok",  # type: ignore[func-returns-value]
+            risk=RiskLevel.READ,
+            read_only=True,
+            idempotent=True,
+            side_effects=False,
+            parallel_safe=True,
+        )
+    )
     executor = ToolExecutor(registry, AllowPolicy())  # type: ignore[arg-type]
 
     class Provider:
         async def chat(self, request):
             if any(isinstance(item, ToolResultMessage) for item in request.messages):
                 return ChatResponse("done", "test", "model")
-            return ChatResponse("", "test", "model", (
-                ToolCall("same-id", "read", {"session": request.messages[-1].content}),
-            ))
+            return ChatResponse(
+                "", "test", "model", (ToolCall("same-id", "read", {"session": request.messages[-1].content}),)
+            )
 
     from agent.runtime import AgentLoop
 
-    stack = SimpleNamespace(create_agent_loop=lambda model, budget=None, cancel_event=None: AgentLoop(
-        model=model, provider=Provider(), tool_executor=executor,
-        budget=budget, cancel_event=cancel_event,
-    ))
+    stack = SimpleNamespace(
+        create_agent_loop=lambda model, budget=None, cancel_event=None: AgentLoop(
+            model=model,
+            provider=Provider(),  # type: ignore[arg-type]
+            tool_executor=executor,
+            budget=budget,
+            cancel_event=cancel_event,
+        )
+    )
     binding = SessionAgentBinding(manager, stack)
     model = ModelInfo("test", "model", "Model", text=True, tool_calling=True)
     await asyncio.gather(

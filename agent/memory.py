@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TypeAlias
 
 from i18n import t
 from acta.memory import (
@@ -231,5 +232,5 @@ def _maybe_extract(
 # protocols (mirrors agent/runtime.py for convenience).
 # ---------------------------------------------------------------------------
 
-MemoryContextCallback: Callable[[str], str]
-TurnCompleteCallback: Callable[[str, str], None]
+MemoryContextCallback: TypeAlias = Callable[[str], str]
+TurnCompleteCallback: TypeAlias = Callable[[str, str], None]

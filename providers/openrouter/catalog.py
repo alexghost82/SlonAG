@@ -70,11 +70,7 @@ def _parse_model(item: Mapping[str, Any]) -> ModelInfo | None:
 
     supported_params = _parameter_set(item.get("supported_parameters"))
 
-    is_embedding = (
-        "embeddings" in output_mods
-        or "embed" in model_id.lower()
-        or "embedding" in display_name.lower()
-    )
+    is_embedding = "embeddings" in output_mods or "embed" in model_id.lower() or "embedding" in display_name.lower()
     has_text_io = "text" in input_mods or "text" in output_mods
     text = (not is_embedding) and (has_text_io or not (input_mods or output_mods))
     vision = "image" in input_mods

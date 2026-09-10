@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import builtins
+import hashlib
+import json
+import sqlite3
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -170,12 +176,10 @@ class MemoryStore:
         sid = session_id if session_id is not None else self.default_session
         conf = confidence if confidence is not None else record.confidence
         # Generate dedup hash
-        dedup_hash = _make_hash(value.strip())
+        _make_hash(value.strip())
         scope = record.scope or MemoryScope.WORKING
         provenance = record.provenance or MemoryProvenance.ASSISTANT_UNVERIFIED
-        if scope == MemoryScope.PERSONAL and not can_promote_to_personal(
-            provenance, conf
-        ):
+        if scope == MemoryScope.PERSONAL and not can_promote_to_personal(provenance, conf):
             scope = MemoryScope.WORKING
         proposal = Proposal(
             id=uuid4().hex,
@@ -301,8 +305,7 @@ class MemoryStore:
         When scope arguments are provided (or default scope is set),
         filtering is applied.
         """
-        if (record_type is None and workspace is None
-                and user_id is None and session_id is None):
+        if record_type is None and workspace is None and user_id is None and session_id is None:
             return [_from_row(row) for row in self._db().list(None)]
         ws = workspace if workspace is not None else self.default_workspace
         uid = user_id if user_id is not None else self.default_user
@@ -417,8 +420,7 @@ class MemoryStore:
                 deleted += 1
         return deleted
 
-
-    def export_all(self) -> list[dict[str, object]]:
+    def export_all(self) -> builtins.list[dict[str, object]]:
         """Export all memory records as plain dicts. Useful for backup or migration."""
         return [_record_to_dict(r) for r in self.list()]
 
@@ -428,7 +430,7 @@ class MemoryStore:
         workspace: str | None = None,
         user_id: str | None = None,
         session_id: str | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> builtins.list[dict[str, object]]:
         """Export records matching a scope filter as plain dicts."""
         ws = workspace if workspace is not None else self.default_workspace
         uid = user_id if user_id is not None else self.default_user
@@ -460,7 +462,7 @@ class MemoryStore:
         workspace: str | None = None,
         user_id: str | None = None,
         session_id: str | None = None,
-    ) -> list[MemoryRecord]:
+    ) -> builtins.list[MemoryRecord]:
         """Semantic search: embed query, rank stored records, return top_k matches."""
         if not self._enabled:
             return []
@@ -486,7 +488,7 @@ class MemoryStore:
             if type_name and r.type != type_name:
                 continue
             if min_score > 0.0:
-                if not hasattr(r, "_similarity") or r._similarity < min_score:  # type: ignore[attr-defined]
+                if not hasattr(r, "_similarity") or r._similarity < min_score:
                     continue
             final.append(_from_row(r))
         return final
@@ -497,7 +499,7 @@ class MemoryStore:
         *,
         record_type: RecordType | str | None = None,
         top_k: int = 5,
-    ) -> list[MemoryRecord]:
+    ) -> builtins.list[MemoryRecord]:
         """Fallback: simple keyword matching on key/value."""
         q = query.lower()
         all_records = self.list(record_type)
@@ -536,9 +538,6 @@ class MemoryStore:
 
 
 # ── helpers ───────────────────────────────────────────────────────────
-
-import hashlib
-import json
 
 
 @dataclass(frozen=True)
@@ -668,7 +667,6 @@ def _record_to_dict(record: MemoryRecord) -> dict[str, object]:
     }
 
 
-
 __all__ = [
     "MemoryProvenance",
     "MemoryRecord",
@@ -682,11 +680,6 @@ __all__ = [
 
 
 # ── Simple async wrapper for E2E tests ──────────────────────────────────
-
-import asyncio
-import json
-import sqlite3
-import uuid
 
 
 class MemoryRepository:
@@ -733,7 +726,8 @@ class MemoryRepository:
                 self._init_db(conn)
                 conn.execute(
                     "INSERT OR REPLACE INTO memory_records (id, content, metadata, type, key, value, source, workspace, user_id, session_id, confidence, recency_weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%S+00:00'), strftime('%Y-%m-%dT%H:%M:%S+00:00'))",
-                    (doc_id, content, meta_json, 'text', '_default_', '1', 'e2e_test', '', '', '', 1.0, 1.0))
+                    (doc_id, content, meta_json, "text", "_default_", "1", "e2e_test", "", "", "", 1.0, 1.0),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -748,8 +742,7 @@ class MemoryRepository:
             conn = sqlite3.connect(db_path)
             try:
                 self._init_db(conn)
-                row = conn.execute(
-                    "SELECT content, metadata FROM memory_records WHERE id = ?", (doc_id,)).fetchone()
+                row = conn.execute("SELECT content, metadata FROM memory_records WHERE id = ?", (doc_id,)).fetchone()
                 if row is None:
                     return None
                 return {"content": row[0], "metadata": json.loads(row[1])}
@@ -758,11 +751,11 @@ class MemoryRepository:
 
         return await asyncio.get_running_loop().run_in_executor(None, _get)
 
-
     async def search(self, query: str, *, top_k: int = 5) -> list[dict[str, str]]:
         """Simple keyword search over memory_records.content. Tokenises query on whitespace
         and requires ALL tokens to be present (LIKE %token% per word)."""
         import sqlite3
+
         db_path = str(self._db_path)
         tokens = [t for t in query.lower().split() if t]
         if not tokens:
@@ -773,15 +766,17 @@ class MemoryRepository:
         try:
             self._init_db(conn)
             rows = conn.execute(
-                f"SELECT id, content, metadata FROM memory_records WHERE {conditions}",
-                params).fetchall()
+                f"SELECT id, content, metadata FROM memory_records WHERE {conditions}", params
+            ).fetchall()
             results = []
             for r in rows:
-                results.append({
-                    "id": r[0],
-                    "content": r[1],
-                    "metadata": r[2],
-                })
+                results.append(
+                    {
+                        "id": r[0],
+                        "content": r[1],
+                        "metadata": r[2],
+                    }
+                )
             return results[:top_k]
         finally:
             conn.close()
@@ -789,6 +784,3 @@ class MemoryRepository:
     async def close(self) -> None:
         """Close any underlying connections."""
         pass
-
-
-

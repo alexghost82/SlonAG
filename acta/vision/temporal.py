@@ -35,12 +35,14 @@ class TemporalState:
     def add_frame(self, frame_index: int, detections: list[DetectionResult]) -> None:
         # Extract labels and track_ids from detections
         labels = [d.label for d in detections]
-        self.history.append({
-            "frame_index": frame_index,
-            "timestamp": time.time(),
-            "detection_count": len(detections),
-            "labels": labels,
-        })
+        self.history.append(
+            {
+                "frame_index": frame_index,
+                "timestamp": time.time(),
+                "detection_count": len(detections),
+                "labels": labels,
+            }
+        )
         if len(self.history) > self.max_history:
             self.history.pop(0)
 
@@ -76,7 +78,9 @@ class TemporalAnalyzer:
         self.state = TemporalState(max_history=max_history, max_events=max_events)
 
     def process_frame(
-        self, frame_index: int, detections: list[DetectionResult],
+        self,
+        frame_index: int,
+        detections: list[DetectionResult],
     ) -> list[Event]:
         """Process detections for one frame and return new events."""
         self.state.add_frame(frame_index, detections)
@@ -86,12 +90,14 @@ class TemporalAnalyzer:
         seen_labels = self._get_recent_labels()
         new_labels = {d.label for d in detections if d.label not in seen_labels}
         for label in new_labels:
-            events.append(Event(
-                event_type=TrackEvent.APPEARANCE,
-                track_id=f"label_{label}",
-                timestamp=time.time(),
-                description=f"New object label '{label}' detected",
-            ))
+            events.append(
+                Event(
+                    event_type=TrackEvent.APPEARANCE,
+                    track_id=f"label_{label}",
+                    timestamp=time.time(),
+                    description=f"New object label '{label}' detected",
+                )
+            )
 
         # Detect motion events for tracked detections
         for d in detections:
@@ -109,13 +115,15 @@ class TemporalAnalyzer:
                     dx = pt2["cx"] - pt1["cx"]
                     if abs(dx) > 0.1:
                         direction = "right" if dx > 0 else "left"
-                        events.append(Event(
-                            event_type=TrackEvent.CONTINUITY,
-                            track_id=d.track_id,
-                            timestamp=time.time(),
-                            description=f"Object {d.track_id} moving {direction}",
-                            extra={"direction": direction, "delta": dx},
-                        ))
+                        events.append(
+                            Event(
+                                event_type=TrackEvent.CONTINUITY,
+                                track_id=d.track_id,
+                                timestamp=time.time(),
+                                description=f"Object {d.track_id} moving {direction}",
+                                extra={"direction": direction, "delta": dx},
+                            )
+                        )
 
         return events
 

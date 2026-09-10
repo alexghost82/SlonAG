@@ -1,48 +1,36 @@
 """Additional tests for agent 11 closed-loop features:
-  - Coordinate validation (screen bounds)
-  - Click-loop detection (infinite loop prevention)
-  - Dangerous action approval gating
-  - Element-level verification diffs
+- Coordinate validation (screen bounds)
+- Click-loop detection (infinite loop prevention)
+- Dangerous action approval gating
+- Element-level verification diffs
 """
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock
 
 import pytest
 
-from computer_control.types import (
-    ActionCategory,
-    CoordinateValidationResult,
-    DangerousActionKind,
-    DangerousActionApproval,
-    ComputerAction,
-    Frame,
-    FrameSource,
-    LoopBudget,
-    LoopPhase,
-    LoopState,
-    VerificationStatus,
-)
 from computer_control.adapter import (
     VirtualScreenAdapter,
-    VirtualElement,
-    VirtualScreenState,
 )
 from computer_control.closed_loop import (
     CoordinateValidator,
-    DefaultReasoner,
-    DefaultVerifier,
     DangerousActionApprover,
     LoopDetector,
     VisionComputerAgent,
 )
-
+from computer_control.types import (
+    ComputerAction,
+    DangerousActionKind,
+    LoopBudget,
+    LoopPhase,
+)
 
 # ---------------------------------------------------------------------------
 # Coordinate Validator tests
 # ---------------------------------------------------------------------------
+
 
 class TestCoordinateValidator:
     """Tests for CoordinateValidator."""
@@ -85,6 +73,7 @@ class TestCoordinateValidator:
 # ---------------------------------------------------------------------------
 # LoopDetector tests
 # ---------------------------------------------------------------------------
+
 
 class TestLoopDetector:
     """Tests for LoopDetector."""
@@ -140,6 +129,7 @@ class TestLoopDetector:
 # DangerousActionApprover tests
 # ---------------------------------------------------------------------------
 
+
 class TestDangerousActionApprover:
     """Tests for DangerousActionApprover."""
 
@@ -185,6 +175,7 @@ class TestDangerousActionApprover:
 # ---------------------------------------------------------------------------
 # Integration: LoopDetector integrated with VisionComputerAgent
 # ---------------------------------------------------------------------------
+
 
 class TestLoopDetectionIntegration:
     """Tests for infinite loop prevention via loop detection."""
@@ -237,6 +228,7 @@ class TestLoopDetectionIntegration:
 # Integration: Dangerous action approval
 # ---------------------------------------------------------------------------
 
+
 class TestDangerousActionApprovalIntegration:
     """Tests for dangerous action approval gating."""
 
@@ -250,7 +242,8 @@ class TestDangerousActionApprovalIntegration:
 
         # Use an agent with a dangerous action reasoner
         from computer_control.closed_loop import DefaultReasoner
-        reasoner = DefaultReasoner(screen_width=800, screen_height=600)
+
+        DefaultReasoner(screen_width=800, screen_height=600)
 
         adapter2 = VirtualScreenAdapter()
         adapter2.set_elements(
@@ -265,15 +258,12 @@ class TestDangerousActionApprovalIntegration:
         # The reasoner uses "click" action type which is NOT dangerous.
         # To test dangerous action denial, we need to inject a dangerous action.
         # We'll verify via the dangerous_approver directly.
-        danger = agent.dangerous_approver.classify(
-            type("", (), {"action_type": "app_kill", "target": "x"})()
-        )
+        danger = agent.dangerous_approver.classify(type("", (), {"action_type": "app_kill", "target": "x"})())
         assert danger == DangerousActionKind.KILL_PROCESS
 
     @pytest.mark.asyncio
     async def test_dangerous_action_requires_approval_hook(self):
         """Dangerous actions with approval hook can be approved or denied."""
-        from computer_control.types import CancellationError
 
         adapter = VirtualScreenAdapter()
         adapter.set_elements(
@@ -284,7 +274,8 @@ class TestDangerousActionApprovalIntegration:
         class DangerousReasoner:
             async def ground(self, observation, intent, safety_policy):
                 from computer_control.closed_loop import TargetGroundingResult
-                from computer_control.types import ComputerAction, ActionCategory
+                from computer_control.types import ActionCategory, ComputerAction
+
                 action = ComputerAction(
                     action_type="app_kill",
                     target="evil_process",
@@ -321,7 +312,8 @@ class TestDangerousActionApprovalIntegration:
         class DangerousReasoner:
             async def ground(self, observation, intent, safety_policy):
                 from computer_control.closed_loop import TargetGroundingResult
-                from computer_control.types import ComputerAction, ActionCategory
+                from computer_control.types import ActionCategory, ComputerAction
+
                 action = ComputerAction(
                     action_type="app_kill",
                     target="evil_process",
@@ -357,6 +349,7 @@ class TestDangerousActionApprovalIntegration:
 # Element-level verification diff
 # ---------------------------------------------------------------------------
 
+
 class TestElementLevelVerification:
     """Tests for element-level verification diff."""
 
@@ -369,7 +362,7 @@ class TestElementLevelVerification:
         )
 
         # Capture initial state
-        initial_state = adapter.get_state_snapshot()
+        adapter.get_state_snapshot()
 
         # Simulate a state change
         adapter._do_click("toggle", {"on_click": {"key": "value", "value": True}})
@@ -402,7 +395,7 @@ class TestElementLevelVerification:
 # ---------------------------------------------------------------------------
 # SafetyDenialError import for tests above
 # ---------------------------------------------------------------------------
-from computer_control.types import SafetyDenialError, ClosedLoopError
+from computer_control.types import ClosedLoopError, SafetyDenialError  # noqa: E402
 
 
 class TestCoordinateClampingInAdapter:
@@ -416,13 +409,18 @@ class TestCoordinateClampingInAdapter:
         )
 
         import asyncio
+
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(adapter.execute({
-                "action_type": "click",
-                "target": "btn",
-                "args": {"x": -100, "y": 200, "on_click": {"key": "value", "value": True}},
-            }))
+            result = loop.run_until_complete(
+                adapter.execute(
+                    {
+                        "action_type": "click",
+                        "target": "btn",
+                        "args": {"x": -100, "y": 200, "on_click": {"key": "value", "value": True}},
+                    }
+                )
+            )
             assert result["success"] is True
         finally:
             loop.close()
@@ -436,13 +434,18 @@ class TestCoordinateClampingInAdapter:
         adapter = VirtualScreenAdapter()
 
         import asyncio
+
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(adapter.execute({
-                "action_type": "app_kill",
-                "target": "evil",
-                "args": {},
-            }))
+            loop.run_until_complete(
+                adapter.execute(
+                    {
+                        "action_type": "app_kill",
+                        "target": "evil",
+                        "args": {},
+                    }
+                )
+            )
         finally:
             loop.close()
 

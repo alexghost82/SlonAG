@@ -1,20 +1,21 @@
 """Integration tests for Wave 15 offline multi-turn AgentLoop runtime (W15-T05)."""
 
-import asyncio
 import time
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
-from agent.executor import AgentExecutor, execute_agent_loop, execute_plan
-from agent.observation import Observation, ObservationKind
-from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
-from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
-from acta.safety import SafetyPolicy, UntrustedSource
+from acta.filesystem.operations import filesystem_operation
+from acta.safety import SafetyPolicy
 from acta.tools.builtin import build_builtin_registry
 from acta.tools.contracts import ToolResult
 from acta.tools.executor import ToolExecutor
-from providers.contracts import ChatMessage, ChatRequest, ChatResponse, ModelInfo, ToolCall
-
+from agent.executor import execute_agent_loop, execute_plan
+from agent.observation import ObservationKind
+from agent.runtime import LoopBudget
+from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
+from providers.contracts import ChatRequest, ChatResponse, ModelInfo, ToolCall
 
 OFFLINE_MODEL = ModelInfo(
     provider_id="offline_provider",
@@ -61,7 +62,24 @@ async def test_offline_agent_multi_turn_tool_execution(tmp_path):
     mock_provider = MagicMock()
     mock_provider.chat.side_effect = mock_chat
 
+    def _workspace_read_file(args: dict) -> ToolResult:
+        result = filesystem_operation(
+            "read",
+            path=str(args.get("path", "")),
+            max_chars=int(args.get("max_chars", 2097152)),
+            roots=(tmp_path,),
+        )
+        return ToolResult(
+            ok=result.ok,
+            code=result.code,
+            message=result.message,
+            data=result.data,
+        )
+
     registry = build_builtin_registry()
+    spec = registry.get("read_file")
+    registry.unregister("read_file")
+    registry.register(replace(spec, handler=_workspace_read_file))
     tool_executor = ToolExecutor(registry, SafetyPolicy())
 
     result = await execute_agent_loop(
@@ -155,9 +173,7 @@ async def test_offline_agent_tool_error_self_correction():
 async def test_offline_agent_steering_interruption_cancel():
     """Verify system cancel steering signal halts AgentLoop cleanly."""
     steering_q = SteeringQueue()
-    steering_q.push(
-        SteeringSignal(kind=SteeringKind.SYSTEM_CANCEL, text="User emergency stop")
-    )
+    steering_q.push(SteeringSignal(kind=SteeringKind.SYSTEM_CANCEL, text="User emergency stop"))
 
     mock_provider = MagicMock()
 
@@ -224,9 +240,7 @@ async def test_offline_agent_steering_guidance_injection():
     assert result.final_answer == "Final answer following guidance"
     # Check that guidance message was injected into prompt context
     first_req_msgs = recorded_messages[0]
-    guidance_found = any(
-        "Please format response as JSON" in m.content for m in first_req_msgs
-    )
+    guidance_found = any("Please format response as JSON" in m.content for m in first_req_msgs)
     assert guidance_found is True
 
 
@@ -234,12 +248,14 @@ async def test_offline_agent_steering_guidance_injection():
 async def test_offline_agent_budget_enforcement_turns():
     """Verify budget max turns limit halts execution."""
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="Looping...",
-        provider_id="offline",
-        model_id="test",
-        tool_calls=(ToolCall(id="c", name="dummy_tool", arguments={}),),
-    ))
+    mock_provider.chat = AsyncMock(
+        return_value=ChatResponse(
+            text="Looping...",
+            provider_id="offline",
+            model_id="test",
+            tool_calls=(ToolCall(id="c", name="dummy_tool", arguments={}),),
+        )
+    )
 
     budget = LoopBudget(max_turns=3)
     result = await execute_agent_loop(
@@ -258,16 +274,18 @@ async def test_offline_agent_budget_enforcement_turns():
 async def test_offline_agent_budget_enforcement_tool_calls():
     """Verify budget max tool calls limit halts execution."""
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="Executing multiple tools",
-        provider_id="offline",
-        model_id="test",
-        tool_calls=(
-            ToolCall(id="c1", name="t1", arguments={}),
-            ToolCall(id="c2", name="t2", arguments={}),
-            ToolCall(id="c3", name="t3", arguments={}),
-        ),
-    ))
+    mock_provider.chat = AsyncMock(
+        return_value=ChatResponse(
+            text="Executing multiple tools",
+            provider_id="offline",
+            model_id="test",
+            tool_calls=(
+                ToolCall(id="c1", name="t1", arguments={}),
+                ToolCall(id="c2", name="t2", arguments={}),
+                ToolCall(id="c3", name="t3", arguments={}),
+            ),
+        )
+    )
 
     budget = LoopBudget(max_tool_calls=2)
     result = await execute_agent_loop(
@@ -286,12 +304,14 @@ async def test_offline_agent_budget_enforcement_tool_calls():
 async def test_offline_agent_budget_enforcement_timeout():
     """Verify timeout limit halts execution."""
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="Slow task",
-        provider_id="offline",
-        model_id="test",
-        tool_calls=(ToolCall(id="c1", name="t1", arguments={}),),
-    ))
+    mock_provider.chat = AsyncMock(
+        return_value=ChatResponse(
+            text="Slow task",
+            provider_id="offline",
+            model_id="test",
+            tool_calls=(ToolCall(id="c1", name="t1", arguments={}),),
+        )
+    )
 
     budget = LoopBudget(timeout_seconds=0.05)
     time.sleep(0.06)

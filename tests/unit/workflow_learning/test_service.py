@@ -11,26 +11,19 @@ Covers the full workflow lifecycle:
 
 from __future__ import annotations
 
-import json
-import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
-from acta.safety.types import DecisionKind, SafetyDecision, UntrustedSource
 from acta.workflow_learning.service import WorkflowService
+from acta.workflow_learning.store import WorkflowStore
 from acta.workflow_learning.types import (
     ActionSequence,
     ExecutionRecord,
     ExecutionResult,
-    ParameterSlot,
     WorkflowCandidate,
     WorkflowState,
     WorkflowStep,
     WorkflowTemplate,
 )
-from acta.workflow_learning.store import WorkflowStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,10 +32,10 @@ from acta.workflow_learning.store import WorkflowStore
 
 def _make_service(tmp_path=None, **kwargs):
     """Create a WorkflowService with an in-memory or file-backed store."""
-    from acta.workflow_learning.observer import ActionObserver
-    from acta.workflow_learning.normalizer import Normalizer
     from acta.workflow_learning.confidence import ConfidenceEngine
     from acta.workflow_learning.executor import WorkflowExecutor
+    from acta.workflow_learning.normalizer import Normalizer
+    from acta.workflow_learning.observer import ActionObserver
     from acta.workflow_learning.store import WorkflowStore
 
     store_path = None
@@ -67,9 +60,9 @@ def _make_service(tmp_path=None, **kwargs):
 
 def _mock_service(tmp_path=None, **observer_kwargs):
     """Create a service with a mocked executor and safety policy."""
-    from acta.workflow_learning.observer import ActionObserver
-    from acta.workflow_learning.normalizer import Normalizer
     from acta.workflow_learning.confidence import ConfidenceEngine
+    from acta.workflow_learning.normalizer import Normalizer
+    from acta.workflow_learning.observer import ActionObserver
     from acta.workflow_learning.store import WorkflowStore
 
     store_path = None
@@ -615,6 +608,7 @@ class TestExecution:
         mock_executor.execute_candidate.return_value = mock_result
 
         import tempfile
+
         tmpdir = tempfile.mkdtemp()
         store_path = tmpdir + "/workflows.json"
 
@@ -647,6 +641,7 @@ class TestExecution:
             assert executions[0].workflow_id == "exec-test"
         finally:
             import shutil
+
             try:
                 shutil.rmtree(tmpdir)
             except OSError:
@@ -750,8 +745,8 @@ class TestPersistenceAndRestart:
 
     def test_persistence_across_instances(self):
         """Data written by one store should be readable by another."""
-        import tempfile
         import shutil
+        import tempfile
         from pathlib import Path
 
         tmpdir = Path(tempfile.mkdtemp())
@@ -775,8 +770,8 @@ class TestPersistenceAndRestart:
 
     def test_corrupted_store_graceful(self):
         """A corrupted store file should not crash the store."""
-        import tempfile
         import shutil
+        import tempfile
         from pathlib import Path
 
         tmpdir = Path(tempfile.mkdtemp())
@@ -828,12 +823,22 @@ class TestTemplates:
     def test_list_templates_active_only(self):
         service = _mock_service()
         t1 = WorkflowTemplate(
-            id="t1", version=1, name="active", description="active",
-            state=WorkflowState.ACTIVE, parameter_slots=[], step_descriptors=[],
+            id="t1",
+            version=1,
+            name="active",
+            description="active",
+            state=WorkflowState.ACTIVE,
+            parameter_slots=[],
+            step_descriptors=[],
         )
         t2 = WorkflowTemplate(
-            id="t2", version=1, name="draft", description="draft",
-            state=WorkflowState.DRAFT, parameter_slots=[], step_descriptors=[],
+            id="t2",
+            version=1,
+            name="draft",
+            description="draft",
+            state=WorkflowState.DRAFT,
+            parameter_slots=[],
+            step_descriptors=[],
         )
         service.store.save_template(t1)
         service.store.save_template(t2)

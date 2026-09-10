@@ -88,10 +88,7 @@ class DeviceCredential:
     device_name: str | None = None
 
     def __repr__(self) -> str:
-        return (
-            f"DeviceCredential(device_id={self.device_id!r}, "
-            f"device_secret='***', device_name={self.device_name!r})"
-        )
+        return f"DeviceCredential(device_id={self.device_id!r}, device_secret='***', device_name={self.device_name!r})"
 
 
 @dataclass(frozen=True)
@@ -177,9 +174,7 @@ class TokenService:
         self._refresh_ttl = float(refresh_ttl_seconds)
         self._is_revoked = _normalize_revocation(is_revoked)
         self._used_jtis: MutableSet[str] = used_jtis if used_jtis is not None else set()
-        self._used_nonces: MutableSet[str] = (
-            used_nonces if used_nonces is not None else set()
-        )
+        self._used_nonces: MutableSet[str] = used_nonces if used_nonces is not None else set()
         self._refresh_by_hash: MutableMapping[str, _RefreshRecord] = {}
         self._refresh_put = refresh_put
         self._refresh_pop = refresh_pop
@@ -339,12 +334,8 @@ class TokenService:
         )
 
     def _sign_claims(self, claims: Mapping[str, Any]) -> str:
-        payload = _b64url_encode(
-            json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8")
-        )
-        sig = _b64url_encode(
-            hmac.new(self._signing_key, payload.encode("ascii"), hashlib.sha256).digest()
-        )
+        payload = _b64url_encode(json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        sig = _b64url_encode(hmac.new(self._signing_key, payload.encode("ascii"), hashlib.sha256).digest())
         return f"mk_{payload}.{sig}"
 
     def _parse_and_verify(self, token: str) -> dict[str, Any]:
@@ -357,11 +348,7 @@ class TokenService:
             payload_b64, sig_b64 = body.split(".", 1)
         except ValueError as exc:
             raise AuthError("invalid access token", code=CODE_INVALID_TOKEN) from exc
-        expected = _b64url_encode(
-            hmac.new(
-                self._signing_key, payload_b64.encode("ascii"), hashlib.sha256
-            ).digest()
-        )
+        expected = _b64url_encode(hmac.new(self._signing_key, payload_b64.encode("ascii"), hashlib.sha256).digest())
         if not hmac.compare_digest(expected, sig_b64):
             raise AuthError("invalid access token", code=CODE_INVALID_TOKEN)
         try:

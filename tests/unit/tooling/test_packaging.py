@@ -1,4 +1,5 @@
 """Tests for project packaging and tooling configuration."""
+
 from __future__ import annotations
 
 import tomllib
@@ -56,6 +57,7 @@ class TestPreCommitConfig:
     @pytest.fixture
     def precommit_data(self, project_root: Path) -> dict:
         import yaml
+
         with open(project_root / ".pre-commit-config.yaml") as f:
             return yaml.safe_load(f)
 
@@ -108,9 +110,7 @@ class TestEnvExample:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 value = line.split("=", 1)[1].strip()
-                assert placeholder in value, (
-                    f"Non-placeholder value found: {line}"
-                )
+                assert placeholder in value, f"Non-placeholder value found: {line}"
 
     def test_google_api_key_placeholder(self, project_root: Path) -> None:
         content = (project_root / ".env.example").read_text()
@@ -126,5 +126,6 @@ class TestEntryPoint:
 
     def test_parses(self, project_root: Path) -> None:
         import ast
+
         with open(project_root / "__main__.py") as f:
             ast.parse(f.read())

@@ -79,3 +79,60 @@ def test_cancel_and_pause(tmp_path: Path) -> None:
     assert cancelled.state == JobState.CANCELLED
     assert cancelled.cancellation == "user"
     engine.close()
+
+
+def test_completed_job_is_not_reexecuted_after_reopen(tmp_path: Path) -> None:
+    path = tmp_path / "jobs.sqlite3"
+    engine = JobEngine(path)
+    job = engine.enqueue(type="agent_task", payload={"goal": "once"}, idempotency_key="agent_task:once")
+    claimed = engine.claim(job_type="agent_task")
+    assert claimed is not None
+    engine.complete(claimed.job_id, result_ref="done")
+    engine.close()
+
+    restarted = JobEngine(path)
+    restarted.recover_running()
+    leftover = restarted.get(job.job_id)
+    assert leftover is not None
+    assert leftover.state == JobState.COMPLETED
+    assert restarted.claim(job_type="agent_task") is None
+    again = restarted.enqueue(
+        type="agent_task",
+        payload={"goal": "again"},
+        idempotency_key="agent_task:once",
+    )
+    assert again.job_id == job.job_id
+    assert again.state == JobState.COMPLETED
+    restarted.close()
+
+
+def test_claim_filters_by_job_type(tmp_path: Path) -> None:
+    engine = JobEngine(tmp_path / "jobs.sqlite3")
+    engine.enqueue(type="automation_fire", payload={}, idempotency_key="auto")
+    engine.enqueue(type="agent_task", payload={}, idempotency_key="agent")
+    claimed = engine.claim(job_type="agent_task")
+    assert claimed is not None
+    assert claimed.type == "agent_task"
+    assert engine.claim(job_type="agent_task") is None
+    other = engine.claim(job_type="automation_fire")
+    assert other is not None
+    assert other.type == "automation_fire"
+    engine.close()
+
+
+def test_running_recovered_once_then_not_duplicated(tmp_path: Path) -> None:
+    path = tmp_path / "jobs.sqlite3"
+    engine = JobEngine(path)
+    job = engine.enqueue(type="agent_task", payload={}, idempotency_key="crash-once", max_attempts=3)
+    claimed = engine.claim(job_type="agent_task")
+    assert claimed is not None
+    engine.close()
+
+    restarted = JobEngine(path)
+    recovered = restarted.recover_running()
+    assert len(recovered) == 1
+    assert recovered[0].job_id == job.job_id
+    assert recovered[0].state == JobState.RETRYING
+    second = restarted.recover_running()
+    assert second == []
+    restarted.close()

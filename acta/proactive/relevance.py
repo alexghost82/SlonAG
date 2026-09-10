@@ -7,6 +7,7 @@ decision pipeline (action=PROPOSE/REQUEST_APPROVAL/EXECUTE depending on risk).
 Sources: vision, system, automation, learned.
 Each source_type can have its own default weight.
 """
+
 from __future__ import annotations
 
 from acta.proactive.types import (
@@ -173,12 +174,25 @@ class RelevanceFilter:
 
         # Keywords in payload values
         keywords_high: list[str] = [
-            "error", "fail", "critical", "breach", "unauthorized",
-            "unauthorized_access", "attack", "malware", "threat",
+            "error",
+            "fail",
+            "critical",
+            "breach",
+            "unauthorized",
+            "unauthorized_access",
+            "attack",
+            "malware",
+            "threat",
         ]
         keywords_med: list[str] = [
-            "warning", "degraded", "slow", "timeout", "retry",
-            "fallback", "recovery", "alert",
+            "warning",
+            "degraded",
+            "slow",
+            "timeout",
+            "retry",
+            "fallback",
+            "recovery",
+            "alert",
         ]
 
         for value in payload.values():

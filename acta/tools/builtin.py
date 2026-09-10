@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from acta.safety.registry import SafetyRule
@@ -50,10 +50,7 @@ _JSON_TYPES: Mapping[str, str] = {
 
 def _input_schema(rule: SafetyRule) -> dict[str, object]:
     """Translate the safety validator's argument knowledge to JSON Schema."""
-    properties = {
-        name: {"type": _JSON_TYPES[type_name]}
-        for name, type_name in rule.schema.types
-    }
+    properties = {name: {"type": _JSON_TYPES[type_name]} for name, type_name in rule.schema.types}
     schema: dict[str, object] = {
         "type": "object",
         "properties": properties,
@@ -77,6 +74,7 @@ def _check_vision() -> bool:
     """Return True when a vision engine is available."""
     try:
         from acta.vision.engine import build_engine as build_vision_engine
+
         build_vision_engine()
         return True
     except Exception:  # noqa: BLE001
@@ -86,6 +84,7 @@ def _check_vision() -> bool:
 def _check_stt() -> bool:
     """Return True when a local STT binary is available."""
     import subprocess
+
     try:
         # Check for whisper first
         if subprocess.run(["whisper", "--help"], capture_output=True, timeout=5).returncode in (0, 1):
@@ -119,7 +118,7 @@ def _check_tts() -> bool:
     return False
 
 
-_TOOL_CAPABILITY_CHECK: dict[str, callable] = {
+_TOOL_CAPABILITY_CHECK: dict[str, Callable[[], bool]] = {
     "vision_analyze": _check_vision,
     "stt_listen": _check_stt,
     "tts_speak": _check_tts,
@@ -166,18 +165,10 @@ def build_builtin_registry() -> ToolRegistry:
                 read_only=rule.risk.value == 0,
                 idempotent=rule.risk.value == 0,
                 side_effects=rule.risk.value != 0,
-                side_effect_class=(
-                    SideEffectClass.NONE
-                    if rule.risk.value == 0
-                    else SideEffectClass.REVERSIBLE
-                ),
+                side_effect_class=(SideEffectClass.NONE if rule.risk.value == 0 else SideEffectClass.REVERSIBLE),
                 parallel_safe=rule.risk.value == 0,
                 cancellable=name == "shell_exec",
-                cancellation_class=(
-                    CancellationClass.KILLABLE
-                    if name == "shell_exec"
-                    else CancellationClass.UNSAFE
-                ),
+                cancellation_class=(CancellationClass.KILLABLE if name == "shell_exec" else CancellationClass.UNSAFE),
                 capabilities=capabilities,
             )
         )
@@ -211,11 +202,7 @@ def _register_preference_tools(registry: ToolRegistry, base_dir: Path) -> None:
                     read_only=spec.get("read_only", False),
                     idempotent=spec.get("read_only", False),
                     side_effects=spec.get("risk", 1) > 0,
-                    side_effect_class=(
-                        SideEffectClass.REVERSIBLE
-                        if spec.get("risk", 1) > 0
-                        else SideEffectClass.NONE
-                    ),
+                    side_effect_class=(SideEffectClass.REVERSIBLE if spec.get("risk", 1) > 0 else SideEffectClass.NONE),
                     parallel_safe=False,
                 )
             )

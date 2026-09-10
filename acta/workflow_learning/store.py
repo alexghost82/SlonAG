@@ -200,12 +200,14 @@ class WorkflowStore:
         """Record a version snapshot for a candidate."""
         with self._lock:
             versions = self._data["versions"].setdefault(candidate_id, [])
-            versions.append({
-                "version": version,
-                "state": state.value,
-                "timestamp": time.time(),
-                "snapshot": snapshot or {},
-            })
+            versions.append(
+                {
+                    "version": version,
+                    "state": state.value,
+                    "timestamp": time.time(),
+                    "snapshot": snapshot or {},
+                }
+            )
             self._data["metadata"]["updated_at"] = time.time()
             self._flush()
 
@@ -249,18 +251,15 @@ class WorkflowStore:
 
     def _deserialize_candidate(self, raw: dict[str, Any]) -> WorkflowCandidate:
         from acta.workflow_learning.types import WorkflowCandidate, WorkflowStep
+
         d = dict(raw)
         d["state"] = WorkflowState(d["state"])
         # Reconstruct nested dataclass objects from dicts
         if d.get("steps"):
-            d["steps"] = [
-                WorkflowStep(**s) if isinstance(s, dict) else s
-                for s in d["steps"]
-            ]
+            d["steps"] = [WorkflowStep(**s) if isinstance(s, dict) else s for s in d["steps"]]
         if d.get("parameter_slots"):
             d["parameter_slots"] = [
-                self._deserialize_slot(s) if isinstance(s, dict) else s
-                for s in d["parameter_slots"]
+                self._deserialize_slot(s) if isinstance(s, dict) else s for s in d["parameter_slots"]
             ]
         return WorkflowCandidate(**d)
 
@@ -268,6 +267,7 @@ class WorkflowStore:
     def _deserialize_slot(raw: dict[str, Any]) -> Any:
         """Deserialize a ParameterSlot from a dict."""
         from acta.workflow_learning.types import ParameterSlot
+
         d = dict(raw)
         # Handle JSON-encoded defaults
         if "default" in d and d["default"] is not None and d["default"] != "":
@@ -297,6 +297,7 @@ class WorkflowStore:
         d = dict(raw)
         if d.get("result") is not None:
             from acta.workflow_learning.types import ExecutionResult
+
             if isinstance(d["result"], dict):
                 d["result"] = ExecutionResult(**d["result"])
         return ExecutionRecord(**d)
@@ -307,7 +308,7 @@ class WorkflowStore:
 
     def _load(self) -> None:
         try:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
+            data = json.loads(self._path.read_text(encoding="utf-8"))  # type: ignore[union-attr]
             if isinstance(data, dict):
                 self._data = data
         except (json.JSONDecodeError, OSError):
@@ -316,18 +317,16 @@ class WorkflowStore:
     def _flush(self) -> None:
         if self._path:
             try:
-                self._path.write_text(
-                    json.dumps(self._data, indent=2, default=str), encoding="utf-8"
-                )
+                self._path.write_text(json.dumps(self._data, indent=2, default=str), encoding="utf-8")
             except OSError:
                 pass
 
-    def _record_version(
-        self, candidate_id: str, version: int, state: WorkflowState | None = None
-    ) -> None:
+    def _record_version(self, candidate_id: str, version: int, state: WorkflowState | None = None) -> None:
         versions = self._data["versions"].setdefault(candidate_id, [])
-        versions.append({
-            "version": version,
-            "state": state.value if state else "unknown",
-            "timestamp": time.time(),
-        })
+        versions.append(
+            {
+                "version": version,
+                "state": state.value if state else "unknown",
+                "timestamp": time.time(),
+            }
+        )

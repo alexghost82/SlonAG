@@ -86,21 +86,29 @@ class ActionObserver:
     # Observation API
     # ------------------------------------------------------------------
 
-    def record_event(self, event: ActionSequenceEvent, *, ok: bool, message: str = "",
-                     data: dict[str, Any] | None = None,
-                     started_at: float | None = None,
-                     finished_at: float | None = None) -> None:
+    def record_event(
+        self,
+        event: ActionSequenceEvent,
+        *,
+        ok: bool,
+        message: str = "",
+        data: dict[str, Any] | None = None,
+        started_at: float | None = None,
+        finished_at: float | None = None,
+    ) -> None:
         """Add one tool execution to the observation buffer."""
         should_complete = False
         with self._lock:
-            self._buffer.append(_BufferEntry(
-                event=event,
-                result_ok=ok,
-                result_message=message,
-                result_data=data,
-                started_at=started_at,
-                finished_at=finished_at,
-            ))
+            self._buffer.append(
+                _BufferEntry(
+                    event=event,
+                    result_ok=ok,
+                    result_message=message,
+                    result_data=data,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                )
+            )
             # Auto-complete when buffer is full
             if len(self._buffer) >= self._buffer_size:
                 should_complete = True
@@ -210,9 +218,7 @@ class ActionObserver:
 
         return sequence
 
-    def _create_candidate(
-        self, sequence: ActionSequence, seq_hash: str, count: int
-    ) -> WorkflowCandidate:
+    def _create_candidate(self, sequence: ActionSequence, seq_hash: str, count: int) -> WorkflowCandidate:
         """Create a WorkflowCandidate from a repeated sequence."""
         # Build a name from the tool chain
         tool_names = [s.tool_name for s in sequence.steps]
@@ -258,9 +264,7 @@ class ActionObserver:
     def _save_history(self) -> None:
         if self._history_path:
             try:
-                self._history_path.write_text(
-                    json.dumps(self._history, indent=2), encoding="utf-8"
-                )
+                self._history_path.write_text(json.dumps(self._history, indent=2), encoding="utf-8")
             except OSError:
                 pass
 
@@ -282,29 +286,39 @@ class ActionObserver:
 # E2E compatibility: WorkflowObserver alias with simple record method
 class WorkflowObserver:
     """Simplified WorkflowObserver for E2E tests.
-    
+
     Wraps ActionObserver with a simple record API.
     """
+
     def __init__(self, store: Any = None) -> None:
         self._store = store
         self._actions: list[dict[str, Any]] = []
         self._observer = ActionObserver(store=store)
 
-    def record(self, name: str, success: bool = True, duration: float = 0.0,
-               message: str = "", result_data: dict[str, Any] | None = None) -> None:
+    def record(
+        self,
+        name: str,
+        success: bool = True,
+        duration: float = 0.0,
+        message: str = "",
+        result_data: dict[str, Any] | None = None,
+    ) -> None:
         """Record a simple workflow action for E2E tests."""
         from acta.workflow_learning.types import ActionSequenceEvent
-        self._actions.append({
-            "name": name,
-            "success": success,
-            "duration": duration,
-            "message": message,
-            "result_data": result_data,
-        })
+
+        self._actions.append(
+            {
+                "name": name,
+                "success": success,
+                "duration": duration,
+                "message": message,
+                "result_data": result_data,
+            }
+        )
         # Also notify the underlying observer if it exists
         try:
             event = ActionSequenceEvent(tool_name=name, args={"recorded": True})
-            self._observer.record_event(event, ok=success, message=message, result_data=result_data)
+            self._observer.record_event(event, ok=success, message=message, result_data=result_data)  # type: ignore[call-arg]
         except Exception:
             pass
 

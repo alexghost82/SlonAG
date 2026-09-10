@@ -4,25 +4,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import uuid4
 
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
-class PreferenceType(str, Enum):
+
+class PreferenceType(StrEnum):
     """Kinds of learnable preference."""
-    EXPLICIT = "explicit"          # Directly stated by user
-    CHOICE = "choice"              # Repeatedly chosen
-    HABIT = "habit"                # Recurring pattern
-    CORRECTION = "correction"      # User said "no, do X instead"
-    INTERACTION = "interaction"    # Interaction tendency (e.g. prefers concise)
-    PROJECT_CONTEXT = "project"    # Project-specific preference
+
+    EXPLICIT = "explicit"  # Directly stated by user
+    CHOICE = "choice"  # Repeatedly chosen
+    HABIT = "habit"  # Recurring pattern
+    CORRECTION = "correction"  # User said "no, do X instead"
+    INTERACTION = "interaction"  # Interaction tendency (e.g. prefers concise)
+    PROJECT_CONTEXT = "project"  # Project-specific preference
 
 
-class LearningSource(str, Enum):
+class LearningSource(StrEnum):
     """Where the learning originated."""
+
     USER_STATED = "user_stated"
     AGENT_OBSERVED = "agent_observed"
     PATTERN_DETECTED = "pattern_detected"
@@ -31,39 +34,44 @@ class LearningSource(str, Enum):
     SYSTEM_DEDUCED = "system_deduced"
 
 
-class PreferenceAction(str, Enum):
+class PreferenceAction(StrEnum):
     """What the Agent should do when this preference is relevant."""
-    APPLY = "apply"                # Use this preference to make decisions
-    AVOID = "avoid"                # Avoid this option
-    PROMPT = "prompt"              # Ask user before deciding
-    INFORM = "inform"              # Just consider, don't enforce
-    OVERRIDE = "override"          # Overrides lower-priority preferences
+
+    APPLY = "apply"  # Use this preference to make decisions
+    AVOID = "avoid"  # Avoid this option
+    PROMPT = "prompt"  # Ask user before deciding
+    INFORM = "inform"  # Just consider, don't enforce
+    OVERRIDE = "override"  # Overrides lower-priority preferences
 
 
-class PriorityLevel(str, Enum):
+class PriorityLevel(StrEnum):
     """How strongly to enforce when relevant."""
-    CRITICAL = "critical"          # Non-negotiable
-    HIGH = "high"                  # Strong preference
-    MEDIUM = "medium"              # Default preference
-    LOW = "low"                    # Nice to have
+
+    CRITICAL = "critical"  # Non-negotiable
+    HIGH = "high"  # Strong preference
+    MEDIUM = "medium"  # Default preference
+    LOW = "low"  # Nice to have
 
 
-class ConfidenceDecayPolicy(str, Enum):
+class ConfidenceDecayPolicy(StrEnum):
     """How confidence degrades over time without reinforcement."""
-    NONE = "none"                  # No decay (explicit preferences)
-    LINEAR = "linear"              # -0.05 per day
-    EXPONENTIAL = "exponential"    # *0.95 per week
+
+    NONE = "none"  # No decay (explicit preferences)
+    LINEAR = "linear"  # -0.05 per day
+    EXPONENTIAL = "exponential"  # *0.95 per week
 
 
 # ---------------------------------------------------------------------------
 # Core data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Evidence:
     """Provenance for a learned preference."""
-    text: str                     # What the user/context said
-    context: str = ""             # Where it happened (tool, turn, session)
+
+    text: str  # What the user/context said
+    context: str = ""  # Where it happened (tool, turn, session)
     timestamp: str = field(default_factory=lambda: _now())
 
     def to_dict(self) -> dict:
@@ -81,16 +89,17 @@ class Evidence:
 @dataclass
 class PreferenceVersion:
     """A single version of a preference with its state."""
+
     id: str = field(default_factory=lambda: uuid4().hex)
     version: int = 1
     type: PreferenceType = PreferenceType.EXPLICIT
     action: PreferenceAction = PreferenceAction.APPLY
     priority: PriorityLevel = PriorityLevel.MEDIUM
-    category: str = ""              # e.g. "ui", "communication", "automation"
-    key: str = ""                   # Short identifier
-    value: str = ""                 # The preference value
-    description: str = ""           # Human-readable description
-    confidence: float = 1.0         # 0.0-1.0
+    category: str = ""  # e.g. "ui", "communication", "automation"
+    key: str = ""  # Short identifier
+    value: str = ""  # The preference value
+    description: str = ""  # Human-readable description
+    confidence: float = 1.0  # 0.0-1.0
     decay_policy: ConfidenceDecayPolicy = ConfidenceDecayPolicy.NONE
     max_reinforcements: int = 50
     reinforcement_count: int = 0
@@ -171,6 +180,7 @@ class PreferenceVersion:
 @dataclass
 class LearnedItem:
     """A complete preference record with history."""
+
     id: str = field(default_factory=lambda: uuid4().hex)
     versions: list[PreferenceVersion] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: _now())
@@ -183,6 +193,14 @@ class LearnedItem:
             if not v.deleted:
                 return v
         return versions[0] if versions else None
+
+    @property
+    def require_active(self) -> PreferenceVersion:
+        """Return the active version or raise if the item has no versions."""
+        active = self.active
+        if active is None:
+            raise RuntimeError("preference item has no versions")
+        return active
 
     @property
     def key(self) -> str:
@@ -215,9 +233,11 @@ class LearnedItem:
 # Query / context
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RetrievalContext:
     """Context that the engine uses to filter matching preferences."""
+
     current_task: str = ""
     tool_name: str = ""
     category_filter: str = ""
@@ -235,14 +255,39 @@ def _now() -> str:
 
 # Keys that should never be exported in plain text
 SENSITIVE_KEY_PATTERNS = (
-    "password", "passwd", "pwd",
-    "token", "api_key", "apikey", "api-key", "api_secret", "apisecret",
-    "secret", "credential", "auth", "private_key", "privatekey",
-    "access_key", "accesskey", "bearer", "cookie", "session",
-    "ssh_key", "sshkey", "gpg_key", "pgp",
-    "connection_string", "dsn", "database_url",
-    "stripe", "aws_access", "gcp_service", "azure",
-    "master_key", "root_key", "encryption_key",
+    "password",
+    "passwd",
+    "pwd",
+    "token",
+    "api_key",
+    "apikey",
+    "api-key",
+    "api_secret",
+    "apisecret",
+    "secret",
+    "credential",
+    "auth",
+    "private_key",
+    "privatekey",
+    "access_key",
+    "accesskey",
+    "bearer",
+    "cookie",
+    "session",
+    "ssh_key",
+    "sshkey",
+    "gpg_key",
+    "pgp",
+    "connection_string",
+    "dsn",
+    "database_url",
+    "stripe",
+    "aws_access",
+    "gcp_service",
+    "azure",
+    "master_key",
+    "root_key",
+    "encryption_key",
 )
 
 

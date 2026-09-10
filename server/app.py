@@ -140,11 +140,7 @@ class DesktopControlApp:
             if verb == "POST" and route == f"{API_VERSION_PREFIX}/tasks":
                 return self._mutating(verb, route, payload, factory=self._tasks_create)
             cancel_prefix = f"{API_VERSION_PREFIX}/tasks/"
-            if (
-                verb == "POST"
-                and route.startswith(cancel_prefix)
-                and route.endswith("/cancel")
-            ):
+            if verb == "POST" and route.startswith(cancel_prefix) and route.endswith("/cancel"):
                 task_id = route[len(cancel_prefix) : -len("/cancel")]
                 return self._mutating(
                     verb,
@@ -155,11 +151,7 @@ class DesktopControlApp:
             if verb == "GET" and route == f"{API_VERSION_PREFIX}/approvals":
                 return self._approvals_list()
             decision_prefix = f"{API_VERSION_PREFIX}/approvals/"
-            if (
-                verb == "POST"
-                and route.startswith(decision_prefix)
-                and route.endswith("/decision")
-            ):
+            if verb == "POST" and route.startswith(decision_prefix) and route.endswith("/decision"):
                 approval_id = route[len(decision_prefix) : -len("/decision")]
                 return self._mutating(
                     verb,
@@ -248,11 +240,10 @@ class DesktopControlApp:
         capabilities_ok = False
         try:
             from observability.capabilities import get_capability_report
+
             report = get_capability_report()
             caps = report.get("capabilities", {})
-            capabilities_ok = bool(
-                caps.get("input", False) or caps.get("screenshot", False)
-            )
+            capabilities_ok = bool(caps.get("input", False) or caps.get("screenshot", False))
         except Exception:
             pass
 

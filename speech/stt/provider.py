@@ -35,10 +35,7 @@ def _supports_kwarg(func: Callable[..., object], name: str) -> bool:
     parameters = signature.parameters
     if name in parameters:
         return True
-    return any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
-    )
+    return any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
 
 
 def _flag_is_set(flag: CancelledFlag | None) -> bool:
@@ -73,9 +70,7 @@ class LocalSTTProvider:
         self.on_partial = on_partial
         self.vad_detect = vad_detect
         self._external_cancelled = cancelled
-        self.cancelled = (
-            cancelled if isinstance(cancelled, threading.Event) else threading.Event()
-        )
+        self.cancelled = cancelled if isinstance(cancelled, threading.Event) else threading.Event()
 
     def cancel(self) -> None:
         """Abort an in-flight or subsequent ``transcribe`` call."""

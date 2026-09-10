@@ -39,9 +39,7 @@ def score_model(
     usable candidate.
     """
     missing = tuple(
-        capability
-        for capability in sorted(required_capabilities)
-        if not bool(getattr(model, capability, False))
+        capability for capability in sorted(required_capabilities) if not bool(getattr(model, capability, False))
     )
     if missing:
         raise CapabilityError(
@@ -55,9 +53,7 @@ def score_model(
             provider_id=model.provider_id,
             model_id=model.model_id,
         )
-    if privacy_profile in {"fully_local", "local_with_tools"} and not is_local_model(
-        model
-    ):
+    if privacy_profile in {"fully_local", "local_with_tools"} and not is_local_model(model):
         raise CapabilityError(
             f"model is not permitted by privacy profile {privacy_profile!r}",
             provider_id=model.provider_id,
@@ -65,9 +61,7 @@ def score_model(
         )
 
     estimated_cost = _UNKNOWN_COST if model.cost is None else max(model.cost, 0.0)
-    local_preference = (
-        _LOCAL_PREFERENCE_WEIGHT if prefer_local and is_local_model(model) else 0.0
-    )
+    local_preference = _LOCAL_PREFERENCE_WEIGHT if prefer_local and is_local_model(model) else 0.0
     return local_preference - estimated_cost
 
 
@@ -107,10 +101,7 @@ def select_model(
                 model
                 for model in permitted
                 if model.provider_id == configured_provider_id
-                and (
-                    configured_model_id is None
-                    or model.model_id == configured_model_id
-                )
+                and (configured_model_id is None or model.model_id == configured_model_id)
             ),
             None,
         )
@@ -197,9 +188,7 @@ def _best_candidate(
     )[1]
 
 
-def _permitted(
-    model: ModelInfo, network_mode: str | None, privacy_profile: str | None
-) -> bool:
+def _permitted(model: ModelInfo, network_mode: str | None, privacy_profile: str | None) -> bool:
     if network_mode in {"offline", "tools_only"} or privacy_profile in {
         "fully_local",
         "local_with_tools",

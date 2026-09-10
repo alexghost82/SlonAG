@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -36,11 +34,11 @@ _SENTINEL_ASSIGN = "api_key = my_fake_placeholder"
 
 # Safe values that must NOT trigger any pattern.
 _SAFE_NOT_REAL = [
-    "sk-test-notreal",           # too short / known-safe prefix
+    "sk-test-notreal",  # too short / known-safe prefix
     "sk-placeholder",
     "CHANGEME",
     "TODO",
-    "example_key = foo",         # value too short
+    "example_key = foo",  # value too short
 ]
 
 
@@ -151,17 +149,13 @@ class TestExemptPatterns:
 
     def test_test_secrets_py_exempt_in_scan_text(self):
         root = Path(__file__).resolve().parents[3]
-        src = (root / "tests" / "unit" / "config" / "test_secrets.py").read_text(
-            encoding="utf-8"
-        )
+        src = (root / "tests" / "unit" / "config" / "test_secrets.py").read_text(encoding="utf-8")
         issues = m.scan_text(src)
         # The test file uses SENTINEL which should not trigger.
         assert issues == []
 
     def test_secret_tracking_py_exempt_in_scan_text(self):
         root = Path(__file__).resolve().parents[3]
-        src = (root / "config" / "secret_tracking.py").read_text(
-            encoding="utf-8"
-        )
+        src = (root / "config" / "secret_tracking.py").read_text(encoding="utf-8")
         issues = m.scan_text(src)
         assert issues == []

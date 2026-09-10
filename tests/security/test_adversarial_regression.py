@@ -10,38 +10,29 @@ No live sockets, no DNS, no real API keys.
 
 from __future__ import annotations
 
-import asyncio
-import json
-import os
-import subprocess
-import sys
-import tempfile
-import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-# --- Security surfaces ------------------------------------------------
-
-from acta.safety.errors import UnsafeUrlError
-from acta.safety.urls import check_url, _parse_ip
-from acta.network.hosts import parse_ip_literal, parse_request_url, is_loopback_host
-from acta.network.policy import NetworkPolicy, NetworkMode
-from actions.shell_exec import _is_blocked, _BLOCKED_PREFIXES
-from acta.memory.context import MemoryContextAssembler, MAX_MEMORY_CHUNKS, _MAX_MEMORY_BYTES
+from acta.memory.context import _MAX_MEMORY_BYTES, MAX_MEMORY_CHUNKS, MemoryContextAssembler
 from acta.memory.policy import MemoryPolicy
-from acta.memory.retriever import RetrievalResult, ContextChunk
-from gateway.approvals import DurableApprovalCoordinator, ApprovalRequest
-from gateway.store import GatewayStore
-from agent.subagent import SubagentConfig, SubagentRuntime, SubagentResult
-from proactive_engine.loop_detector import LoopDetector
+from acta.memory.retriever import ContextChunk, RetrievalResult
+from acta.network.policy import NetworkMode, NetworkPolicy
 
+# --- Security surfaces ------------------------------------------------
+from acta.safety.errors import UnsafeUrlError
+from acta.safety.urls import _parse_ip, check_url
+from actions.shell_exec import _BLOCKED_PREFIXES, _is_blocked
+from agent.subagent import SubagentConfig
+from gateway.approvals import ApprovalRequest, DurableApprovalCoordinator
+from gateway.store import GatewayStore
 
 # ====================================================================
 # 1. SSRF host-parsing edge cases
 # ====================================================================
+
 
 class TestSSRFIPBypass:
     """Ensure every IP literal bypass is caught."""
@@ -49,35 +40,35 @@ class TestSSRFIPBypass:
     @pytest.mark.parametrize(
         "host",
         [
-            "169.254.169.254",       # cloud metadata
-            "127.0.0.1",             # loopback
-            "10.0.0.1",              # private
-            "192.168.1.1",           # private
-            "172.16.0.1",            # private
-            "0.0.0.0",               # unspecified
-            "255.255.255.255",       # broadcast (unspecified class)
-            "::1",                   # IPv6 loopback
-            "::ffff:127.0.0.1",      # IPv6-mapped loopback
-            "::ffff:169.254.169.254",# IPv6-mapped metadata
-            "fe80::1",               # link-local
-            "ff00::1",               # multicast
-            "2001:db8::1",           # reserved
-            "127.1",                 # partial IPv4 → 0.0.0.0 (conservative block)
-            "10.1",                  # partial IPv4 → 0.0.0.0 (conservative block)
-            "0177.0.0.1",            # octal-style → 127.0.0.1
-            "0377.0.0.1",            # octal-style (invalid — still blocked)
-            "2130706433",            # decimal 127.0.0.1
-            "0x7f000001",            # hex 127.0.0.1
-            "0x7F000001",            # hex uppercase
-            "10.0.0.01",             # octal-style partial
-            "0x00000000",            # hex 0.0.0.0
-            "0x7f000000",            # hex 127.0.0.0
-            "0",                     # single zero → loopback
-            "2130706432",            # decimal 127.0.0.0
-            "1.2.3.4",               # public — should NOT be blocked
-            "8.8.8.8",               # public — should NOT be blocked
-            "google.com",            # FQDN — should NOT be blocked by IP parsing
-            "localhost",             # blocked by hostname, not IP
+            "169.254.169.254",  # cloud metadata
+            "127.0.0.1",  # loopback
+            "10.0.0.1",  # private
+            "192.168.1.1",  # private
+            "172.16.0.1",  # private
+            "0.0.0.0",  # unspecified
+            "255.255.255.255",  # broadcast (unspecified class)
+            "::1",  # IPv6 loopback
+            "::ffff:127.0.0.1",  # IPv6-mapped loopback
+            "::ffff:169.254.169.254",  # IPv6-mapped metadata
+            "fe80::1",  # link-local
+            "ff00::1",  # multicast
+            "2001:db8::1",  # reserved
+            "127.1",  # partial IPv4 → 0.0.0.0 (conservative block)
+            "10.1",  # partial IPv4 → 0.0.0.0 (conservative block)
+            "0177.0.0.1",  # octal-style → 127.0.0.1
+            "0377.0.0.1",  # octal-style (invalid — still blocked)
+            "2130706433",  # decimal 127.0.0.1
+            "0x7f000001",  # hex 127.0.0.1
+            "0x7F000001",  # hex uppercase
+            "10.0.0.01",  # octal-style partial
+            "0x00000000",  # hex 0.0.0.0
+            "0x7f000000",  # hex 127.0.0.0
+            "0",  # single zero → loopback
+            "2130706432",  # decimal 127.0.0.0
+            "1.2.3.4",  # public — should NOT be blocked
+            "8.8.8.8",  # public — should NOT be blocked
+            "google.com",  # FQDN — should NOT be blocked by IP parsing
+            "localhost",  # blocked by hostname, not IP
         ],
     )
     def test_parse_ip_blocked_or_public(self, host: str) -> None:
@@ -116,8 +107,8 @@ class TestSSRFIPBypass:
             "http://10.0.0.1/api",
             "http://192.168.1.1/admin",
             "http://0/admin",
-            "http://127.1/admin",       # partial IPv4
-            "http://0x7f000000/admin",   # hex partial
+            "http://127.1/admin",  # partial IPv4
+            "http://0x7f000000/admin",  # hex partial
         ],
     )
     def test_check_url_rejects_bypass_vectors(self, url: str) -> None:
@@ -133,6 +124,7 @@ class TestSSRFIPBypass:
 # ====================================================================
 # 2. Shell injection via whitespace / encoding tricks
 # ====================================================================
+
 
 class TestShellInjection:
     """Verify _is_blocked catches obfuscated commands."""
@@ -213,6 +205,7 @@ class TestShellInjection:
 # 3. Path traversal & symlink escape
 # ====================================================================
 
+
 class TestPathTraversal:
     """Workspace filesystem must never escape the root."""
 
@@ -225,9 +218,8 @@ class TestPathTraversal:
         link = allowed / "escape"
         link.symlink_to(outside)
         import acta.filesystem.operations as fs_mod
-        result = fs_mod.filesystem_operation(
-            "read", path=str(link / "classified.txt"), roots=[str(allowed)]
-        )
+
+        result = fs_mod.filesystem_operation("read", path=str(link / "classified.txt"), roots=[str(allowed)])
         assert result.code == "path_denied"
 
     def test_traversal_dotdot(self, tmp_path: Path) -> None:
@@ -237,15 +229,15 @@ class TestPathTraversal:
         outside = tmp_path / "secret.txt"
         outside.write_text("classified", encoding="utf-8")
         import acta.filesystem.operations as fs_mod
-        result = fs_mod.filesystem_operation(
-            "read", path=str(Path("../secret.txt")), roots=[str(allowed)]
-        )
+
+        result = fs_mod.filesystem_operation("read", path=str(Path("../secret.txt")), roots=[str(allowed)])
         assert result.code == "path_denied"
 
 
 # ====================================================================
 # 4. Subagent permission inheritance
 # ====================================================================
+
 
 class TestSubagentPermissions:
     """Subagents must never inherit more permissions than their parent."""
@@ -257,21 +249,17 @@ class TestSubagentPermissions:
         parent = SafetyPolicy()
         bounded = _BoundedSafetyPolicy(parent, frozenset({"shell_exec", "generated_code"}))
 
-        decision = bounded.authorize(
-            "shell_exec", {"command": "ls"}, source="user"
-        )
+        decision = bounded.authorize("shell_exec", {"command": "ls"}, source="user")
         assert decision.kind.value == "deny"
 
         # Safe tool still works
-        decision2 = bounded.authorize(
-            "read_file", {"path": "safe.txt"}, source="user"
-        )
+        decision2 = bounded.authorize("read_file", {"path": "safe.txt"}, source="user")
         assert decision2.kind != "deny"
 
     def test_runtime_creates_bounded_policy(self) -> None:
-        from agent.subagent import _build_subagent_safety
         from acta.safety.policy import SafetyPolicy
         from acta.safety.types import DecisionKind
+        from agent.subagent import _build_subagent_safety
 
         parent_policy = SafetyPolicy()
         config = SubagentConfig(
@@ -283,9 +271,7 @@ class TestSubagentPermissions:
         )
         bounded = _build_subagent_safety(parent_policy, config)
 
-        decision = bounded.authorize(
-            "shell_exec", {"command": "id"}, source="user"
-        )
+        decision = bounded.authorize("shell_exec", {"command": "id"}, source="user")
         assert decision.kind == DecisionKind.DENY
 
 
@@ -293,14 +279,18 @@ class TestSubagentPermissions:
 # 5. Approval fail-closed / canonical tool_call_id
 # ====================================================================
 
+
 class TestApprovalFailClosed:
     def test_tool_call_id_required(self) -> None:
         store = MagicMock(spec=GatewayStore)
         coordinator = DurableApprovalCoordinator(store)
         with pytest.raises(ValueError, match="tool_call_id"):
             coordinator.request(
-                workspace_id="ws", tool_name="shell_exec",
-                reason="test", timeout=30.0, tool_call_id="",
+                workspace_id="ws",
+                tool_name="shell_exec",
+                reason="test",
+                timeout=30.0,
+                tool_call_id="",
             )
 
     def test_expired_approval_is_denied(self) -> None:
@@ -308,9 +298,12 @@ class TestApprovalFailClosed:
         store.approval.return_value = None  # expired → not found
         coordinator = DurableApprovalCoordinator(store)
         request = ApprovalRequest(
-            approval_id="aid", workspace_id="ws",
-            session_id=None, run_id=None,
-            tool_call_id="tc-1", tool_name="shell_exec",
+            approval_id="aid",
+            workspace_id="ws",
+            session_id=None,
+            run_id=None,
+            tool_call_id="tc-1",
+            tool_name="shell_exec",
             expires_at=time.time() - 100,
         )
         assert not coordinator.wait(request, timeout=0.01)
@@ -326,9 +319,12 @@ class TestApprovalFailClosed:
         }
         coordinator = DurableApprovalCoordinator(store)
         request = ApprovalRequest(
-            approval_id="aid", workspace_id="ws-1",
-            session_id=None, run_id=None,
-            tool_call_id="tc-1", tool_name="shell_exec",
+            approval_id="aid",
+            workspace_id="ws-1",
+            session_id=None,
+            run_id=None,
+            tool_call_id="tc-1",
+            tool_name="shell_exec",
             expires_at=time.time() + 60,
         )
         assert not coordinator.wait(request, timeout=0.01)
@@ -337,6 +333,7 @@ class TestApprovalFailClosed:
 # ====================================================================
 # 6. Secret redaction in memory policy
 # ====================================================================
+
 
 class TestSecretRedaction:
     @pytest.mark.parametrize(
@@ -368,6 +365,7 @@ class TestSecretRedaction:
 # 7. Memory context byte budget
 # ====================================================================
 
+
 class TestMemoryContextBudget:
     def test_byte_budget_enforced(self) -> None:
         """Assembled context must not exceed _MAX_MEMORY_BYTES bytes."""
@@ -398,10 +396,13 @@ class TestMemoryContextBudget:
 # 8. Browser service isolation (no cookie injection into other contexts)
 # ====================================================================
 
+
 class TestBrowserIsolation:
     def test_js_denied_domains_are_enforced(self) -> None:
-        from runtime.browser.service import BrowserService
         import inspect
+
+        from runtime.browser.service import BrowserService
+
         # Verify __init__ initializes _js_denied_domains
         init_source = inspect.getsource(BrowserService.__init__)
         assert "_js_denied_domains" in init_source
@@ -412,17 +413,19 @@ class TestBrowserIsolation:
 # 9. Vision frame injection / bounded queues
 # ====================================================================
 
+
 class TestVisionBounded:
     def test_vision_queue_maxlen(self) -> None:
         from acta.vision.queues import BoundedFrameQueue
+
         queue = BoundedFrameQueue(maxlen=5)
         assert queue.maxlen == 5
-
 
 
 # ====================================================================
 # 10. Proactive-loop prevention
 # ====================================================================
+
 
 class TestProactiveLoopPrevention:
     def test_loop_detector_detects_repetition(self) -> None:
@@ -443,7 +446,7 @@ class TestProactiveLoopPrevention:
 
         detector = LoopDetector(max_loop_count=3)
         ok_a, _ = detector.check("src_a", "action")
-        ok_b, _ = detector.check("src_b", "action")  
+        ok_b, _ = detector.check("src_b", "action")
         ok_c, _ = detector.check("src_c", "action")
         assert ok_a is True
         assert ok_b is True
@@ -453,6 +456,7 @@ class TestProactiveLoopPrevention:
 # ====================================================================
 # 11. Network policy SSRF via proxy
 # ====================================================================
+
 
 class TestNetworkPolicy:
     def test_proxy_forces_external_on_loopback(self) -> None:
@@ -465,15 +469,14 @@ class TestNetworkPolicy:
 
     def test_metadata_host_denied(self) -> None:
         policy = NetworkPolicy(mode=NetworkMode.HYBRID)
-        decision = policy.check_request(
-            url="http://169.254.169.254/latest/meta-data/", purpose="test"
-        )
+        decision = policy.check_request(url="http://169.254.169.254/latest/meta-data/", purpose="test")
         assert not decision.allowed
 
 
 # ====================================================================
 # 12. Safety error messages never echo secrets
 # ====================================================================
+
 
 class TestSafetyMessageNoSecrets:
     def test_unsafe_url_error_no_secrets(self) -> None:
@@ -493,27 +496,37 @@ class TestSafetyMessageNoSecrets:
 # 13. Tool call ID canonicality in approvals
 # ====================================================================
 
+
 class TestToolCallIdCanonicality:
     def test_empty_tool_call_id_raises(self) -> None:
         store = MagicMock(spec=GatewayStore)
         coordinator = DurableApprovalCoordinator(store)
         with pytest.raises(ValueError):
             coordinator.request(
-                workspace_id="ws", tool_name="shell_exec",
-                reason="test", timeout=30.0, tool_call_id="",
+                workspace_id="ws",
+                tool_name="shell_exec",
+                reason="test",
+                timeout=30.0,
+                tool_call_id="",
             )
         with pytest.raises(ValueError):
             coordinator.request(
-                workspace_id="ws", tool_name="shell_exec",
-                reason="test", timeout=30.0, tool_call_id="   ",
+                workspace_id="ws",
+                tool_name="shell_exec",
+                reason="test",
+                timeout=30.0,
+                tool_call_id="   ",
             )
 
     def test_valid_tool_call_id_succeeds(self) -> None:
         store = MagicMock(spec=GatewayStore)
         coordinator = DurableApprovalCoordinator(store)
         request = coordinator.request(
-            workspace_id="ws", tool_name="shell_exec",
-            reason="test", timeout=30.0, tool_call_id="tc-abc123",
+            workspace_id="ws",
+            tool_name="shell_exec",
+            reason="test",
+            timeout=30.0,
+            tool_call_id="tc-abc123",
         )
         assert request.tool_call_id == "tc-abc123"
 
@@ -522,15 +535,18 @@ class TestToolCallIdCanonicality:
 # 14. Shell exec _BLOCKED_PREFIXES regression — no empty set
 # ====================================================================
 
+
 def test_no_empty_prefix_regression() -> None:
     """_BLOCKED_PREFIXES must not be empty (regression guard)."""
     from actions.shell_exec import _BLOCKED_PREFIXES as prefixes
+
     assert len(prefixes) > 50, f"Only {len(prefixes)} prefixes — regression detected"
 
 
 # ====================================================================
 # 15. TLS private LAN classification
 # ====================================================================
+
 
 class TestTLSPrivateLAN:
     def test_private_lan_detected(self) -> None:

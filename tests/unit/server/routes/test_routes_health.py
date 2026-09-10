@@ -55,7 +55,7 @@ def test_health_check_includes_bind_info() -> None:
 
 
 def test_health_check_includes_uptime() -> None:
-    start = time.monotonic()
+    time.monotonic()
     response = health_check(is_listening=True, uptime=123.45)
     assert response.body["uptime_seconds"] == 123.45
 

@@ -6,11 +6,10 @@ and config/settings.py for provider and model selection.
 
 from __future__ import annotations
 
+import pytest
+
 from config.catalog import (
-    clear_cache,
-    get_model_info,
     get_static_models,
-    resolve_capabilities,
 )
 from config.onboard import (
     CLOUD_MODELS,
@@ -21,10 +20,8 @@ from config.onboard import (
     validate_model_for_provider,
     validate_model_id,
 )
-from config.schema import Settings, validate_settings
-from config.settings import save_settings, load_settings
-from config.settings import SETTINGS_PATH
-import pytest
+from config.schema import validate_settings
+from config.settings import load_settings, save_settings
 
 
 class TestCatalogIntegration:
@@ -35,8 +32,7 @@ class TestCatalogIntegration:
         models = get_static_models("gemini")
         for m in models:
             if m.model_id in ("gemini-2.5-flash", "gemini-2.5-pro"):
-                assert m.model_id in MODEL_CAPABILITIES, \
-                    f"{m.model_id} should be in MODEL_CAPABILITIES"
+                assert m.model_id in MODEL_CAPABILITIES, f"{m.model_id} should be in MODEL_CAPABILITIES"
 
     def test_model_capabilities_are_read_from_catalog(self):
         """MODEL_CAPABILITIES reflects the catalog data."""
@@ -109,6 +105,7 @@ class TestModelCapabilitiesSummary:
 
     def test_gemini_summary_ru(self):
         from i18n import set_locale
+
         set_locale("ru")
 
         summary = get_model_capabilities_summary("gemini", "gemini-2.5-flash")
@@ -117,6 +114,7 @@ class TestModelCapabilitiesSummary:
 
     def test_gemini_summary_en(self):
         from i18n import set_locale
+
         set_locale("en")
 
         summary = get_model_capabilities_summary("gemini", "gemini-2.5-flash")
@@ -125,6 +123,7 @@ class TestModelCapabilitiesSummary:
 
     def test_unknown_model_summary(self):
         from i18n import set_locale
+
         set_locale("ru")
 
         summary = get_model_capabilities_summary("unknown", "foo")
@@ -167,10 +166,12 @@ class TestSettingsPersistence:
 
     def test_model_roles_persist(self, isolated_paths):
         """Model roles survive save/load cycle."""
-        settings = validate_settings({
-            "provider_id": "gemini",
-            "model_roles": {"chat": "gemini-2.5-flash", "planning": "gemini-2.5-pro"},
-        })
+        settings = validate_settings(
+            {
+                "provider_id": "gemini",
+                "model_roles": {"chat": "gemini-2.5-flash", "planning": "gemini-2.5-pro"},
+            }
+        )
         save_settings(settings)
 
         loaded = load_settings()

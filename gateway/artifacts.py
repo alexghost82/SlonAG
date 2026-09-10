@@ -17,10 +17,17 @@ from gateway.store import GatewayStore
 
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_TTL_SECONDS = 300.0
-DEFAULT_MIME_TYPES = frozenset({
-    "image/jpeg", "image/png", "audio/wav", "audio/mpeg",
-    "application/pdf", "application/octet-stream", "text/plain",
-})
+DEFAULT_MIME_TYPES = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "audio/wav",
+        "audio/mpeg",
+        "application/pdf",
+        "application/octet-stream",
+        "text/plain",
+    }
+)
 
 
 class ArtifactTransferError(RuntimeError):
@@ -40,7 +47,11 @@ class ArtifactGrant:
 
 class ArtifactTransferService:
     def __init__(
-        self, *, store: GatewayStore, root: str | Path, signing_key: bytes,
+        self,
+        *,
+        store: GatewayStore,
+        root: str | Path,
+        signing_key: bytes,
         clock: Callable[[], float] | None = None,
         allowed_mime_types: frozenset[str] = DEFAULT_MIME_TYPES,
     ) -> None:
@@ -54,8 +65,13 @@ class ArtifactTransferService:
         self.allowed_mime_types = allowed_mime_types
 
     def issue(
-        self, *, device_id: str, workspace_id: str, operation: str,
-        mime_type: str, max_bytes: int = DEFAULT_MAX_BYTES,
+        self,
+        *,
+        device_id: str,
+        workspace_id: str,
+        operation: str,
+        mime_type: str,
+        max_bytes: int = DEFAULT_MAX_BYTES,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
         artifact_id: str | None = None,
     ) -> ArtifactGrant:
@@ -72,22 +88,40 @@ class ArtifactTransferService:
         expires_at = float(self._clock()) + ttl_seconds
         storage_name = f"{artifact_id}.bin"
         claims = {
-            "gid": grant_id, "aid": artifact_id, "did": device_id,
-            "wid": workspace_id, "op": operation, "mime": mime_type,
-            "max": max_bytes, "exp": expires_at,
+            "gid": grant_id,
+            "aid": artifact_id,
+            "did": device_id,
+            "wid": workspace_id,
+            "op": operation,
+            "mime": mime_type,
+            "max": max_bytes,
+            "exp": expires_at,
         }
         ticket = self._sign(claims)
-        self.store.put_artifact_grant((
-            grant_id, artifact_id, device_id, workspace_id, operation, mime_type,
-            max_bytes, expires_at, 0, storage_name,
-        ))
-        return ArtifactGrant(
-            grant_id, artifact_id, operation, mime_type, max_bytes, expires_at, ticket
+        self.store.put_artifact_grant(
+            (
+                grant_id,
+                artifact_id,
+                device_id,
+                workspace_id,
+                operation,
+                mime_type,
+                max_bytes,
+                expires_at,
+                0,
+                storage_name,
+            )
         )
+        return ArtifactGrant(grant_id, artifact_id, operation, mime_type, max_bytes, expires_at, ticket)
 
     def issue_download(
-        self, *, artifact_id: str, device_id: str, workspace_id: str,
-        mime_type: str, max_bytes: int = DEFAULT_MAX_BYTES,
+        self,
+        *,
+        artifact_id: str,
+        device_id: str,
+        workspace_id: str,
+        mime_type: str,
+        max_bytes: int = DEFAULT_MAX_BYTES,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
     ) -> ArtifactGrant:
         try:
@@ -97,21 +131,28 @@ class ArtifactTransferService:
         artifact = self.store.artifact(artifact_id)
         if artifact is None:
             raise ArtifactTransferError("artifact is unavailable")
-        if (artifact["device_id"] != device_id
-                or artifact["workspace_id"] != workspace_id):
+        if artifact["device_id"] != device_id or artifact["workspace_id"] != workspace_id:
             raise ArtifactTransferError("artifact owner mismatch")
         if not self._storage_path(str(artifact["storage_name"])).is_file():
             raise ArtifactTransferError("artifact is unavailable")
         return self.issue(
-            device_id=device_id, workspace_id=workspace_id, operation="download",
+            device_id=device_id,
+            workspace_id=workspace_id,
+            operation="download",
             mime_type=str(artifact["mime_type"]),
-            max_bytes=min(max_bytes, int(artifact["size"])), ttl_seconds=ttl_seconds,
+            max_bytes=min(max_bytes, int(artifact["size"])),  # type: ignore[call-overload]
+            ttl_seconds=ttl_seconds,
             artifact_id=artifact_id,
         )
 
     def upload(
-        self, *, ticket: str, device_id: str, workspace_id: str,
-        mime_type: str, data: bytes,
+        self,
+        *,
+        ticket: str,
+        device_id: str,
+        workspace_id: str,
+        mime_type: str,
+        data: bytes,
     ) -> dict[str, object]:
         record = self._verify(ticket, device_id, workspace_id, "upload")
         if mime_type != record["mime_type"]:
@@ -133,18 +174,28 @@ class ArtifactTransferService:
             raise
         digest = hashlib.sha256(data).hexdigest()
         self.store.put_artifact(
-            artifact_id=str(record["artifact_id"]), device_id=device_id,
-            workspace_id=workspace_id, mime_type=mime_type, size=len(data),
-            sha256=digest, storage_name=str(record["storage_name"]),
+            artifact_id=str(record["artifact_id"]),
+            device_id=device_id,
+            workspace_id=workspace_id,
+            mime_type=mime_type,
+            size=len(data),
+            sha256=digest,
+            storage_name=str(record["storage_name"]),
             created_at=float(self._clock()),
         )
         return {
-            "artifact_id": record["artifact_id"], "mime_type": mime_type,
-            "size": len(data), "sha256": digest,
+            "artifact_id": record["artifact_id"],
+            "mime_type": mime_type,
+            "size": len(data),
+            "sha256": digest,
         }
 
     def download(
-        self, *, ticket: str, device_id: str, workspace_id: str,
+        self,
+        *,
+        ticket: str,
+        device_id: str,
+        workspace_id: str,
     ) -> tuple[bytes, str]:
         record = self._verify(ticket, device_id, workspace_id, "download")
         if not self.store.consume_artifact_grant(str(record["grant_id"])):
@@ -163,18 +214,20 @@ class ArtifactTransferService:
             raise ArtifactTransferError("artifact storage path is invalid")
         return path
 
-    def _verify(
-        self, ticket: str, device_id: str, workspace_id: str, operation: str
-    ):
+    def _verify(self, ticket: str, device_id: str, workspace_id: str, operation: str):
         claims = self._parse(ticket)
         record = self.store.artifact_grant(str(claims.get("gid", "")))
         if record is None or bool(record["used"]):
             raise ArtifactTransferError("artifact grant is invalid")
         expected = {
-            "gid": record["grant_id"], "aid": record["artifact_id"],
-            "did": record["device_id"], "wid": record["workspace_id"],
-            "op": record["operation"], "mime": record["mime_type"],
-            "max": record["max_bytes"], "exp": record["expires_at"],
+            "gid": record["grant_id"],
+            "aid": record["artifact_id"],
+            "did": record["device_id"],
+            "wid": record["workspace_id"],
+            "op": record["operation"],
+            "mime": record["mime_type"],
+            "max": record["max_bytes"],
+            "exp": record["expires_at"],
         }
         if claims != expected:
             raise ArtifactTransferError("artifact grant claims mismatch")
@@ -182,7 +235,7 @@ class ArtifactTransferService:
             raise ArtifactTransferError("artifact grant owner mismatch")
         if operation != record["operation"]:
             raise ArtifactTransferError("artifact grant operation mismatch")
-        if float(self._clock()) >= float(record["expires_at"]):
+        if float(self._clock()) >= float(record["expires_at"]):  # type: ignore[arg-type]
             raise ArtifactTransferError("artifact grant expired")
         return record
 

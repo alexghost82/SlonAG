@@ -19,9 +19,7 @@ from acta.memory.errors import MemoryStoreError
 
 
 def test_unverified_assistant_cannot_become_personal() -> None:
-    assert (
-        can_promote_to_personal(MemoryProvenance.ASSISTANT_UNVERIFIED, 1.0) is False
-    )
+    assert can_promote_to_personal(MemoryProvenance.ASSISTANT_UNVERIFIED, 1.0) is False
 
 
 def test_inferred_and_tool_obs_cannot_become_personal() -> None:
@@ -84,7 +82,7 @@ def test_explicit_fact_can_promote(tmp_path: Path) -> None:
     assert written is not None
     promoted = store.promote_to_personal(written.id)
     assert promoted.scope == MemoryScope.PERSONAL
-    assert store.get(written.id).scope == MemoryScope.PERSONAL
+    assert store.get(written.id).scope == MemoryScope.PERSONAL  # type: ignore[union-attr]
 
 
 def test_live_extract_and_prompt_are_untrusted(tmp_path: Path) -> None:

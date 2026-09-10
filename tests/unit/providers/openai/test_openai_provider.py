@@ -53,12 +53,8 @@ class FakeResponse:
 class FakeTransport:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
-        self.chat_payload: dict[str, Any] = {
-            "choices": [{"message": {"content": "hello"}}]
-        }
-        self.models_payload: dict[str, Any] = {
-            "data": [{"id": TEXT_MODEL_ID, "owned_by": "openai"}]
-        }
+        self.chat_payload: dict[str, Any] = {"choices": [{"message": {"content": "hello"}}]}
+        self.models_payload: dict[str, Any] = {"data": [{"id": TEXT_MODEL_ID, "owned_by": "openai"}]}
         self.stream_lines = [
             'data: {"choices":[{"delta":{"content":"hel"}}]}',
             'data: {"choices":[{"delta":{"content":"lo"}}]}',
@@ -105,9 +101,7 @@ def _text_model() -> ModelInfo:
     )
 
 
-def _request(
-    model: ModelInfo | None = None, *, role: str = "chat"
-) -> ChatRequest:
+def _request(model: ModelInfo | None = None, *, role: str = "chat") -> ChatRequest:
     return ChatRequest(
         model=model or _text_model(),
         messages=(ChatMessage(role="user", content="ping"),),
@@ -286,9 +280,7 @@ async def test_chat_sends_exactly_one_requested_model() -> None:
 
     await provider.chat(_request(other))
 
-    assert [call["json"]["model"] for call in transport.calls] == [
-        "gpt-4.1-mini"
-    ]
+    assert [call["json"]["model"] for call in transport.calls] == ["gpt-4.1-mini"]
 
 
 async def test_default_base_url_is_openai_v1() -> None:
@@ -308,9 +300,7 @@ async def test_base_url_is_injectable() -> None:
 
     await provider.chat(_request())
 
-    assert transport.calls[0]["url"] == (
-        "https://example.test/v1/chat/completions"
-    )
+    assert transport.calls[0]["url"] == ("https://example.test/v1/chat/completions")
 
 
 async def test_requests_transport_can_be_mocked(

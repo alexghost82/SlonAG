@@ -16,15 +16,30 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-KNOWN_SECRET_NAMES = frozenset(
-    {"gemini_api_key", "openrouter_api_key", "openai_api_key", "gateway_signing_key"}
+_SECRET_TEXT_PATTERNS = (
+    re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"AIza[A-Za-z0-9_-]{8,}"),
+    re.compile(r"(?i)Bearer\s+\S+"),
+    re.compile(r"sk-or-v1-[A-Za-z0-9_-]{16,}"),
 )
+
+
+def redact_secret_text(text: str) -> str:
+    """Replace key-like substrings so they cannot leak through logs or errors."""
+    redacted = text
+    for pattern in _SECRET_TEXT_PATTERNS:
+        redacted = pattern.sub("[REDACTED]", redacted)
+    return redacted
+
+
+KNOWN_SECRET_NAMES = frozenset({"gemini_api_key", "openrouter_api_key", "openai_api_key", "gateway_signing_key"})
 PROVIDER_SECRET_NAMES = {
     "gemini": "gemini_api_key",
     "openrouter": "openrouter_api_key",
@@ -125,9 +140,7 @@ def _run_tool(args: list[str], *, input_text: str | None = None) -> subprocess.C
 
 
 def _macos_get(name: str) -> str | None:
-    result = _run_tool(
-        ["security", "find-generic-password", "-s", SERVICE_NAME, "-a", name, "-w"]
-    )
+    result = _run_tool(["security", "find-generic-password", "-s", SERVICE_NAME, "-a", name, "-w"])
     if result.returncode != 0:
         return None
     value = result.stdout.rstrip("\n")
@@ -153,9 +166,7 @@ def _macos_set(name: str, value: str) -> None:
 
 
 def _linux_get(name: str) -> str | None:
-    result = _run_tool(
-        ["secret-tool", "lookup", "service", SERVICE_NAME, "account", name]
-    )
+    result = _run_tool(["secret-tool", "lookup", "service", SERVICE_NAME, "account", name])
     if result.returncode != 0:
         return None
     value = result.stdout.rstrip("\n")

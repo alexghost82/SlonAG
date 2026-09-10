@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -29,7 +29,7 @@ def test_estimate_cost_uses_model_info_when_known() -> None:
 
 def test_ledger_aggregates_daily_and_monthly(tmp_path: Path) -> None:
     path = tmp_path / "cost-ledger.json"
-    now = datetime(2026, 8, 15, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
     ledger = CostLedger(path, now=lambda: now)
     first = ledger.add_usage(10, 5, _model(cost=0.01))
     second = ledger.add_usage(2, 3, _model(cost=0.01))
@@ -45,7 +45,7 @@ def test_ledger_aggregates_daily_and_monthly(tmp_path: Path) -> None:
 
 def test_ledger_persists_on_injected_path(tmp_path: Path) -> None:
     path = tmp_path / "ledgers" / "usage.json"
-    now = datetime(2026, 8, 15, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 15, 9, 0, tzinfo=UTC)
     CostLedger(path, now=lambda: now).add_usage(4, 1, _model(cost=0.5))
     reloaded = CostLedger(path, now=lambda: now)
     assert reloaded.daily.input_tokens == 4

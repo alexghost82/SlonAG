@@ -32,7 +32,7 @@ def _scan(path: Path) -> list[str]:
     hits: list[str] = []
     for node in ast.walk(tree):
         if _is_agent_executor_call(node):
-            hits.append(f"{path}:{node.lineno}")
+            hits.append(f"{path}:{node.lineno}")  # type: ignore[attr-defined]
     return hits
 
 

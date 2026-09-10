@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.executor import AgentExecutor, ToolDeniedError
 from acta.safety import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
 from acta.tools import ToolExecutor, ToolRegistry, ToolResult, ToolSpec
+from agent.executor import AgentExecutor, ToolDeniedError
 
 
 class RecordingExecutor:
@@ -36,9 +36,7 @@ def test_plan_step_reaches_injected_canonical_executor(
     import agent.error_handler as error_handler
     import agent.planner as planner
 
-    injected = RecordingExecutor(
-        ToolResult(ok=True, code="ok", message="canonical result")
-    )
+    injected = RecordingExecutor(ToolResult(ok=True, code="ok", message="canonical result"))
     executor = AgentExecutor(tool_executor=injected)  # type: ignore[arg-type]
     monkeypatch.setattr(
         planner,
@@ -77,9 +75,7 @@ class DenyPolicy:
         assert isinstance(args, Mapping)
         return dict(args)
 
-    def authorize(
-        self, name: str, args: object, *, source: UntrustedSource, intent: str = ""
-    ) -> SafetyDecision:
+    def authorize(self, name: str, args: object, *, source: UntrustedSource, intent: str = "") -> SafetyDecision:
         assert isinstance(args, Mapping)
         return SafetyDecision(
             kind=DecisionKind.DENY,
@@ -93,9 +89,7 @@ class DenyPolicy:
 
 
 class AllowPolicy(DenyPolicy):
-    def authorize(
-        self, name: str, args: object, *, source: UntrustedSource, intent: str = ""
-    ) -> SafetyDecision:
+    def authorize(self, name: str, args: object, *, source: UntrustedSource, intent: str = "") -> SafetyDecision:
         decision = super().authorize(name, args, source=source, intent=intent)
         return SafetyDecision(
             kind=DecisionKind.ALLOW,
@@ -130,9 +124,7 @@ def test_denied_canonical_result_has_no_side_effect() -> None:
 
 
 def test_failed_tool_result_is_not_reported_as_success() -> None:
-    injected = RecordingExecutor(
-        ToolResult(ok=False, code="handler_error", message="Tool handler failed.")
-    )
+    injected = RecordingExecutor(ToolResult(ok=False, code="handler_error", message="Tool handler failed."))
     executor = AgentExecutor(tool_executor=injected)  # type: ignore[arg-type]
 
     with pytest.raises(RuntimeError, match="Tool handler failed"):
@@ -148,7 +140,7 @@ def test_legacy_speak_is_bound_as_context_not_as_model_argument(
         assert parameters == {"game": "demo"}
         assert player is None
         assert callable(speak)
-        speak("progress")  # type: ignore[operator]
+        speak("progress")
         return "updated"
 
     monkeypatch.setitem(
@@ -158,9 +150,7 @@ def test_legacy_speak_is_bound_as_context_not_as_model_argument(
     )
     executor = AgentExecutor(policy=AllowPolicy())  # type: ignore[arg-type]
 
-    result = executor._call_tool(
-        "game_updater", {"game": "demo"}, spoken.append, intent="update"
-    )
+    result = executor._call_tool("game_updater", {"game": "demo"}, spoken.append, intent="update")
 
     assert result == "updated"
     assert spoken == ["progress"]

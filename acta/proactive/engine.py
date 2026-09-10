@@ -11,6 +11,7 @@ Main orchestrator that:
 This module does NOT modify automation, vision, memory, or AgentLoop internals.
 It only exposes the event ingestion API and internal processing pipeline.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +31,7 @@ from acta.proactive.persistence import ProactivePersistence
 from acta.proactive.relevance import RelevanceFilter
 from acta.proactive.safe_actions import SafeActionExecutor
 from acta.proactive.types import (
+    CooldownEntry,
     ProactiveAction,
     ProactiveDecision,
     ProactiveEvent,
@@ -114,23 +116,16 @@ class ProactiveAgent:
 
         # Step 1: Anti-spam check
         if not self._anti_spam.check(event):
-            raise SpamDetectedError(
-                f"Event type '{event.event_type}' exceeded spam rate limit."
-            )
+            raise SpamDetectedError(f"Event type '{event.event_type}' exceeded spam rate limit.")
 
         # Step 2: Dedup check
         if self._dedup.is_duplicate(event):
-            raise DuplicateEventError(
-                "Duplicate event (fingerprint collapsed within TTL)."
-            )
+            raise DuplicateEventError("Duplicate event (fingerprint collapsed within TTL).")
 
         # Step 3: Cooldown check
         if self._cooldown.is_on_cooldown(event.event_type):
             remaining = self._cooldown.get_remaining(event.event_type)
-            raise CooldownActiveError(
-                f"Cooldown active for '{event.event_type}'. "
-                f"Remaining: {remaining:.1f}s."
-            )
+            raise CooldownActiveError(f"Cooldown active for '{event.event_type}'. Remaining: {remaining:.1f}s.")
 
         # Step 4: Relevance evaluation
         decision = self._relevance.evaluate(event)
@@ -218,9 +213,7 @@ class ProactiveAgent:
         """Reset all state (anti-spam, cooldown, dedup, permissions)."""
         self._anti_spam.clear_expired()
         self._dedup.clear_expired()
-        self._cooldown = CooldownManager(
-            default_cooldown=self._cooldown._default_cooldown
-        )
+        self._cooldown = CooldownManager(default_cooldown=self._cooldown._default_cooldown)
         self._authorization = ProactiveAuthorization()
         self._persistence.save()
 
@@ -324,6 +317,6 @@ class ProactiveAgent:
             pass
 
         elif decision.action == ProactiveAction.REQUEST_APPROVAL:
-            decision.approval_required = True
+            decision.approval_required = True  # type: ignore[misc]
 
         return decision

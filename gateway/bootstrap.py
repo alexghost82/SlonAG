@@ -15,7 +15,9 @@ class GatewayConfigurationError(RuntimeError):
 
 
 def build_gateway(
-    *, repo_root: str | Path, runtime_stack,
+    *,
+    repo_root: str | Path,
+    runtime_stack,
     key_provider: Callable[[str], str | None],
 ) -> SlonGateway:
     root = Path(repo_root).resolve()

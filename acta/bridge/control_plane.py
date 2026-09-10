@@ -11,9 +11,7 @@ from copy import deepcopy
 EventSink = Callable[[Mapping[str, object]], object]
 CommandHandler = Callable[[], object]
 TextHandler = Callable[[str], object]
-ApprovalHandler = Callable[
-    [str, Mapping[str, object], str, str, str | None], bool
-]
+ApprovalHandler = Callable[[str, Mapping[str, object], str, str, str | None], bool]
 
 
 class ControlPlaneUnavailable(RuntimeError):
@@ -155,9 +153,7 @@ class DesktopControlPlane:
                     dict(payload.get("arguments") or {}),
                     source=str(payload.get("source") or "ui"),
                     reason=action,
-                    tool_call_id=payload.get("tool_call_id")
-                    if isinstance(payload.get("tool_call_id"), str)
-                    else None,
+                    tool_call_id=payload.get("tool_call_id") if isinstance(payload.get("tool_call_id"), str) else None,
                 )
             return self.perform(action)
         return self.perform(str(command))
@@ -211,9 +207,7 @@ class DesktopControlPlane:
             handler = self._approval_handler
         if handler is None:
             return False
-        return bool(
-            handler(tool_name, dict(arguments), source, reason, tool_call_id)
-        )
+        return bool(handler(tool_name, dict(arguments), source, reason, tool_call_id))
 
     def publish(self, event: str, payload: Mapping[str, object]) -> None:
         envelope = {

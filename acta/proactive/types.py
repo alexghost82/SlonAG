@@ -1,4 +1,5 @@
 """Data types for the proactive agent system."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ from uuid import uuid4
 
 class EventSource(StrEnum):
     """Where the event originates."""
+
     VISION = "vision"
     SYSTEM = "system"
     AUTOMATION = "automation"
@@ -17,6 +19,7 @@ class EventSource(StrEnum):
 
 class ProactiveAction(StrEnum):
     """Actions the proactive engine can take."""
+
     IGNORE = "ignore"
     REMEMBER = "remember"
     NOTIFY = "notify"
@@ -27,6 +30,7 @@ class ProactiveAction(StrEnum):
 
 class ProactiveDecisionKind(StrEnum):
     """Decision outcome from relevance filtering."""
+
     DROP = "drop"
     PROCESS = "process"
     ESCALATE = "escalate"
@@ -34,6 +38,7 @@ class ProactiveDecisionKind(StrEnum):
 
 class RiskLevel(IntEnum):
     """Risk of a proactive action. SAFE is lowest, DANGEROUS is highest."""
+
     SAFE = 0
     LOW = 1
     MEDIUM = 2
@@ -43,13 +48,15 @@ class RiskLevel(IntEnum):
 
 # Events that can be auto-executed by proactive agent without user approval.
 # Only these low-risk, already-authorized patterns are allowed.
-SAFE_AUTO_ACTIONS: frozenset[str] = frozenset({
-    "notify",
-    "remember",
-    "check_status",
-    "log_event",
-    "update_health",
-})
+SAFE_AUTO_ACTIONS: frozenset[str] = frozenset(
+    {
+        "notify",
+        "remember",
+        "check_status",
+        "log_event",
+        "update_health",
+    }
+)
 
 
 @dataclass(frozen=True)

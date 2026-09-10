@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import acta.network.hosts as hosts_mod
 import pytest
 
+import acta.network.hosts as hosts_mod
 from acta.network import (
     CODE_OFFLINE,
     CODE_OK,

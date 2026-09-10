@@ -53,9 +53,7 @@ class MemoryPolicy:
     def __init__(self, extra_categories: Sequence[str] = ()) -> None:
         extras = tuple(item.strip().lower() for item in extra_categories if item.strip())
         self.extra_categories = extras
-        self._key_markers = _BUILTIN_KEY_MARKERS | frozenset(
-            marker.replace("-", "_") for marker in extras
-        )
+        self._key_markers = _BUILTIN_KEY_MARKERS | frozenset(marker.replace("-", "_") for marker in extras)
 
     def allows(self, key: str, value: str) -> bool:
         """Return True when the pair is not secret-like."""
@@ -118,8 +116,6 @@ def _luhn_ok(digits: str) -> bool:
                 number -= 9
         total += number
     return total % 10 == 0
-
-
 
 
 # ---------------------------------------------------------------------------

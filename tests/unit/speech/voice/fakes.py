@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from providers.contracts import AudioRequest, ModelInfo, SpeechRequest
 
 
@@ -55,6 +53,7 @@ class FakeSTTProvider:
     async def transcribe(self, request: AudioRequest) -> object:
         self.calls.append((request.audio, ""))
         from providers.contracts import Transcript
+
         return Transcript(text=self.text)
 
 
@@ -70,6 +69,7 @@ class FakeTTSProvider:
     async def synthesize(self, request: SpeechRequest) -> object:
         self.calls.append(request.text)
         from providers.contracts import AudioStream
+
         return AudioStream(data=self.audio, mime_type="audio/wav")
 
 

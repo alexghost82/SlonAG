@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import ssl
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from acta.connectivity.transport import (
     LANTransport,
     LANTransportError,
-    MAX_MESSAGE_BYTES,
     TransportConfig,
-    _encode_text_frame,
-    _decode_text_frame,
 )
 
 

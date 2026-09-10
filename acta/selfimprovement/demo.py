@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from acta.selfimprovement.collector import MetricsCollector
 from acta.selfimprovement.pipeline import SelfImprovementPipeline
-from acta.selfimprovement.types import ObservationKind
+from acta.selfimprovement.types import ObservationKind, RiskLevel
 
 
 def main() -> None:
@@ -37,13 +37,13 @@ def main() -> None:
         collector.record_tool_call("browser_click", 200, True, "ok")
 
     # Simulate provider calls
-    collector.record_provider_call("gemini", 450, True, routing=True)
-    collector.record_provider_call("gemini", 380, True, routing=True)
-    collector.record_provider_call("openrouter", 1200, True, routing=True)
-    collector.record_provider_call("openrouter", 3000, False, routing=True)
-    collector.record_provider_call("openrouter", 2500, False, routing=True)
-    collector.record_provider_call("local", 150, True, routing=True)
-    collector.record_provider_call("local", 200, True, routing=True)
+    collector.record_provider_call("gemini", 450, True, routing_decision=True)
+    collector.record_provider_call("gemini", 380, True, routing_decision=True)
+    collector.record_provider_call("openrouter", 1200, True, routing_decision=True)
+    collector.record_provider_call("openrouter", 3000, False, routing_decision=True)
+    collector.record_provider_call("openrouter", 2500, False, routing_decision=True)
+    collector.record_provider_call("local", 150, True, routing_decision=True)
+    collector.record_provider_call("local", 200, True, routing_decision=True)
     collector.record_provider_call("openai", 6000, False, timeout=True)
     collector.record_provider_call("openai", 7000, False, timeout=True)
 
@@ -84,8 +84,11 @@ def main() -> None:
     # ── Phase 3: Approve ──────────────────────────────────────
     print("\n[Phase 3] Approving best candidates...")
     for c in candidates[:3]:
-        if c.risk in (ObservationKind.SAFE.value if hasattr(ObservationKind, 'SAFE') else "safe",
-                       RiskLevel.SAFE, RiskLevel.LOW):
+        if c.risk in (
+            ObservationKind.SAFE.value if hasattr(ObservationKind, "SAFE") else "safe",
+            RiskLevel.SAFE,
+            RiskLevel.LOW,
+        ):
             pipeline.approve(c.id, approved_by="system")
             print(f"  ✓ Approved: {c.title}")
 

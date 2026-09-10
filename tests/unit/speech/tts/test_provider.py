@@ -16,7 +16,6 @@ from providers.contracts import (
 )
 from speech.tts.provider import LocalTTSProvider
 from speech.tts.sentences import split_sentences
-
 from tests.unit.speech.tts.fakes import (
     InterruptOnFirstEngine,
     RecordingEngine,

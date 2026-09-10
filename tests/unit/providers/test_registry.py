@@ -4,7 +4,6 @@ import pytest
 
 from providers.errors import ProviderError
 from providers.registry import clear, get, register, registered_ids
-
 from tests.unit.providers.mocks import MockChatProvider
 
 

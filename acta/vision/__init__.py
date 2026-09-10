@@ -39,8 +39,6 @@ from acta.vision.acquisition import (
 from acta.vision.config import VisionConfig
 from acta.vision.processing import (
     DetectionBackend,
-    DetectionKind,
-    DetectionResult,
     DummyObjectDetector,
     DummyOCR,
     DummyPersonDetector,

@@ -40,9 +40,7 @@ def _record(key: str, value: str) -> MemoryRecord:
         ("note", "password=hunter2-not-real"),
     ),
 )
-def test_secrets_rejected_on_propose(
-    store: MemoryStore, key: str, value: str
-) -> None:
+def test_secrets_rejected_on_propose(store: MemoryStore, key: str, value: str) -> None:
     with pytest.raises(MemoryPolicyError) as exc_info:
         store.propose(_record(key, value))
     assert exc_info.value.code == CODE_SECRET_REJECTED

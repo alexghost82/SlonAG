@@ -28,16 +28,13 @@ class ConfidenceEngine:
     REPETITION_SIGMOID_K: float = 0.5  # steepness
     MAX_REASONABLE_LENGTH: int = 10  # steps beyond this penalize
 
-
     def compute(self, candidate: WorkflowCandidate) -> float:
         """Compute overall confidence score.
 
         Returns a value in [0.0, 1.0].
         """
         # No evidence → zero confidence
-        if (len(candidate.steps) == 0 and
-                candidate.repetition_count == 0 and
-                candidate.total_executions == 0):
+        if len(candidate.steps) == 0 and candidate.repetition_count == 0 and candidate.total_executions == 0:
             return 0.0
 
         components = [
@@ -138,6 +135,7 @@ class ConfidenceEngine:
 # E2E compatibility: ConfidenceTracker wrapper for simple tests
 class ConfidenceTracker:
     """Simple confidence tracker for E2E tests."""
+
     def __init__(self) -> None:
         self._scores: dict[str, float] = {}
 

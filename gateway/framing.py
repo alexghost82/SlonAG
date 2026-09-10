@@ -43,10 +43,7 @@ def decode_client_frame(raw: bytes) -> WebSocketFrame:
     if len(raw) != end:
         raise GatewayProtocolError("malformed_frame", t("gateway.frame_size"))
     mask = raw[offset : offset + 4]
-    payload = bytes(
-        value ^ mask[index % 4]
-        for index, value in enumerate(raw[offset + 4 : end])
-    )
+    payload = bytes(value ^ mask[index % 4] for index, value in enumerate(raw[offset + 4 : end]))
     return WebSocketFrame(opcode, payload)
 
 

@@ -42,9 +42,7 @@ def try_build_local_stt(
     asr_backend = "empty"
     engine: object
     model_path = Path(repo_root or Path.cwd()) / "models" / "whisper" / "base"
-    faster_whisper = (
-        try_faster_whisper_engine(str(model_path)) if prefer_whisper and model_path.is_dir() else None
-    )
+    faster_whisper = try_faster_whisper_engine(str(model_path)) if prefer_whisper and model_path.is_dir() else None
     if faster_whisper is not None:
         engine = faster_whisper
         asr_backend = "faster_whisper"
@@ -52,7 +50,7 @@ def try_build_local_stt(
         engine = EmptySTTEngine()
 
     provider = LocalSTTProvider(
-        engine,  # type: ignore[arg-type]
+        engine,
         language=language,
         is_assistant_speaking=is_assistant_speaking,
     )

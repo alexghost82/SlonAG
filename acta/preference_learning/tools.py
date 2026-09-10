@@ -46,9 +46,21 @@ def build_preference_tools(base_dir: Path) -> dict[str, dict[str, Any]]:
                         "key": {"type": "string", "description": "Short identifier, e.g. 'preferred_theme'."},
                         "value": {"type": "string", "description": "The preference value."},
                         "description": {"type": "string", "description": "Human-readable description."},
-                        "pref_type": {"type": "string", "description": "explicit|choice|habit|correction|interaction|project_context.", "enum": ["explicit", "choice", "habit", "correction", "interaction", "project_context"]},
-                        "action": {"type": "string", "description": "apply|avoid|prompt|inform.", "enum": ["apply", "avoid", "prompt", "inform", "override"]},
-                        "priority": {"type": "string", "description": "critical|high|medium|low.", "enum": ["critical", "high", "medium", "low"]},
+                        "pref_type": {
+                            "type": "string",
+                            "description": "explicit|choice|habit|correction|interaction|project_context.",
+                            "enum": ["explicit", "choice", "habit", "correction", "interaction", "project_context"],
+                        },
+                        "action": {
+                            "type": "string",
+                            "description": "apply|avoid|prompt|inform.",
+                            "enum": ["apply", "avoid", "prompt", "inform", "override"],
+                        },
+                        "priority": {
+                            "type": "string",
+                            "description": "critical|high|medium|low.",
+                            "enum": ["critical", "high", "medium", "low"],
+                        },
                         "category": {"type": "string", "description": "e.g. ui, communication, automation."},
                         "tags": {"type": "array", "description": "Tags for filtering.", "items": {"type": "string"}},
                     },
@@ -70,7 +82,11 @@ def build_preference_tools(base_dir: Path) -> dict[str, dict[str, Any]]:
                         "value": {"type": "string", "description": "New value (omit to keep)."},
                         "description": {"type": "string", "description": "New description (omit to keep)."},
                         "category": {"type": "string", "description": "New category (omit to keep)."},
-                        "tags": {"type": "array", "description": "New tags (omit to keep).", "items": {"type": "string"}},
+                        "tags": {
+                            "type": "array",
+                            "description": "New tags (omit to keep).",
+                            "items": {"type": "string"},
+                        },
                     },
                     "required": ["key"],
                     "additionalProperties": False,
@@ -135,6 +151,7 @@ def build_preference_tools(base_dir: Path) -> dict[str, dict[str, Any]]:
 # Handler implementations
 # ---------------------------------------------------------------------------
 
+
 def _pref_inspect(engine: PreferenceEngine):
     def handler(args: Mapping[str, object]) -> ToolResult:
         key = str(args.get("key", ""))
@@ -143,7 +160,8 @@ def _pref_inspect(engine: PreferenceEngine):
         if query:
             results = engine.search_preferences(query, top_k=20)
             return ToolResult(
-                ok=True, code="ok",
+                ok=True,
+                code="ok",
                 message=f"Found {len(results)} matching preferences.",
                 data=results,
             )
@@ -155,16 +173,19 @@ def _pref_inspect(engine: PreferenceEngine):
         else:
             prefs = engine.list_all_preferences()
             return ToolResult(
-                ok=True, code="ok",
+                ok=True,
+                code="ok",
                 message=f"Total: {len(prefs)} preference(s).",
                 data=prefs,
             )
+
     return handler
 
 
 def _pref_add(engine: PreferenceEngine):
     def handler(args: Mapping[str, object]) -> ToolResult:
         from acta.preference_learning.types import LearningSource, PreferenceAction, PreferenceType, PriorityLevel
+
         key = str(args.get("key", ""))
         value = str(args.get("value", ""))
         if not key or not value:
@@ -183,24 +204,28 @@ def _pref_add(engine: PreferenceEngine):
         except ValueError:
             priority = PriorityLevel.MEDIUM
 
-        tags = args.get("tags")
-        if isinstance(tags, list):
-            tags = [str(t) for t in tags]
+        tags_raw = args.get("tags")
+        tags = [str(t) for t in tags_raw] if isinstance(tags_raw, list) else None
 
         item = engine.add_preference(
-            key=key, value=value,
+            key=key,
+            value=value,
             description=str(args.get("description", "")),
-            pref_type=pref_type, action=action, priority=priority,
+            pref_type=pref_type,
+            action=action,
+            priority=priority,
             source=LearningSource.MANUAL_ENTRY,
             category=str(args.get("category", "")),
             tags=tags,
         )
-        active = item.active
+        active = item.require_active
         return ToolResult(
-            ok=True, code="ok",
+            ok=True,
+            code="ok",
             message=f"Preference '{key}' saved (version {active.version}, confidence {active.confidence:.2f}).",
             data={"key": key, "version": active.version, "confidence": active.confidence},
         )
+
     return handler
 
 
@@ -218,14 +243,16 @@ def _pref_edit(engine: PreferenceEngine):
                 category=str(args["category"]) if "category" in args else None,
                 tags=[str(t) for t in args["tags"]] if "tags" in args and isinstance(args["tags"], list) else None,
             )
-            active = item.active
+            active = item.require_active
             return ToolResult(
-                ok=True, code="ok",
+                ok=True,
+                code="ok",
                 message=f"Preference '{key}' updated to version {active.version}.",
                 data={"key": key, "version": active.version},
             )
         except KeyError as e:
             return ToolResult(ok=False, code="not_found", message=str(e))
+
     return handler
 
 
@@ -237,6 +264,7 @@ def _pref_delete(engine: PreferenceEngine):
         if engine.delete_preference(key):
             return ToolResult(ok=True, code="ok", message=f"Preference '{key}' hard-deleted.")
         return ToolResult(ok=False, code="not_found", message=f"Preference not found: {key}")
+
     return handler
 
 
@@ -248,6 +276,7 @@ def _pref_forget(engine: PreferenceEngine):
         if engine.forget_preference(key):
             return ToolResult(ok=True, code="ok", message=f"Preference '{key}' forgotten (audit trail preserved).")
         return ToolResult(ok=False, code="not_found", message=f"Preference not found: {key}")
+
     return handler
 
 
@@ -256,10 +285,12 @@ def _pref_reinforce(engine: PreferenceEngine):
         key = str(args.get("key", ""))
         if not key:
             return ToolResult(ok=False, code="invalid", message="key is required.")
-        amount = float(args.get("amount", 0.1))
+        raw_amount = args.get("amount", 0.1)
+        amount = float(raw_amount) if isinstance(raw_amount, (int, float, str)) else 0.1
         decision = engine.reinforce(key, amount=amount)
         return ToolResult(
-            ok=True, code="ok",
+            ok=True,
+            code="ok",
             message=decision.reason,
             data={
                 "action": decision.action,
@@ -268,4 +299,5 @@ def _pref_reinforce(engine: PreferenceEngine):
                 "new_confidence": decision.new_confidence,
             },
         )
+
     return handler

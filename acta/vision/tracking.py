@@ -52,7 +52,9 @@ class ObjectTracker:
     # ── API ──────────────────────────────────────────────────────
 
     def process_frame(
-        self, frame_index: int, detections: list[DetectionResult],
+        self,
+        frame_index: int,
+        detections: list[DetectionResult],
     ) -> tuple[dict[str, TrackingState], list[FrameEvent]]:
         """Process detections for one frame.
 
@@ -95,19 +97,23 @@ class ObjectTracker:
                 ts.is_present = False
                 if ts.ttl_seconds and (now - ts.last_seen) > ts.ttl_seconds:
                     stale_ids.append(tid)
-                    events.append(FrameEvent(
-                        event_type=TrackEvent.DISAPPEARANCE,
-                        track_id=tid,
-                        timestamp=now,
-                        description=f"Track {tid} disappeared (stale)",
-                    ))
+                    events.append(
+                        FrameEvent(
+                            event_type=TrackEvent.DISAPPEARANCE,
+                            track_id=tid,
+                            timestamp=now,
+                            description=f"Track {tid} disappeared (stale)",
+                        )
+                    )
                 else:
-                    events.append(FrameEvent(
-                        event_type=TrackEvent.CONTINUITY,
-                        track_id=tid,
-                        timestamp=now,
-                        description=f"Track {tid} missing for {now - ts.last_seen:.1f}s",
-                    ))
+                    events.append(
+                        FrameEvent(
+                            event_type=TrackEvent.CONTINUITY,
+                            track_id=tid,
+                            timestamp=now,
+                            description=f"Track {tid} missing for {now - ts.last_seen:.1f}s",
+                        )
+                    )
 
         # Remove stale tracks
         for tid in stale_ids:
@@ -148,7 +154,7 @@ class ObjectTracker:
         return dict(self._state)
 
     def get_present_tracks(self) -> list[str]:
-        now = time.time()
+        time.time()
         return [tid for tid, ts in self._state.items() if not ts.stale and ts.is_present]
 
     def cleanup_stale(self) -> int:

@@ -149,9 +149,7 @@ async def test_stream_yields_delta_then_done() -> None:
 async def test_stream_sends_tools_and_emits_native_function_call() -> None:
     class ToolChunk:
         text = ""
-        function_calls = [
-            type("Call", (), {"id": "g-1", "name": "lookup", "args": {"q": "x"}})()
-        ]
+        function_calls = [type("Call", (), {"id": "g-1", "name": "lookup", "args": {"q": "x"}})()]
 
     client = FakeGeminiClient()
 
@@ -159,7 +157,7 @@ async def test_stream_sends_tools_and_emits_native_function_call() -> None:
         client.generate_content_stream_calls.append(dict(kwargs))
         yield ToolChunk()
 
-    client.generate_content_stream = stream
+    client.generate_content_stream = stream  # type: ignore[method-assign]
     provider = GeminiChatProvider(api_key="test-key-not-real", client=client)
     request = ChatRequest(
         model=_text_model(tool_calling=True),
@@ -170,7 +168,7 @@ async def test_stream_sends_tools_and_emits_native_function_call() -> None:
     assert events[0].tool_call == ToolCall("g-1", "lookup", {"q": "x"})
     assert events[-1].type == "done"
     config = client.generate_content_stream_calls[0]["config"]
-    assert config["tools"][0]["function_declarations"][0]["name"] == "lookup"
+    assert config["tools"][0]["function_declarations"][0]["name"] == "lookup"  # type: ignore[index]
 
 
 async def test_stream_rejects_duplicate_native_function_call_ids() -> None:
@@ -187,9 +185,7 @@ async def test_stream_rejects_duplicate_native_function_call_ids() -> None:
             ]
 
     client = FakeGeminiClient()
-    client.generate_content_stream = lambda **_kwargs: iter(
-        (ToolChunk("first"), ToolChunk("second"))
-    )
+    client.generate_content_stream = lambda **_kwargs: iter((ToolChunk("first"), ToolChunk("second")))  # type: ignore[method-assign, assignment]
     provider = GeminiChatProvider(api_key="test-key-not-real", client=client)
     with pytest.raises(ProviderError, match="повторяющийся"):
         async for _event in provider.stream(_request(_text_model())):
@@ -220,6 +216,4 @@ async def test_chat_does_not_walk_fallback_models() -> None:
     model = _text_model(model_id="gemini-2.5-pro")
     response = await provider.chat(_request(model))
     assert response.model_id == "gemini-2.5-pro"
-    assert [call["model"] for call in client.generate_content_calls] == [
-        "gemini-2.5-pro"
-    ]
+    assert [call["model"] for call in client.generate_content_calls] == ["gemini-2.5-pro"]

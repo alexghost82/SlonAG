@@ -53,9 +53,7 @@ class DocumentIngestor:
         self.transcribe_audio = transcribe_audio
         self.max_zip_ratio = max_zip_ratio
         self.max_zip_uncompressed = (
-            max_zip_uncompressed
-            if max_zip_uncompressed is not None
-            else DEFAULT_MAX_ZIP_UNCOMPRESSED
+            max_zip_uncompressed if max_zip_uncompressed is not None else DEFAULT_MAX_ZIP_UNCOMPRESSED
         )
 
     def ingest(self, path: Path, *, source_bytes: bytes | None = None) -> DocumentExtract:

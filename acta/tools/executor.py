@@ -7,17 +7,16 @@ import inspect
 import queue
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from typing import cast
 
 from acta.safety import DecisionKind, SafetyPolicy, UntrustedSource
 from acta.tools.contracts import CancellationClass, ToolResult, ToolSpec
 from acta.tools.registry import ToolRegistry
 
-_CONFIRMATION_KINDS = frozenset(
-    {DecisionKind.CONFIRM, DecisionKind.EXACT_CONFIRM, DecisionKind.BIOMETRIC}
-)
+_CONFIRMATION_KINDS = frozenset({DecisionKind.CONFIRM, DecisionKind.EXACT_CONFIRM, DecisionKind.BIOMETRIC})
 _TRANSIENT_EXCEPTIONS = (ConnectionError, TimeoutError)
 _TRANSIENT_CODES = frozenset({"timeout", "connection_error"})
 
@@ -66,32 +65,22 @@ class ToolExecutor:
         try:
             checked = self._safety_policy.validate_args(name, arguments)
         except Exception:
-            return self._error(
-                "invalid_args", "Tool arguments failed validation.", started_at
-            )
+            return self._error("invalid_args", "Tool arguments failed validation.", started_at)
 
         try:
-            decision = self._safety_policy.authorize(
-                name, checked, source=source, intent=intent
-            )
+            decision = self._safety_policy.authorize(name, checked, source=source, intent=intent)
         except Exception:
-            return self._error(
-                "policy_error", "Safety policy could not authorize the tool.", started_at
-            )
+            return self._error("policy_error", "Safety policy could not authorize the tool.", started_at)
 
         if decision.kind is DecisionKind.DENY:
             return self._error("denied", "Tool is refused by policy.", started_at)
 
         if decision.kind in _CONFIRMATION_KINDS:
             if self._confirmer is None:
-                return self._error(
-                    "confirmation_required", "Confirmation is required.", started_at
-                )
+                return self._error("confirmation_required", "Confirmation is required.", started_at)
             try:
                 approval_started_at = time.monotonic()
-                confirmed = bool(
-                    self._confirmer(replace(decision, tool_call_id=tool_call_id))
-                )
+                confirmed = bool(self._confirmer(replace(decision, tool_call_id=tool_call_id)))
                 approval_finished_at = time.monotonic()
             except Exception:
                 approval_finished_at = time.monotonic()
@@ -108,9 +97,7 @@ class ToolExecutor:
                 if cancel_event is not None and cancel_event.is_set():
                     raise asyncio.CancelledError("Execution was cancelled during approval.")
                 return replace(
-                    self._error(
-                        "confirmation_declined", "Confirmation was declined.", started_at
-                    ),
+                    self._error("confirmation_declined", "Confirmation was declined.", started_at),
                     approval_started_at=approval_started_at,
                     approval_finished_at=approval_finished_at,
                 )
@@ -157,10 +144,7 @@ class ToolExecutor:
 
     def execute_many(
         self,
-        calls: Sequence[
-            tuple[str, Mapping[str, object]]
-            | tuple[str, str, Mapping[str, object]]
-        ],
+        calls: Sequence[tuple[str, Mapping[str, object]] | tuple[str, str, Mapping[str, object]]],
         *,
         source: UntrustedSource,
         intent: str = "",
@@ -173,18 +157,25 @@ class ToolExecutor:
         if not self._calls_are_parallel_safe(normalized_calls):
             return tuple(
                 self.execute(
-                    name, arguments, source=source, intent=intent,
-                    cancel_event=cancel_event, tool_call_id=tool_call_id,
+                    name,
+                    arguments,
+                    source=source,
+                    intent=intent,
+                    cancel_event=cancel_event,
+                    tool_call_id=tool_call_id,
                 )
                 for tool_call_id, name, arguments in normalized_calls
             )
-        with ThreadPoolExecutor(
-            max_workers=min(len(calls), 8), thread_name_prefix="slon-tool-batch"
-        ) as pool:
+        with ThreadPoolExecutor(max_workers=min(len(calls), 8), thread_name_prefix="slon-tool-batch") as pool:
             futures = [
                 pool.submit(
-                    self.execute, name, arguments, source=source, intent=intent,
-                    cancel_event=cancel_event, tool_call_id=tool_call_id,
+                    self.execute,
+                    name,
+                    arguments,
+                    source=source,
+                    intent=intent,
+                    cancel_event=cancel_event,
+                    tool_call_id=tool_call_id,
                 )
                 for tool_call_id, name, arguments in normalized_calls
             ]
@@ -192,8 +183,7 @@ class ToolExecutor:
 
     @staticmethod
     def _normalize_call(
-        call: tuple[str, Mapping[str, object]]
-        | tuple[str, str, Mapping[str, object]],
+        call: tuple[str, Mapping[str, object]] | tuple[str, str, Mapping[str, object]],
     ) -> tuple[str | None, str, Mapping[str, object]]:
         """Accept legacy name/args pairs while preserving canonical call IDs."""
         if len(call) == 2:
@@ -218,17 +208,10 @@ class ToolExecutor:
             except Exception:
                 specs.append(None)
         safely_parallel = all(
-            spec is not None
-            and spec.parallel_safe
-            and spec.read_only
-            and spec.idempotent
-            and not spec.side_effects
+            spec is not None and spec.parallel_safe and spec.read_only and spec.idempotent and not spec.side_effects
             for spec in specs
         )
-        identities = [
-            (name, repr(sorted(arguments.items())))
-            for _tool_call_id, name, arguments in normalized_calls
-        ]
+        identities = [(name, repr(sorted(arguments.items()))) for _tool_call_id, name, arguments in normalized_calls]
         independent = len(set(identities)) == len(identities)
         return bool(safely_parallel and independent)
 
@@ -258,34 +241,25 @@ class ToolExecutor:
         try:
             checked = self._safety_policy.validate_args(name, arguments)
         except Exception:
-            return self._error(
-                "invalid_args", "Tool arguments failed validation.", started_at
-            )
+            return self._error("invalid_args", "Tool arguments failed validation.", started_at)
 
         try:
-            decision = self._safety_policy.authorize(
-                name, checked, source=source, intent=intent
-            )
+            decision = self._safety_policy.authorize(name, checked, source=source, intent=intent)
         except Exception:
-            return self._error(
-                "policy_error", "Safety policy could not authorize the tool.", started_at
-            )
+            return self._error("policy_error", "Safety policy could not authorize the tool.", started_at)
 
         if decision.kind is DecisionKind.DENY:
             return self._error("denied", "Tool is refused by policy.", started_at)
 
         if decision.kind in _CONFIRMATION_KINDS:
-            if self._confirmer is None:
-                return self._error(
-                    "confirmation_required", "Confirmation is required.", started_at
-                )
+            confirmer = self._confirmer
+            if confirmer is None:
+                return self._error("confirmation_required", "Confirmation is required.", started_at)
             try:
                 approval_started_at = time.monotonic()
                 # Wrap confirmer in thread so asyncio.CancelledError can interrupt it
                 confirmed = await asyncio.to_thread(
-                    lambda: bool(
-                        self._confirmer(replace(decision, tool_call_id=tool_call_id))
-                    )
+                    lambda: bool(confirmer(replace(decision, tool_call_id=tool_call_id)))
                 )
                 approval_finished_at = time.monotonic()
             except Exception:
@@ -303,9 +277,7 @@ class ToolExecutor:
                 if cancel_event is not None and cancel_event.is_set():
                     raise asyncio.CancelledError("Execution was cancelled during approval.")
                 return replace(
-                    self._error(
-                        "confirmation_declined", "Confirmation was declined.", started_at
-                    ),
+                    self._error("confirmation_declined", "Confirmation was declined.", started_at),
                     approval_started_at=approval_started_at,
                     approval_finished_at=approval_finished_at,
                 )
@@ -354,10 +326,7 @@ class ToolExecutor:
 
     async def execute_many_async(
         self,
-        calls: Sequence[
-            tuple[str, Mapping[str, object]]
-            | tuple[str, str, Mapping[str, object]]
-        ],
+        calls: Sequence[tuple[str, Mapping[str, object]] | tuple[str, str, Mapping[str, object]]],
         *,
         source: UntrustedSource,
         intent: str = "",
@@ -368,23 +337,20 @@ class ToolExecutor:
             return ()
         normalized = tuple(self._normalize_call(call) for call in calls)
 
-        async def _run_one(
-            tool_call_id: str | None, name: str, arguments: Mapping[str, object]
-        ) -> ToolResult:
+        async def _run_one(tool_call_id: str | None, name: str, arguments: Mapping[str, object]) -> ToolResult:
             return await self.execute_async(
-                name, arguments, source=source, intent=intent,
-                cancel_event=cancel_event, tool_call_id=tool_call_id,
+                name,
+                arguments,
+                source=source,
+                intent=intent,
+                cancel_event=cancel_event,
+                tool_call_id=tool_call_id,
             )
 
         if not self._calls_are_parallel_safe(normalized):
-            return tuple([
-                await _run_one(tid, name, args) for tid, name, args in normalized
-            ])
-        results = await asyncio.gather(
-            *(_run_one(tid, name, args) for tid, name, args in normalized)
-        )
-        return results
-
+            return tuple([await _run_one(tid, name, args) for tid, name, args in normalized])
+        results = await asyncio.gather(*(_run_one(tid, name, args) for tid, name, args in normalized))
+        return tuple(results)
 
     @staticmethod
     def _invoke(
@@ -399,17 +365,17 @@ class ToolExecutor:
                 raw_result = handler(arguments)
                 # Await if handler returned a coroutine (e.g. sync wrapper around async)
                 if asyncio.iscoroutine(raw_result):
+
                     async def _async_call() -> object:
                         return await asyncio.wait_for(raw_result, timeout=timeout_seconds)
+
                     results.put(asyncio.run(_async_call()))
                 else:
                     results.put(raw_result)
             except TimeoutError:
                 results.put(_TIMED_OUT)
             except Exception as exc:
-                results.put(
-                    _HandlerFailure(retryable=isinstance(exc, _TRANSIENT_EXCEPTIONS))
-                )
+                results.put(_HandlerFailure(retryable=isinstance(exc, _TRANSIENT_EXCEPTIONS)))
 
         worker = threading.Thread(target=run, name="slon-tool-handler", daemon=True)
         worker.start()
@@ -430,9 +396,7 @@ class ToolExecutor:
                 artifacts=value.artifacts,
                 warnings=value.warnings,
                 started_at=value.started_at if value.started_at is not None else started_at,
-                finished_at=(
-                    value.finished_at if value.finished_at is not None else finished_at
-                ),
+                finished_at=(value.finished_at if value.finished_at is not None else finished_at),
                 retryable=value.retryable,
             )
         if value is None:
@@ -489,19 +453,11 @@ def _timeout_warning(spec: ToolSpec) -> str:
     if spec.cancellation_class is CancellationClass.KILLABLE:
         return "The handler timed out; killable work should have been terminated."
     if spec.cancellation_class is CancellationClass.COOPERATIVE:
-        return (
-            "The handler timed out; cooperative cancellation was requested but "
-            "the handler may still be unwinding."
-        )
-    return (
-        "The handler did not finish before the deadline; an already running "
-        "legacy operation may continue."
-    )
+        return "The handler timed out; cooperative cancellation was requested but the handler may still be unwinding."
+    return "The handler did not finish before the deadline; an already running legacy operation may continue."
 
 
-def _retryable_failure(
-    spec: ToolSpec, *, exc: BaseException | None = None, code: str | None = None
-) -> bool:
+def _retryable_failure(spec: ToolSpec, *, exc: BaseException | None = None, code: str | None = None) -> bool:
     if not spec.idempotent:
         return False
     if exc is not None:
@@ -522,9 +478,7 @@ def _retryable_from_result(spec: ToolSpec, result: ToolResult) -> bool:
 async def _invoke_handler_async(spec: ToolSpec, arguments: Mapping[str, object]) -> object:
     """Run a handler without blocking the event loop on sync callables."""
     sig = inspect.signature(spec.handler)
-    has_var_keyword = any(
-        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
-    )
+    has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
 
     def _call() -> object:
         if has_var_keyword:
@@ -533,11 +487,9 @@ async def _invoke_handler_async(spec: ToolSpec, arguments: Mapping[str, object])
 
     if inspect.iscoroutinefunction(spec.handler):
         raw_result = _call()
-        return await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
+        return await asyncio.wait_for(cast(Awaitable[object], raw_result), timeout=spec.timeout_seconds)
 
-    raw_result = await asyncio.wait_for(
-        asyncio.to_thread(_call), timeout=spec.timeout_seconds
-    )
+    raw_result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=spec.timeout_seconds)
     if inspect.iscoroutine(raw_result):
         return await asyncio.wait_for(raw_result, timeout=spec.timeout_seconds)
     return raw_result

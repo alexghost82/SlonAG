@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 
 from acta.safety.errors import ArgValidationError
@@ -137,8 +138,6 @@ __all__ = [
 ]
 
 
-import re
-
 # Patterns to redact from log outputs
 _SECRET_PATTERNS: list[tuple[str, str]] = [
     # API keys: sk-..., key=..., token=...
@@ -157,5 +156,3 @@ def redact_secrets(text: str) -> str:
     for pattern, replacement in _SECRET_PATTERNS:
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     return text
-
-

@@ -54,10 +54,16 @@ class SessionManager:
             raise ValueError("title, agent_id, and workspace_id must be non-empty")
         now = _now()
         session = Session(
-            id=str(uuid4()), created_at=now, updated_at=now, title=title.strip(),
-            agent_id=agent_id.strip(), model_policy=model_policy,
-            workspace_id=workspace_id.strip(), status=SessionStatus.ACTIVE,
-            context_state=dict(context_state or {}), memory_scope=memory_scope,
+            id=str(uuid4()),
+            created_at=now,
+            updated_at=now,
+            title=title.strip(),
+            agent_id=agent_id.strip(),
+            model_policy=model_policy,
+            workspace_id=workspace_id.strip(),
+            status=SessionStatus.ACTIVE,
+            context_state=dict(context_state or {}),
+            memory_scope=memory_scope,
             permissions_profile=permissions_profile,
         )
         self.store.insert_session(session)
@@ -80,9 +86,7 @@ class SessionManager:
         if session.status is SessionStatus.ARCHIVED:
             raise SessionStateError("archived session cannot be resumed")
         if session.status is SessionStatus.CLOSED:
-            if not self.store.resume_session(
-                session_id, workspace_id=workspace_id, updated_at=_now()
-            ):
+            if not self.store.resume_session(session_id, workspace_id=workspace_id, updated_at=_now()):
                 raise SessionStateError("session could not be resumed")
             with self._runtime_lock:
                 self._closing.discard(session_id)
@@ -99,9 +103,7 @@ class SessionManager:
             for cancel in cancellers:
                 cancel()
             try:
-                self.store.close_session(
-                    session_id, workspace_id=workspace_id, updated_at=_now()
-                )
+                self.store.close_session(session_id, workspace_id=workspace_id, updated_at=_now())
             except SessionInactiveError as exc:
                 raise SessionStateError("session is not active") from exc
         return self.get(session_id, workspace_id=workspace_id)
@@ -110,9 +112,7 @@ class SessionManager:
         session = self.get(session_id, workspace_id=workspace_id)
         if session.status is not SessionStatus.ARCHIVED:
             try:
-                changed = self.store.archive_session(
-                    session_id, workspace_id=workspace_id, updated_at=_now()
-                )
+                changed = self.store.archive_session(session_id, workspace_id=workspace_id, updated_at=_now())
             except SessionInactiveError as exc:
                 raise SessionStateError("session with active runs cannot be archived") from exc
             if not changed:
@@ -145,10 +145,20 @@ class SessionManager:
         if session.status is not SessionStatus.ACTIVE:
             raise SessionStateError("session is not active")
         entry = TranscriptEntry(
-            id=str(uuid4()), session_id=session_id, turn_id=turn_id, sequence=1,
-            kind=kind, state=state, created_at=_now(), role=role, text=text,
-            tool_call_id=tool_call_id, tool_name=tool_name, data=data,
-            artifacts=artifacts, media_references=media_references,
+            id=str(uuid4()),
+            session_id=session_id,
+            turn_id=turn_id,
+            sequence=1,
+            kind=kind,
+            state=state,
+            created_at=_now(),
+            role=role,
+            text=text,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            data=data,
+            artifacts=artifacts,
+            media_references=media_references,
         )
         try:
             return self.store.append_entry(entry, workspace_id=workspace_id)
@@ -169,8 +179,12 @@ class SessionManager:
             raise SessionStateError("session is not active")
         now = _now()
         run = SessionRun(
-            id=str(uuid4()), session_id=session_id, turn_id=turn_id or str(uuid4()),
-            status=RunStatus.ACTIVE, started_at=now, updated_at=now,
+            id=str(uuid4()),
+            session_id=session_id,
+            turn_id=turn_id or str(uuid4()),
+            status=RunStatus.ACTIVE,
+            started_at=now,
+            updated_at=now,
             effective_provider_id=effective_provider_id,
             effective_model_id=effective_model_id,
         )
@@ -187,14 +201,14 @@ class SessionManager:
         changed = self.store.update_run_status(run.id, status, now)
         return replace(run, status=status, updated_at=now) if changed else run
 
-    def record_effective_model(
-        self, run: SessionRun, *, provider_id: str, model_id: str
-    ) -> SessionRun:
+    def record_effective_model(self, run: SessionRun, *, provider_id: str, model_id: str) -> SessionRun:
         now = _now()
         self.store.update_run_effective_model(run.id, provider_id, model_id, now)
         return replace(
-            run, effective_provider_id=provider_id,
-            effective_model_id=model_id, updated_at=now,
+            run,
+            effective_provider_id=provider_id,
+            effective_model_id=model_id,
+            updated_at=now,
         )
 
     def expire_idle(
@@ -228,17 +242,11 @@ class SessionManager:
         """Mark uncertain work interrupted; never replay provider/tools."""
         return self.store.recover_interrupted(_now())
 
-    def register_canceller(
-        self, session_id: str, cancel: Callable[[], None]
-    ) -> Callable[[], None]:
+    def register_canceller(self, session_id: str, cancel: Callable[[], None]) -> Callable[[], None]:
         reject = False
         with self._runtime_lock:
             session = self.store.get_session_unhydrated(session_id)
-            if (
-                session_id in self._closing
-                or session is None
-                or session.status is not SessionStatus.ACTIVE
-            ):
+            if session_id in self._closing or session is None or session.status is not SessionStatus.ACTIVE:
                 reject = True
             else:
                 self._cancellers.setdefault(session_id, set()).add(cancel)
@@ -263,5 +271,7 @@ def _now() -> str:
 
 
 __all__ = [
-    "SessionManager", "SessionNotFoundError", "SessionStateError",
+    "SessionManager",
+    "SessionNotFoundError",
+    "SessionStateError",
 ]

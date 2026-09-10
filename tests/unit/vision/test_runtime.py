@@ -16,9 +16,8 @@ from pathlib import Path
 import pytest
 
 from acta.vision.config import VisionConfig
-from acta.vision.fixtures.image import create_test_image, create_moving_object_image
+from acta.vision.fixtures.image import create_test_image
 from acta.vision.runtime import create_runtime
-from acta.vision.types import FrameSource
 
 
 class TestVisionRuntimeImage:

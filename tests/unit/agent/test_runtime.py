@@ -2,9 +2,11 @@
 
 import asyncio
 import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from acta.tools.contracts import ToolResult
 from agent.observation import Observation, ObservationKind
 from agent.runtime import (
     AgentLoop,
@@ -14,7 +16,6 @@ from agent.runtime import (
     LoopDetector,
 )
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
-from acta.tools.contracts import ToolResult
 from providers.contracts import (
     AssistantToolCallMessage,
     ChatRequest,
@@ -23,7 +24,6 @@ from providers.contracts import (
     ToolCall,
     ToolResultMessage,
 )
-
 
 MODEL = ModelInfo(
     provider_id="test",
@@ -256,9 +256,7 @@ async def test_agent_loop_provider_retry_budget():
 async def test_agent_loop_single_turn_text_response():
     """Verify AgentLoop completes on first turn when model returns text only."""
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="Hello user!", provider_id="test", model_id="test"
-    ))
+    mock_provider.chat = AsyncMock(return_value=ChatResponse(text="Hello user!", provider_id="test", model_id="test"))
 
     loop = AgentLoop(provider=mock_provider, model=MODEL)
     result = await loop.run("Say hello")
@@ -321,9 +319,7 @@ async def test_agent_loop_tool_error_self_correction():
             text="Calling broken tool",
             provider_id="test",
             model_id="test",
-            tool_calls=(
-                ToolCall(id="call_err", name="bad_tool", arguments={}),
-            ),
+            tool_calls=(ToolCall(id="call_err", name="bad_tool", arguments={}),),
         ),
         ChatResponse(
             text="I see the error, fixing it now.",
@@ -361,9 +357,7 @@ async def test_agent_loop_budget_exceeded():
             text="",
             provider_id="test",
             model_id="test",
-            tool_calls=(
-                ToolCall(id=f"c_{i}", name="loop_tool", arguments={"i": i}),
-            ),
+            tool_calls=(ToolCall(id=f"c_{i}", name="loop_tool", arguments={"i": i}),),
         )
         for i in range(10)
     ]
@@ -391,14 +385,14 @@ async def test_agent_loop_budget_exceeded():
 async def test_agent_loop_loop_detector_halt():
     """Verify loop halts when LoopDetector detects identical repeated calls."""
     mock_provider = MagicMock()
-    mock_provider.chat = AsyncMock(return_value=ChatResponse(
-        text="",
-        provider_id="test",
-        model_id="test",
-        tool_calls=(
-            ToolCall(id="call_rep", name="repeat_tool", arguments={"key": "val"}),
-        ),
-    ))
+    mock_provider.chat = AsyncMock(
+        return_value=ChatResponse(
+            text="",
+            provider_id="test",
+            model_id="test",
+            tool_calls=(ToolCall(id="call_rep", name="repeat_tool", arguments={"key": "val"}),),
+        )
+    )
 
     detector = LoopDetector(max_consecutive=3)
     loop = AgentLoop(

@@ -3,6 +3,7 @@
 Provides save/load for events, decisions, cooldown state, and
 relevance cache so the proactive layer survives restarts.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ class ProactivePersistence:
     def __init__(self, store_path: str | Path | None = None) -> None:
         if store_path is None:
             import tempfile
+
             tmpdir = Path(tempfile.mkdtemp(prefix="proactive_"))
             self._store_path = tmpdir / "proactive_state.json"
         else:

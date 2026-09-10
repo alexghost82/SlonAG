@@ -13,16 +13,16 @@ from pathlib import Path
 
 import pytest
 
-from actions.desktop import UnknownDesktopOpError, desktop_control
-from actions.file_controller import file_controller
-from actions.reminder import reminder
-from agent.executor import ToolDeniedError, _call_tool
 from acta.safety import (
     UnknownToolError,
     UnsafeUrlError,
     check_url,
 )
 from acta.vision import UNTRUSTED_FENCE, wrap_untrusted_image_text
+from actions.desktop import UnknownDesktopOpError, desktop_control
+from actions.file_controller import file_controller
+from actions.reminder import reminder
+from agent.executor import ToolDeniedError, _call_tool
 from server import DesktopControlApp
 
 SECRET = "sk-abcdefghijklmnopqrstuvwxyz012345"
@@ -48,7 +48,7 @@ def test_path_traversal_outside_allowlist_is_blocked(tmp_path: Path) -> None:
         allowlist=[allowed],
     )
     assert "classified" not in result
-    assert ("outside the allowlist" in result or "traversal" in result)
+    assert "outside the allowlist" in result or "traversal" in result
     assert secret.read_text(encoding="utf-8") == "classified"
 
 
@@ -163,12 +163,6 @@ Adversarial security regression tests.
 These test edge cases, evasion attempts, and protocol-level attacks.
 No live sockets, no DNS, no real API keys.
 """
-
-import hashlib
-import json
-import os
-import re
-from unittest import mock
 
 
 def test_shell_injection_null_byte():
@@ -302,8 +296,8 @@ def test_shell_injection_from_markdown():
 def test_subagent_permission_denial():
     """Subagents must inherit restricted permissions from parent."""
     from acta.safety import SafetyPolicy
-    from agent.subagent import _BoundedSafetyPolicy
     from acta.safety.types import UntrustedSource
+    from agent.subagent import _BoundedSafetyPolicy
 
     # Create a policy with specific tools
     parent = SafetyPolicy()
@@ -312,6 +306,7 @@ def test_subagent_permission_denial():
 
     # Verify subagents cannot use denied tools via authorize
     from acta.safety.types import DecisionKind
+
     for tool in denied_tools:
         decision = policy.authorize(tool, {}, source=UntrustedSource.TOOL_RESULT)
         assert decision.kind == DecisionKind.DENY, f"Subagent can access denied tool: {tool}"
@@ -343,6 +338,7 @@ def test_token_expiry_simulation():
 
     # Verify that expired access tokens are rejected
     from server.auth import DeviceCredential
+
     cred = DeviceCredential(device_id="test-dev", device_secret="secret")
 
     # Create a token normally
@@ -362,8 +358,7 @@ def test_token_expiry_simulation():
 
 def test_token_replay_prevention():
     """Revoked tokens must not be reused (replay prevention)."""
-    from server.auth import AuthError, TokenService
-    from server.auth import DeviceCredential
+    from server.auth import AuthError, DeviceCredential, TokenService
 
     # Replay prevention: used_jtis set prevents re-use of the same jti
     used_jtis = set()
@@ -372,7 +367,7 @@ def test_token_replay_prevention():
     cred = DeviceCredential(device_id="test-dev2", device_secret="secret2")
 
     # Mint a token with a known jti
-    tokens = mgr.mint(cred, jti="known-jti-123")
+    mgr.mint(cred, jti="known-jti-123")
     assert "known-jti-123" in used_jtis
 
     # Try minting again with the same jti — should be rejected
@@ -417,7 +412,7 @@ def test_ssrf_browser_via_playwright():
 
 def test_file_traversal_deep():
     """Deep path traversal must be blocked at all depths."""
-    from acta.filesystem.security import sanitize_path, PathDenied
+    from acta.filesystem.security import PathDenied, sanitize_path
 
     traversal_paths = [
         "../../../../etc/shadow",
@@ -440,9 +435,9 @@ def test_file_traversal_deep():
 
 def test_cancellation_propagation():
     """AutomationEngine must stop when stopped."""
-    from acta.automation.engine import AutomationEngine
-    import threading
     import time
+
+    from acta.automation.engine import AutomationEngine
 
     engine = AutomationEngine()
 
@@ -457,7 +452,6 @@ def test_cancellation_propagation():
 
     # Engine.stop() already joined the thread (sets _thread to None)
     # Verify the thread has stopped by waiting a moment
-    import time
     time.sleep(0.2)
 
 
@@ -491,13 +485,23 @@ def test_proactive_loop_detection():
 def test_browser_cleanup_on_shutdown():
     """BrowserService must close all resources on shutdown."""
     pytest.importorskip("playwright")
-    from runtime.browser.service import BrowserService
     import time
+
+    from runtime.browser.service import BrowserService
+    from runtime.browser.status import BrowserAvailability, detect_runtime_availability
+
+    if detect_runtime_availability() != BrowserAvailability.READY:
+        pytest.skip("Playwright Chromium not installed")
+
+    from runtime.browser.exceptions import BrowserLaunchError
 
     service = BrowserService()
 
     # Start in background thread
-    service.start()
+    try:
+        service.start()
+    except BrowserLaunchError as exc:
+        pytest.skip(f"Playwright Chromium not installed: {exc}")
     time.sleep(0.3)
 
     # stop() closes browser resources and stops the background thread
@@ -507,9 +511,10 @@ def test_browser_cleanup_on_shutdown():
 
 def test_automation_process_cleanup():
     """Shell processes must be cleaned up on error/timeout."""
-    from actions.shell_exec import _kill_tree
-    import subprocess
     import os
+    import subprocess
+
+    from actions.shell_exec import _kill_tree
 
     # Start a background process group
     proc = subprocess.Popen(
@@ -539,9 +544,10 @@ def test_automation_process_cleanup():
 
 async def test_vision_queue_age_staleness():
     """BoundedFrameQueue must drop stale frames."""
+    import asyncio
+
     from acta.vision.queues import BoundedFrameQueue
     from acta.vision.types import Frame
-    import asyncio
 
     queue = BoundedFrameQueue(maxlen=3, max_age_seconds=0.1)
     await queue.put(Frame(index=0, width=640, height=480))
@@ -555,6 +561,7 @@ async def test_vision_queue_age_staleness():
 async def test_tracking_memory_persists():
     """Memory repository persists and retrieves entries."""
     import tempfile
+
     from acta.memory.repository import MemoryRepository
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=True) as f:

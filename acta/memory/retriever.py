@@ -104,19 +104,12 @@ class MemoryRetriever:
             fallback_used = True
             candidates = self._keyword_search(query, record_type=record_type, top_k=self._max_chunks * 2)
         else:
-            candidates = self._vector_search(
-                vector, record_type=record_type, top_k=self._max_chunks * 2
-            )
+            candidates = self._vector_search(vector, record_type=record_type, top_k=self._max_chunks * 2)
 
         # Step 2: apply workspace/user/session scoping
         if not include_all_scopes:
             candidates = [
-                r for r in candidates
-                if (
-                    r.workspace == ws
-                    and r.user_id == uid
-                    and (sid == "" or r.session_id == sid)
-                )
+                r for r in candidates if (r.workspace == ws and r.user_id == uid and (sid == "" or r.session_id == sid))
             ]
 
         # Step 3: rank — combined score
@@ -125,7 +118,7 @@ class MemoryRetriever:
             relevance = row._similarity if hasattr(row, "_similarity") else 0.0
             recency = self._calc_recency(row.updated_at)
             confidence = row.confidence if hasattr(row, "confidence") else 1.0
-            combined = relevance * 0.5 + recency * 0.3 + confidence * 0.2
+            relevance * 0.5 + recency * 0.3 + confidence * 0.2
             scored.append((row, relevance, recency, confidence))
 
         # Filter by min relevance
@@ -158,13 +151,15 @@ class MemoryRetriever:
             text = self._format_chunk(row)
             if len(text) > budget_left:
                 break
-            chunks.append(ContextChunk(
-                source_ref=f"{row.type}:{row.key}",
-                text=text,
-                confidence=conf,
-                relevance=rel,
-                recency=rec,
-            ))
+            chunks.append(
+                ContextChunk(
+                    source_ref=f"{row.type}:{row.key}",
+                    text=text,
+                    confidence=conf,
+                    relevance=rel,
+                    recency=rec,
+                )
+            )
             budget_left -= len(text)
 
         # Step 6: privacy filter
@@ -243,9 +238,13 @@ class MemoryRetriever:
         self._db.update(updated)
         self._db.upsert_embedding(updated.id, self._embed_service.embed(new_value) or [0.0])
         return MemoryRecord(
-            id=updated.id, type=RecordType(updated.type), key=updated.key,
-            value=updated.value, source=updated.source,
-            created_at=updated.created_at, updated_at=updated.updated_at,
+            id=updated.id,
+            type=RecordType(updated.type),
+            key=updated.key,
+            value=updated.value,
+            source=updated.source,
+            created_at=updated.created_at,
+            updated_at=updated.updated_at,
         )
 
     def delete_low_confidence(self, *, threshold: float = 0.3) -> int:

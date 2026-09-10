@@ -98,10 +98,7 @@ def try_build_local_tts(
     return LocalTTSBuildResult(
         provider=provider,
         ready=True,
-        message=(
-            f"Local TTS ready (Piper {voice}; "
-            f"binary={engine.binary_path}; model={engine.model_path})."
-        ),
+        message=(f"Local TTS ready (Piper {voice}; binary={engine.binary_path}; model={engine.model_path})."),
         binary_path=engine.binary_path,
         model_path=engine.model_path,
         voice=voice,

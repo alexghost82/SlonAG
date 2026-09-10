@@ -11,13 +11,14 @@ from __future__ import annotations
 
 try:
     import tkinter  # noqa: F401
+
     _HAS_TKINTER = True
 except ImportError:
     _HAS_TKINTER = False
 
 import pytest
 
-from observability import RuntimeStatus, get_status, get_capability_report, is_capable
+from observability import RuntimeStatus, get_capability_report, get_status, is_capable
 
 
 def test_runtime_status_defaults():
@@ -68,9 +69,16 @@ def test_get_status_returns_structure():
     assert "capabilities_ok" in d
     assert isinstance(d["capabilities_ok"], bool)
     # Must have all standard status fields
-    for key in ("online", "paired", "provider_id", "model_id",
-                "network_mode", "privacy_profile",
-                "active_tasks", "pending_approvals"):
+    for key in (
+        "online",
+        "paired",
+        "provider_id",
+        "model_id",
+        "network_mode",
+        "privacy_profile",
+        "active_tasks",
+        "pending_approvals",
+    ):
         assert key in d, f"Missing key in to_dict: {key}"
 
 
@@ -89,9 +97,17 @@ def test_get_capability_report_has_validation():
 @pytest.mark.skipif(not _HAS_TKINTER, reason="tkinter not available")
 def test_is_capable_returns_bool():
     """is_capable() returns a bool for known capabilities."""
-    for cap in ("input", "screenshot", "clipboard",
-                "window_management", "clipboard",
-                "system_settings", "app_launch", "screen_info", "platform"):
+    for cap in (
+        "input",
+        "screenshot",
+        "clipboard",
+        "window_management",
+        "clipboard",
+        "system_settings",
+        "app_launch",
+        "screen_info",
+        "platform",
+    ):
         result = is_capable(cap)
         assert isinstance(result, bool), f"is_capable({cap!r}) returned {type(result)}"
 

@@ -11,8 +11,6 @@ from providers.contracts import ModelInfo
 from ui import SlonUI, JarvisUI
 from acta.memory import commit_extracted_facts, format_store_for_prompt
 from memory.memory_manager import (
-    format_memory_for_prompt,
-    load_memory,
     should_extract_memory,
     extract_memory,
 )
@@ -225,6 +223,7 @@ class SlonLive:
         self._closed = False
         base_registry = getattr(runtime_stack, "tool_registry", None)
         policy = getattr(runtime_stack, "safety", None)
+        stack_executor = getattr(runtime_stack, "tool_executor", None)
         live_registry = build_live_registry(
             ui=ui,
             speak=self.speak,
@@ -233,12 +232,14 @@ class SlonLive:
         self.tool_bridge = LiveToolBridge(
             ui=ui,
             speak=self.speak,
-            registry=live_registry,
+            registry=live_registry if stack_executor is None else (base_registry or live_registry),
             policy=policy,
+            executor=stack_executor,
         )
         self.tool_registry = self.tool_bridge.registry
         self.tool_executor = self.tool_bridge.executor
         self.tool_declarations = export_gemini_tools(self.tool_registry.list())
+        self._voice_bridge = None
         self.latency_trace = TurnLatencyTracker()
         self.runtime_events = RuntimeEventBus()
         self.runtime_events.subscribe(UIRuntimeEventSink(ui))
@@ -323,7 +324,7 @@ class SlonLive:
         from datetime import datetime
 
         store = getattr(self.runtime_stack, "memory", None)
-        mem_str = format_store_for_prompt(store) if store is not None else format_memory_for_prompt(load_memory())
+        mem_str = format_store_for_prompt(store) if store is not None else ""
         sys_prompt = _load_system_prompt()
 
         now      = datetime.now()
@@ -428,7 +429,7 @@ class SlonLive:
         result = await self.tool_bridge.execute(
             name,
             args,
-            intent="Gemini Live function call",
+            intent="desktop voice function call",
             call_id=fc.id,
         )
         self.latency_trace.mark_at("approval_start", result.approval_started_at)
@@ -637,37 +638,57 @@ class SlonLive:
         )
 
     async def run(self):
+        """Desktop voice: VoiceBridge audio I/O, AgentLoop as the only reasoner.
+
+        Gemini Live remains an optional transport factory in
+        ``providers.gemini.live.create_live_client`` and is not a second tool loop.
+        """
         if self._closed:
             raise RuntimeError("logical session is closed")
-        client = create_live_client(
-            api_key=_get_api_key(),
-            http_options={"api_version": "v1beta"},
-        )
+        from agent.runtime import AgentLoop
+        from config.schema import settings_forbid_cloud
+        from runtime.canonical_voice import VoiceBridge, VoiceConfig
+
+        if settings_forbid_cloud():
+            raise RuntimeError(
+                "desktop voice cloud path is disabled in local_only/offline/fully_local"
+            )
+
+        stack = self.runtime_stack
         task = asyncio.current_task()
         loop = asyncio.get_running_loop()
-        manager = getattr(self.runtime_stack, "session_manager", None)
+        manager = getattr(stack, "session_manager", None)
 
         def cancel() -> None:
             if task is not None:
                 loop.call_soon_threadsafe(task.cancel)
+            voice = self._voice_bridge
+            if voice is not None:
+                voice.cancel()
+
+        def agent_loop_factory(model, provider, executor):
+            if stack is not None:
+                try:
+                    return stack.create_agent_loop(model=model)
+                except RuntimeError:
+                    pass
+            return AgentLoop(model=model, provider=provider, tool_executor=executor)
 
         unregister = (
             manager.register_canceller(self.session_id, cancel)
             if manager is not None else lambda: None
         )
+        self._voice_bridge = VoiceBridge(
+            config=VoiceConfig(),
+            ui=self.ui,
+            agent_loop_factory=agent_loop_factory,
+            model_info=self.selected_model,
+            set_speaking=self.set_speaking,
+        )
         try:
-            await run_live_lifecycle(
-                client=client,
-                model_id=self.selected_model.model_id,
-                build_config=self._build_config,
-                on_connected=self._on_connected,
-                on_disconnected=self._on_disconnected,
-                tasks=self._session_tasks,
-                ui=self.ui,
-                emit_event=self._emit_event,
-                should_stop=lambda: self._closed,
-            )
+            await self._voice_bridge.run()
         finally:
+            self._voice_bridge = None
             unregister()
 
     async def close(self) -> None:
@@ -705,10 +726,6 @@ def _run_chat_agent(ui, settings, stack=None):
 
     provider_id = getattr(settings, "provider_id", "gemini")
     model_id = getattr(settings, "model_id", "")
-
-    # Audio-capable Gemini uses SlonLive, not AgentLoop.
-    if provider_id == "gemini" and model_id and "audio" in model_id.lower():
-        return False
 
     model_info = _resolve_model_info(provider_id, model_id)
 
@@ -860,26 +877,25 @@ def main():
     def runner():
         ui.wait_for_api_key()
         settings = _get_settings()
-        stack = getattr(ui, "_runtime_stack", None) or _build_stack()
+        stack = _build_stack()
+        ui._runtime_stack = stack
 
         selected_provider = getattr(settings, "provider_id", "gemini")
-
-        # Check if this is an audio-capable Gemini model → use SlonLive
         selected_model_id = getattr(settings, "model_id", "")
-        is_gemini_audio = (
+        wants_desktop_voice = bool(
             selected_provider == "gemini"
             and selected_model_id
             and "audio" in selected_model_id.lower()
         )
 
-        if is_gemini_audio:
+        if wants_desktop_voice:
+            # VoiceBridge + AgentLoop. SlonLive is lifecycle, not a second reasoner.
             slon = SlonLive(ui, runtime_stack=stack)
             try:
                 asyncio.run(slon.run())
             except KeyboardInterrupt:
                 logger.info("\n%s", t("status.disconnected"))
         else:
-            # Chat-based agent loop for non-Gemini or non-audio models
             _run_chat_agent(ui, settings, stack)
             logger.info("\n%s", t("agent.completed"))
 

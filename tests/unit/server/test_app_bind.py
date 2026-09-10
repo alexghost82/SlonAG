@@ -4,6 +4,7 @@ from __future__ import annotations
 
 try:
     import tkinter  # noqa: F401
+
     _HAS_TKINTER = True
 except ImportError:
     _HAS_TKINTER = False

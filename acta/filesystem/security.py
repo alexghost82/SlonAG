@@ -24,40 +24,95 @@ from pathlib import Path
 # System paths that are always forbidden regardless of allowlist membership.
 # ---------------------------------------------------------------------------
 
-_FORBIDDEN_POSIX: frozenset[str] = frozenset({
-    "/", "/etc", "/system", "/usr", "/bin", "/sbin",
-    "/var", "/dev", "/proc", "/root", "/boot",
-    "/lib", "/lib64", "/private/etc",
-})
+_FORBIDDEN_POSIX: frozenset[str] = frozenset(
+    {
+        "/",
+        "/etc",
+        "/system",
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/var",
+        "/dev",
+        "/proc",
+        "/root",
+        "/boot",
+        "/lib",
+        "/lib64",
+        "/private/etc",
+    }
+)
 
-_FORBIDDEN_WINDOWS: frozenset[str] = frozenset({
-    "c:", "c:/", "c:/windows", "c:/windows/system32",
-    "c:/program files", "c:/program files (x80)",
-    "c:/programdata",
-})
+_FORBIDDEN_WINDOWS: frozenset[str] = frozenset(
+    {
+        "c:",
+        "c:/",
+        "c:/windows",
+        "c:/windows/system32",
+        "c:/program files",
+        "c:/program files (x80)",
+        "c:/programdata",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Size limits (bytes)
 # ---------------------------------------------------------------------------
 
-MAX_READ_BYTES: int = 2 * 1024 * 1024          # 2 MB read ceiling
-MAX_WRITE_BYTES: int = 2 * 1024 * 1024        # 2 MB write ceiling
-MAX_FILE_SIZE: int = 100 * 1024 * 1024        # 100 MB file size ceiling
+MAX_READ_BYTES: int = 2 * 1024 * 1024  # 2 MB read ceiling
+MAX_WRITE_BYTES: int = 2 * 1024 * 1024  # 2 MB write ceiling
+MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100 MB file size ceiling
 
 # ---------------------------------------------------------------------------
 # Encoding
 # ---------------------------------------------------------------------------
 
 _DEFAULT_ENCODING = "utf-8"
-_TEXT_EXTENSIONS: frozenset[str] = frozenset({
-    ".txt", ".md", ".py", ".js", ".ts", ".jsx", ".tsx",
-    ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg",
-    ".xml", ".html", ".css", ".csv", ".sh", ".bash",
-    ".sql", ".rs", ".go", ".java", ".c", ".cpp", ".h",
-    ".rb", ".pl", ".php", ".swift", ".kt", ".scala",
-    ".rst", ".tex", ".log", ".toml", ".env", ".gitignore",
-    ".dockerignore", ".editorconfig", ".gitattributes",
-})
+_TEXT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".txt",
+        ".md",
+        ".py",
+        ".js",
+        ".ts",
+        ".jsx",
+        ".tsx",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".xml",
+        ".html",
+        ".css",
+        ".csv",
+        ".sh",
+        ".bash",
+        ".sql",
+        ".rs",
+        ".go",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".rb",
+        ".pl",
+        ".php",
+        ".swift",
+        ".kt",
+        ".scala",
+        ".rst",
+        ".tex",
+        ".log",
+        ".toml",
+        ".env",
+        ".gitignore",
+        ".dockerignore",
+        ".editorconfig",
+        ".gitattributes",
+    }
+)
 
 _BINARY_MAGIC: list[tuple[bytes, str]] = [
     (b"%PDF", "pdf"),
@@ -74,6 +129,7 @@ _BINARY_MAGIC: list[tuple[bytes, str]] = [
 
 class Cancelled(Exception):
     """Raised when an operation is cancelled."""
+
     pass
 
 
@@ -122,6 +178,7 @@ class TraversalDetected(Exception):
 @dataclass(frozen=True)
 class AllowlistRoots:
     """Canonical allowlisted roots."""
+
     roots: tuple[Path, ...]
 
     def contains(self, resolved: Path) -> bool:
@@ -214,16 +271,32 @@ def _check_symlink_chain(target: Path, roots: tuple[Path, ...]) -> None:
         if current.is_symlink():
             real = current.resolve()
             if not _symlink_target_allowed(real, roots):
-                raise SymlinkEscape(
-                    f"Symlink at {current} points outside allowlist ({real})."
-                )
+                raise SymlinkEscape(f"Symlink at {current} points outside allowlist ({real}).")
+
+
+def _coerce_roots(roots: object) -> tuple[Path, ...]:
+    """Normalize list/tuple/str/Path roots to resolved Path tuples."""
+    if roots is None:
+        return ()
+    if isinstance(roots, (str, Path)):
+        items: tuple[object, ...] = (roots,)
+    elif isinstance(roots, (list, tuple)):
+        items = tuple(roots)
+    else:
+        raise TypeError(f"roots must be str, Path, or a sequence of those, got {type(roots).__name__}")
+    coerced: list[Path] = []
+    for item in items:
+        if item is None:
+            continue
+        coerced.append(Path(item).expanduser().resolve())  # type: ignore[arg-type]
+    return tuple(coerced)
 
 
 def _safe_relative(resolved: Path, root: Path) -> str | None:
     """Return the relative part or None if not under root."""
     try:
         resolved_r = resolved.resolve()
-        root_r = root.resolve()
+        root_r = Path(root).resolve()
         if not resolved_r.is_relative_to(root_r):
             return None
         return resolved_r.relative_to(root_r).as_posix()
@@ -265,11 +338,7 @@ def validate_path(
     Relative paths are resolved relative to the first root so that
     operations like ``write("new.txt", roots=(workspace,))`` work as expected.
     """
-    # Normalize roots to tuple[Path, ...]
-    if isinstance(roots, str):
-        roots = (Path(roots),)
-    elif isinstance(roots, Path):
-        roots = (roots,)
+    roots = _coerce_roots(roots)
 
     if not path_raw or not path_raw.strip():
         raise PathDenied("Empty path.")
@@ -322,9 +391,7 @@ def validate_path(
                 if current.exists() and current.is_symlink():
                     real = current.resolve()
                     if not _symlink_target_allowed(real, roots):
-                        raise SymlinkEscape(
-                            f"Symlink at {current} points outside allowlist ({real})."
-                        )
+                        raise SymlinkEscape(f"Symlink at {current} points outside allowlist ({real}).")
         except OSError:
             pass
     else:
@@ -345,9 +412,7 @@ def validate_path(
                     if current.exists() and current.is_symlink():
                         real = current.resolve()
                         if not _symlink_target_allowed(real, roots):
-                            raise SymlinkEscape(
-                                f"Symlink at {current} points outside allowlist ({real})."
-                            )
+                            raise SymlinkEscape(f"Symlink at {current} points outside allowlist ({real}).")
             except SymlinkEscape:
                 raise
             except OSError:
@@ -360,9 +425,7 @@ def validate_path(
         except OSError:
             size = 0
         if size > MAX_FILE_SIZE:
-            raise SizeExceeded(
-                f"File size {size} bytes exceeds limit of {MAX_FILE_SIZE}."
-            )
+            raise SizeExceeded(f"File size {size} bytes exceeds limit of {MAX_FILE_SIZE}.")
 
     return resolved
 
@@ -377,7 +440,7 @@ def _is_binary(data: bytes) -> bool:
     if b"\x00" in data:
         return True
     for magic, _ in _BINARY_MAGIC:
-        if data[:len(magic)] == magic:
+        if data[: len(magic)] == magic:
             return True
     return False
 
@@ -390,8 +453,7 @@ def detect_file_type(path: Path) -> str:
     ext = path.suffix.lower()
     if ext in _TEXT_EXTENSIONS:
         return "text"
-    if ext in {".bin", ".dat", ".exe", ".dll", ".so", ".dylib", ".o", ".a",
-               ".pyc", ".pyo", ".class", ".jar", ".war"}:
+    if ext in {".bin", ".dat", ".exe", ".dll", ".so", ".dylib", ".o", ".a", ".pyc", ".pyo", ".class", ".jar", ".war"}:
         return "binary"
     # Check file content (up to 8192 bytes)
     try:
@@ -431,9 +493,7 @@ def validate_write_size(content: str) -> int:
     """Return byte size and raise SizeExceeded if over limit."""
     byte_size = len(content.encode(_DEFAULT_ENCODING))
     if byte_size > MAX_WRITE_BYTES:
-        raise SizeExceeded(
-            f"Write size {byte_size} bytes exceeds limit of {MAX_WRITE_BYTES}."
-        )
+        raise SizeExceeded(f"Write size {byte_size} bytes exceeds limit of {MAX_WRITE_BYTES}.")
     return byte_size
 
 
@@ -482,6 +542,7 @@ __all__ = [
     "MAX_WRITE_BYTES",
     "MAX_FILE_SIZE",
     "_check_cancel",
+    "_coerce_roots",
     "default_allowlist_roots",
     "detect_file_type",
     "read_safe",
@@ -496,9 +557,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-def sanitize_path(
-    path_raw: str, allowlist_roots: tuple[str, ...] | None = None
-) -> str:
+def sanitize_path(path_raw: str, allowlist_roots: tuple[str, ...] | None = None) -> str:
     """Resolve and normalise *path_raw* to a safe absolute path.
 
     Raises ``PathDenied`` on traversal escape.

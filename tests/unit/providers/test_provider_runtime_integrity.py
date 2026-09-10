@@ -24,8 +24,8 @@ import pytest
 from providers.capabilities import (
     KNOWN_ROLES,
     ROLE_CAPABILITY_FLAGS,
-    require_capability,
     require_capabilities,
+    require_capability,
     require_provider_match,
     supports,
 )
@@ -35,7 +35,6 @@ from providers.contracts import (
     ChatEvent,
     ChatMessage,
     ChatRequest,
-    ChatResponse,
     ConversationMessage,
     ModelInfo,
     ProviderStatus,
@@ -46,12 +45,10 @@ from providers.contracts import (
 )
 from providers.errors import (
     CapabilityError,
-    ProviderAuthError,
     ProviderError,
     ProviderOfflineError,
     redact_secrets,
 )
-from providers.local.common import DEFAULT_LOCAL_BASE_URL
 from providers.local.endpoint import (
     assert_endpoint_allowed,
     is_loopback_host,
@@ -60,18 +57,16 @@ from providers.local.endpoint import (
     origin_of,
     parse_endpoint_host,
 )
-from providers.openai.provider import OpenAIChatProvider, PROVIDER_ID
+from providers.openai.provider import OpenAIChatProvider
 from providers.registry import clear, get, register, registered_ids
 from providers.router import Router
 from providers.routing import (
     CLOUD_PROVIDER_IDS,
     LOCAL_PROVIDER_IDS,
     ROUTING_MODES,
-    is_local_model,
     score_model,
     select_model,
 )
-
 
 # ──────────────────────────────────────────────
 # Stream parser edge cases
@@ -478,9 +473,7 @@ class TestRouterCacheIntegrity:
 
     def test_cache_reuses_same_instance(self) -> None:
         mock1 = MagicMock()
-        mock1.validate = MagicMock(
-            return_value=ProviderStatus(provider_id="test", ok=True)
-        )
+        mock1.validate = MagicMock(return_value=ProviderStatus(provider_id="test", ok=True))
 
         router = Router(
             provider_id="test",
@@ -502,13 +495,9 @@ class TestRouterCacheIntegrity:
 
     def test_injected_not_overwritten(self) -> None:
         mock1 = MagicMock()
-        mock1.validate = MagicMock(
-            return_value=ProviderStatus(provider_id="test", ok=True)
-        )
+        mock1.validate = MagicMock(return_value=ProviderStatus(provider_id="test", ok=True))
         mock2 = MagicMock()
-        mock2.validate = MagicMock(
-            return_value=ProviderStatus(provider_id="test", ok=True)
-        )
+        mock2.validate = MagicMock(return_value=ProviderStatus(provider_id="test", ok=True))
 
         router = Router(
             provider_id="test",
@@ -688,9 +677,7 @@ class TestContractIntegrity:
             UserMessage(content="hi"),
             SystemMessage(content="be helpful"),
             AssistantMessage(content="hello"),
-            AssistantToolCallMessage(
-                tool_calls=(ToolCall(id="1", name="t", arguments={}),)
-            ),
+            AssistantToolCallMessage(tool_calls=(ToolCall(id="1", name="t", arguments={}),)),
             ToolResultMessage(tool_call_id="1", tool_name="t", result="ok"),
             ChatMessage(role="user", content="hi"),
         ]
@@ -720,9 +707,7 @@ class TestLocalEndpointValidation:
         from providers.local.openai_compatible import OpenAICompatibleChatProvider
 
         fake_transport = MagicMock()
-        fake_transport.request.return_value = TransportResponse(
-            status_code=200, body='{"data": []}', headers={}
-        )
+        fake_transport.request.return_value = TransportResponse(status_code=200, body='{"data": []}', headers={})
 
         provider = OpenAICompatibleChatProvider(
             base_url="http://127.0.0.1:8080/v1",
@@ -736,13 +721,11 @@ class TestLocalEndpointValidation:
         """The loopback guard is re-evaluated on every _request call,
         so even if allow_remote was True at construction, changing it
         later still blocks."""
-        from providers.local.http import TransportResponse, StdlibTransport
+        from providers.local.http import StdlibTransport, TransportResponse
         from providers.local.openai_compatible import OpenAICompatibleChatProvider
 
         fake_transport = MagicMock(spec=StdlibTransport)
-        fake_transport.request.return_value = TransportResponse(
-            status_code=200, body='{"data": []}', headers={}
-        )
+        fake_transport.request.return_value = TransportResponse(status_code=200, body='{"data": []}', headers={})
 
         # allow_remote=True to pass __init__
         provider = OpenAICompatibleChatProvider(

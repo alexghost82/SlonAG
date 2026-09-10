@@ -17,26 +17,28 @@ from typing import Any
 # Transport kinds
 # ---------------------------------------------------------------------------
 
+
 class TransportKind(StrEnum):
     """Which physical/protocol channel carries the traffic."""
 
-    LAN_TLS = "lan_tls"          # direct WebSocket-over-TLS on same LAN
-    LAN_WS = "lan_ws"            # direct WebSocket (plain TCP) on same LAN
-    REMOTE = "remote"            # remoted through a transport adapter
-    LOCAL = "local"              # in-process / loopback (desktop ↔ UI)
+    LAN_TLS = "lan_tls"  # direct WebSocket-over-TLS on same LAN
+    LAN_WS = "lan_ws"  # direct WebSocket (plain TCP) on same LAN
+    REMOTE = "remote"  # remoted through a transport adapter
+    LOCAL = "local"  # in-process / loopback (desktop ↔ UI)
 
 
 class ConnectivityMode(StrEnum):
     """Policy for selecting a transport at connection time."""
 
-    AUTO = "auto"                # LAN first, then remote
-    LAN_ONLY = "lan_only"        # fail if no LAN reachable
+    AUTO = "auto"  # LAN first, then remote
+    LAN_ONLY = "lan_only"  # fail if no LAN reachable
     REMOTE_ONLY = "remote_only"  # always use remote
 
 
 # ---------------------------------------------------------------------------
 # Connection state
 # ---------------------------------------------------------------------------
+
 
 class ConnectionState(StrEnum):
     """Observable connection state. Always monotonically progresses except on
@@ -69,6 +71,7 @@ class ConnectionReason(StrEnum):
 # ---------------------------------------------------------------------------
 # Identity
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class DeviceIdentity:
@@ -131,6 +134,7 @@ class CertificateInfo:
 # Discovery
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class DiscoveredDevice:
     """A device found via discovery (Bonjour/mDNS)."""
@@ -147,12 +151,14 @@ class DiscoveredDevice:
     def __post_init__(self) -> None:
         if self.discovered_at == 0.0:
             import time
+
             object.__setattr__(self, "discovered_at", time.time())
 
 
 # ---------------------------------------------------------------------------
 # Transport
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TransportEndpoint:
@@ -189,6 +195,7 @@ class TransportMessage:
 # ---------------------------------------------------------------------------
 # Connection
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ConnectionInfo:
@@ -228,6 +235,7 @@ ConnectionConnectionReason = ConnectionReason
 # Policy
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ConnectivityPolicy:
     """User-configurable connectivity preferences."""
@@ -241,7 +249,7 @@ class ConnectivityPolicy:
     max_reconnect_attempts: int = 5
     lan_reconnect_delay: float = 5.0
     certificate_verify: bool = True
-    prefer_secure: bool = True       # TLS before plain WS
+    prefer_secure: bool = True  # TLS before plain WS
     remote_adapter: str = "firebase"  # pluggable adapter name
 
 

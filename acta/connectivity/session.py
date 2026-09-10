@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -19,7 +19,6 @@ from acta.connectivity.monitor import ConnectivityMonitor
 from acta.connectivity.remote import RemoteAdapter, RemoteAdapterError
 from acta.connectivity.transport import LANTransport, LANTransportError, TransportConfig
 from acta.connectivity.types import (
-    ConnectionConnectionReason,
     ConnectionInfo,
     ConnectionReason,
     ConnectionState,
@@ -66,20 +65,22 @@ class ConnectivitySession:
 
     # Callbacks
     _state_handlers: list[Any] = field(default_factory=list)
-    _message_handlers: list[callable] = field(default_factory=list)
+    _message_handlers: list[Callable[..., Any]] = field(default_factory=list)
 
     # Async primitives
-    _lock: asyncio.Lock | None = None
-    _stop_event: asyncio.Event | None = None
+    _lock: asyncio.Lock = field(init=False)
+    _stop_event: asyncio.Event = field(init=False)
 
     def __post_init__(self) -> None:
-        if self._lock is None:
-            self._lock = asyncio.Lock()
-        if self._stop_event is None:
-            self._stop_event = asyncio.Event()
+        self._lock = asyncio.Lock()
+        self._stop_event = asyncio.Event()
         if self.policy is None:
-            from acta.connectivity.types import ConnectivityPolicy
             self.policy = ConnectivityPolicy()
+
+    def _require_policy(self) -> ConnectivityPolicy:
+        if self.policy is None:
+            self.policy = ConnectivityPolicy()
+        return self.policy
 
     # -- Connection lifecycle --
 
@@ -182,7 +183,7 @@ class ConnectivitySession:
         """Register a callback for state changes."""
         self._state_handlers.append(handler)
 
-    def on_message(self, handler: callable) -> None:
+    def on_message(self, handler: Callable[..., Any]) -> None:
         """Register a callback for received messages."""
         self._message_handlers.append(handler)
 
@@ -196,10 +197,10 @@ class ConnectivitySession:
             endpoint_url=self.current_device.connect_url if self.current_device else "",
             established_at=time.time() if self.state == ConnectionState.CONNECTED else 0.0,
             last_heartbeat_at=self._monitor.last_pong_at if self._monitor else 0.0,
-            heartbeat_interval=self.policy.heartbeat_interval,
-            heartbeat_timeout=self.policy.heartbeat_timeout,
+            heartbeat_interval=self._require_policy().heartbeat_interval,
+            heartbeat_timeout=self._require_policy().heartbeat_timeout,
             reconnect_attempt=0,
-            max_reconnect_attempts=self.policy.max_reconnect_attempts,
+            max_reconnect_attempts=self._require_policy().max_reconnect_attempts,
             remote_address=self.current_device.host if self.current_device else "",
         )
 
@@ -211,9 +212,9 @@ class ConnectivitySession:
             devices = await self._scan_devices()
             if devices:
                 device = devices[0]
-            elif self.policy.remote_fallback:
+            elif self._require_policy().remote_fallback:
                 # No LAN devices found, try remote.
-                if self.policy.preferred_mode == ConnectivityMode.LAN_ONLY:
+                if self._require_policy().preferred_mode == ConnectivityMode.LAN_ONLY:
                     raise ConnectivitySessionError(
                         "No LAN devices found and mode is LAN_ONLY",
                         code="no_lan_available",
@@ -246,7 +247,7 @@ class ConnectivitySession:
             ) from exc
 
         # If remote fallback is enabled and migration is configured, set it up.
-        if self.policy.remote_fallback:
+        if self._require_policy().remote_fallback:
             if self._remote_adapter is None:
                 self._remote_adapter = RemoteAdapter()
             if self._migration is None:

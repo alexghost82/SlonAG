@@ -23,7 +23,7 @@ def register_vision_tools(registry: ToolRegistry, runtime: Any) -> None:
         The Vision Runtime instance.
     """
 
-    @registry.tool("vision_capture", "Capture a single frame from the vision source.")
+    @registry.tool("vision_capture", "Capture a single frame from the vision source.")  # type: ignore[attr-defined]
     async def vision_capture() -> dict[str, Any]:
         """Capture one frame."""
         status = runtime.status()
@@ -35,7 +35,7 @@ def register_vision_tools(registry: ToolRegistry, runtime: Any) -> None:
             "timestamp": time.time(),
         }
 
-    @registry.tool("vision_query", "Query the current vision state.")
+    @registry.tool("vision_query", "Query the current vision state.")  # type: ignore[attr-defined]
     async def vision_query(query: str = "status") -> dict[str, Any]:
         """Query vision state.
 
@@ -57,20 +57,27 @@ def register_vision_tools(registry: ToolRegistry, runtime: Any) -> None:
         elif query == "tracks":
             return {
                 "present": runtime.get_present_tracks(),
-                "all": {tid: {
-                    "label": ts.label,
-                    "kind": ts.kind.value,
-                    "age": ts.age,
-                    "trajectory_len": len(ts.trajectory),
-                    "present": ts.is_present,
-                } for tid, ts in runtime.get_active_tracks().items()},
+                "all": {
+                    tid: {
+                        "label": ts.label,
+                        "kind": ts.kind.value,
+                        "age": ts.age,
+                        "trajectory_len": len(ts.trajectory),
+                        "present": ts.is_present,
+                    }
+                    for tid, ts in runtime.get_active_tracks().items()
+                },
             }
         elif query == "events":
             events = await runtime.get_recent_events(20)
             return {
                 "events": [
-                    {"type": e.event_type.value, "track_id": e.track_id,
-                     "description": e.description, "timestamp": e.timestamp}
+                    {
+                        "type": e.event_type.value,
+                        "track_id": e.track_id,
+                        "description": e.description,
+                        "timestamp": e.timestamp,
+                    }
                     for e in events
                 ],
             }
@@ -82,8 +89,12 @@ def register_vision_tools(registry: ToolRegistry, runtime: Any) -> None:
                         "kind": d.kind.value,
                         "label": d.label,
                         "confidence": d.confidence,
-                        "bbox": {"x_min": d.bbox.x_min, "y_min": d.bbox.y_min,
-                                 "x_max": d.bbox.x_max, "y_max": d.bbox.y_max},
+                        "bbox": {
+                            "x_min": d.bbox.x_min,
+                            "y_min": d.bbox.y_min,
+                            "x_max": d.bbox.x_max,
+                            "y_max": d.bbox.y_max,
+                        },
                         "track_id": d.track_id,
                     }
                     for d in detections
@@ -91,7 +102,7 @@ def register_vision_tools(registry: ToolRegistry, runtime: Any) -> None:
             }
         return {"error": "unknown query"}
 
-    @registry.tool("vision_tracks", "List current tracks and their trajectories.")
+    @registry.tool("vision_tracks", "List current tracks and their trajectories.")  # type: ignore[attr-defined]
     async def vision_tracks(track_id: str | None = None) -> dict[str, Any]:
         """List tracks.
 
@@ -104,17 +115,13 @@ def register_vision_tools(registry: ToolRegistry, runtime: Any) -> None:
             traj = runtime.get_trajectory(track_id)
             return {
                 "track_id": track_id,
-                "trajectory": [
-                    {"frame_index": p.timestamp, "cx": p.center_x, "cy": p.center_y}
-                    for p in traj
-                ],
+                "trajectory": [{"frame_index": p.timestamp, "cx": p.center_x, "cy": p.center_y} for p in traj],
             }
         tracks = runtime.get_active_tracks()
         return {
             "track_count": len(tracks),
             "tracks": {
-                tid: {"label": ts.label, "age": ts.age, "count": len(ts.trajectory)}
-                for tid, ts in tracks.items()
+                tid: {"label": ts.label, "age": ts.age, "count": len(ts.trajectory)} for tid, ts in tracks.items()
             },
         }
 

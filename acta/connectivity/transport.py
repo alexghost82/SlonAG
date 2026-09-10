@@ -163,6 +163,7 @@ class LANTransport:
             raw = await asyncio.wait_for(self._ws.recv(), timeout=timeout)
             if isinstance(raw, str):
                 import json
+
                 return json.loads(raw)
             return {"_raw_binary": raw}
         except TimeoutError:
@@ -259,6 +260,7 @@ class LANTransport:
     async def _send_auth_handshake(self) -> None:
         """Send the device auth token as the first message."""
         import json
+
         message = json.dumps({"kind": "auth_handshake", "payload": {}})
         try:
             await self._ws.send(message)
@@ -277,6 +279,7 @@ async def _open_websocket(
     """Open a websocket connection. Tries websockets library first."""
     try:
         import websockets
+
         # websockets >= 11 uses connect() returning a connection object.
         if ssl_context:
             # Create a permissive context for LAN self-signed certs.
@@ -392,6 +395,7 @@ class _StdlibWebSocket:
 
     async def send(self, data: Any) -> None:
         import json
+
         if isinstance(data, dict):
             data = json.dumps(data)
         frame = _encode_text_frame(data.encode("utf-8"))
@@ -406,6 +410,7 @@ class _StdlibWebSocket:
         if frame is None:
             return None
         import json
+
         return json.loads(frame)
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
@@ -462,7 +467,7 @@ def _decode_text_frame(data: bytes) -> str | None:
         offset = 10
     if len(data) < offset + length:
         return None
-    return data[offset: offset + length].decode("utf-8", errors="replace")
+    return data[offset : offset + length].decode("utf-8", errors="replace")
 
 
 __all__ = [

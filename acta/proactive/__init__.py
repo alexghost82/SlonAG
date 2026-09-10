@@ -20,6 +20,7 @@ Submodules:
     - types: Data types and enums
     - errors: Error codes and exceptions
 """
+
 from __future__ import annotations
 
 from acta.proactive.anti_spam import AntiSpamFilter

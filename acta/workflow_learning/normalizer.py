@@ -19,12 +19,12 @@ from typing import Any
 from acta.workflow_learning.types import ParameterSlot, WorkflowCandidate, WorkflowStep
 
 # Pattern detectors
-_URL_RE = re.compile(r'^https?://')
-_PATH_RE = re.compile(r'^[/~]|^\.?/|^[a-zA-Z]:[\\/]')
-_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-_NUMBER_RE = re.compile(r'^-?\d+(\.\d+)?$')
-_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-_BOOL_RE = re.compile(r'^(true|false|yes|no|on|off)$', re.IGNORECASE)
+_URL_RE = re.compile(r"^https?://")
+_PATH_RE = re.compile(r"^[/~]|^\.?/|^[a-zA-Z]:[\\/]")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_NUMBER_RE = re.compile(r"^-?\d+(\.\d+)?$")
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+_BOOL_RE = re.compile(r"^(true|false|yes|no|on|off)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -74,17 +74,17 @@ class Normalizer:
         slots: list[ParameterSlot] = []
         for key, value in step.args.items():
             hint = self._hint_for(key, value)
-            slots.append(ParameterSlot(
-                name=hint.suggested_name,
-                slot_type=hint.slot_type,
-                required=hint.is_required,
-                description=hint.suggested_name.replace("_", " ").title(),
-            ))
+            slots.append(
+                ParameterSlot(
+                    name=hint.suggested_name,
+                    slot_type=hint.slot_type,
+                    required=hint.is_required,
+                    description=hint.suggested_name.replace("_", " ").title(),
+                )
+            )
         return slots
 
-    def extract_candidate_slots(
-        self, candidate: WorkflowCandidate
-    ) -> dict[str, list[ParameterSlot]]:
+    def extract_candidate_slots(self, candidate: WorkflowCandidate) -> dict[str, list[ParameterSlot]]:
         """Extract parameter slots for all steps in a candidate.
 
         Returns a dict mapping step index to list of slots.
@@ -127,9 +127,7 @@ class Normalizer:
 
         return templates
 
-    def infer_step_descriptors(
-        self, candidate: WorkflowCandidate
-    ) -> list[dict[str, Any]]:
+    def infer_step_descriptors(self, candidate: WorkflowCandidate) -> list[dict[str, Any]]:
         """Build step descriptors from a parameterized candidate.
 
         Returns a list of dicts ready to serialize as StepDescriptor.
@@ -139,12 +137,16 @@ class Normalizer:
         descriptors = []
         for idx, step in enumerate(candidate.steps):
             slot_names = [s.name for s in self.extract_slots(step)]
-            descriptors.append({
-                "tool_name": step.tool_name,
-                "arg_template": self.infer_template(candidate)[idx] if idx < len(self.infer_template(candidate)) else {},
-                "required_slots": slot_names,
-                "safety_risk": risk_for(step.tool_name),
-            })
+            descriptors.append(
+                {
+                    "tool_name": step.tool_name,
+                    "arg_template": self.infer_template(candidate)[idx]
+                    if idx < len(self.infer_template(candidate))
+                    else {},
+                    "required_slots": slot_names,
+                    "safety_risk": risk_for(step.tool_name),
+                }
+            )
 
         return descriptors
 
@@ -180,10 +182,10 @@ class Normalizer:
         """Convert an argument key to a slot name."""
         name = key.lower().strip()
         # Replace separators with underscores
-        name = re.sub(r'[-_.\s]+', '_', name)
-        name = re.sub(r'[^a-z0-9_]', '', name)
+        name = re.sub(r"[-_.\s]+", "_", name)
+        name = re.sub(r"[^a-z0-9_]", "", name)
         # Strip leading underscores
-        name = name.strip('_')
+        name = name.strip("_")
         return name or "param"
 
     @staticmethod
@@ -199,9 +201,7 @@ class Normalizer:
             return "string"
         return "string"
 
-    def _collect_values(
-        self, candidate: WorkflowCandidate, step: WorkflowStep
-    ) -> dict[str, set[str]]:
+    def _collect_values(self, candidate: WorkflowCandidate, step: WorkflowStep) -> dict[str, set[str]]:
         """Collect all values for each arg key across candidate steps.
 
         This is used to detect variability: if the same key has different
@@ -226,7 +226,7 @@ def _detect_string_type(key: str, value: str) -> _SlotHint:
     if _EMAIL_RE.match(value):
         return _SlotHint(suggested_name=key, slot_type="string", is_required=True)
     if _NUMBER_RE.match(value):
-        if '.' in value:
+        if "." in value:
             return _SlotHint(suggested_name=key, slot_type="float", is_required=True)
         return _SlotHint(suggested_name=key, slot_type="int", is_required=True)
     if _BOOL_RE.match(value):

@@ -117,13 +117,8 @@ class JobEngine:
                 )
                 """
             )
-            self._connection.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency "
-                "ON jobs(idempotency_key)"
-            )
-            self._connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state)"
-            )
+            self._connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key)")
+            self._connection.execute("CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state)")
 
     def enqueue(
         self,
@@ -189,8 +184,52 @@ class JobEngine:
             ).fetchone()
         return _row_to_job(row) if row is not None else None
 
-    def claim(self, *, now: datetime | None = None) -> Job | None:
+    def claim(self, *, now: datetime | None = None, job_type: str | None = None) -> Job | None:
         """Atomically move one due PENDING/RETRYING job to RUNNING."""
+        stamp = now or _now()
+        iso = _iso(stamp) or ""
+        type_clause = " AND type = ?" if job_type else ""
+        params: tuple[object, ...] = (JobState.PENDING, JobState.RETRYING, iso)
+        if job_type:
+            params = params + (job_type,)
+        with self._lock:
+            with self._connection:
+                row = self._connection.execute(
+                    f"""
+                    SELECT * FROM jobs
+                    WHERE state IN (?, ?)
+                      AND (next_retry_at IS NULL OR next_retry_at <= ?)
+                      {type_clause}
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                    """,
+                    params,
+                ).fetchone()
+                if row is None:
+                    return None
+                job = _row_to_job(row)
+                attempt = job.attempt + 1
+                self._connection.execute(
+                    """
+                    UPDATE jobs
+                    SET state = ?, attempt = ?, started_at = COALESCE(started_at, ?),
+                        updated_at = ?, error = NULL
+                    WHERE job_id = ? AND state IN (?, ?)
+                    """,
+                    (
+                        JobState.RUNNING,
+                        attempt,
+                        iso,
+                        iso,
+                        job.job_id,
+                        JobState.PENDING,
+                        JobState.RETRYING,
+                    ),
+                )
+            return self._get_unlocked(job.job_id)
+
+    def claim_job(self, job_id: str, *, now: datetime | None = None) -> Job | None:
+        """Atomically move this PENDING/RETRYING job to RUNNING."""
         stamp = now or _now()
         iso = _iso(stamp) or ""
         with self._lock:
@@ -198,12 +237,10 @@ class JobEngine:
                 row = self._connection.execute(
                     """
                     SELECT * FROM jobs
-                    WHERE state IN (?, ?)
+                    WHERE job_id = ? AND state IN (?, ?)
                       AND (next_retry_at IS NULL OR next_retry_at <= ?)
-                    ORDER BY created_at ASC
-                    LIMIT 1
                     """,
-                    (JobState.PENDING, JobState.RETRYING, iso),
+                    (job_id, JobState.PENDING, JobState.RETRYING, iso),
                 ).fetchone()
                 if row is None:
                     return None
@@ -253,9 +290,7 @@ class JobEngine:
             return job
         now = _now()
         if retry and job.attempt < job.max_attempts:
-            delay = 0.0 if error == "recovered_after_crash" else min(
-                60.0, 2 ** max(0, job.attempt - 1)
-            )
+            delay = 0.0 if error == "recovered_after_crash" else min(60.0, 2 ** max(0, job.attempt - 1))
             return self._update(
                 job_id,
                 state=JobState.RETRYING,
@@ -307,12 +342,18 @@ class JobEngine:
             recovered.append(self.fail(job.job_id, "recovered_after_crash", retry=True))
         return recovered
 
-    def list_by_state(self, state: JobState) -> list[Job]:
+    def list_by_state(self, state: JobState, *, job_type: str | None = None) -> list[Job]:
         with self._lock:
-            rows = self._connection.execute(
-                "SELECT * FROM jobs WHERE state = ? ORDER BY created_at ASC",
-                (state,),
-            ).fetchall()
+            if job_type:
+                rows = self._connection.execute(
+                    "SELECT * FROM jobs WHERE state = ? AND type = ? ORDER BY created_at ASC",
+                    (state, job_type),
+                ).fetchall()
+            else:
+                rows = self._connection.execute(
+                    "SELECT * FROM jobs WHERE state = ? ORDER BY created_at ASC",
+                    (state,),
+                ).fetchall()
         return [_row_to_job(row) for row in rows]
 
     def _require(self, job_id: str) -> Job:

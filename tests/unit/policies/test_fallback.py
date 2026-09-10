@@ -58,13 +58,9 @@ def test_never_returns_none_for_local_and_cloud() -> None:
     "constraint",
     [{"network_mode": "offline"}, {"privacy_profile": "fully_local"}],
 )
-def test_never_and_offline_equivalent_never_return_cloud_id(
-    cloud_id: str, constraint: dict[str, str]
-) -> None:
+def test_never_and_offline_equivalent_never_return_cloud_id(cloud_id: str, constraint: dict[str, str]) -> None:
     never = NeverFallbackPolicy()
-    offline = resolve_policy(
-        "preselected_cloud", cloud_provider_id=cloud_id, **constraint
-    )
+    offline = resolve_policy("preselected_cloud", cloud_provider_id=cloud_id, **constraint)
     assert never.next("local", ERROR) is None
     assert offline.next("local", ERROR) is None
     assert never.next(cloud_id, ERROR) is None
@@ -86,12 +82,8 @@ def test_same_provider_does_not_invent_a_hidden_model_list() -> None:
     policy = SameProviderFallbackPolicy()
     assert not hasattr(policy, "models")
     assert policy.next("gemini", ERROR) is None
-    assert SameProviderFallbackPolicy(alternate_provider_id="openai").next(
-        "gemini", ERROR
-    ) is None
-    assert SameProviderFallbackPolicy(alternate_provider_id="openai").next(
-        "openai", ERROR
-    ) is None
+    assert SameProviderFallbackPolicy(alternate_provider_id="openai").next("gemini", ERROR) is None
+    assert SameProviderFallbackPolicy(alternate_provider_id="openai").next("openai", ERROR) is None
 
 
 @pytest.mark.parametrize("cloud_id", sorted(CLOUD_PROVIDER_IDS))

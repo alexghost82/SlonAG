@@ -6,11 +6,11 @@ import array
 
 import pytest
 
+from providers.contracts import AudioRequest, ModelInfo
 from speech.stt.engines import CallbackSTTEngine, EmptySTTEngine
 from speech.stt.local_factory import try_build_local_stt
 from speech.stt.mic import MicCapture, pcm16_to_wav
 from speech.stt.provider import LocalSTTProvider
-from providers.contracts import AudioRequest, ModelInfo
 
 
 def test_pcm16_to_wav_has_riff_header() -> None:

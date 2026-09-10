@@ -3,10 +3,13 @@ from __future__ import annotations
 from i18n import t
 
 import json
+import logging
 import re
 import sys
 from pathlib import Path
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 def get_base_dir() -> Path:
@@ -88,7 +91,7 @@ def analyze_error(
     from providers.gemini import generative as genai
 
     if attempt >= max_attempts:
-        print(f"[ErrorHandler] ⚠️ Max attempts reached for step {step.get('step')} — forcing replan")
+        logger.warning("Max attempts reached for step %s — forcing replan", step.get("step"))
         return {
             "decision":      ErrorDecision.REPLAN,
             "reason":        f"Failed {attempt} times: {error[:100]}",
@@ -134,11 +137,11 @@ Attempt number: {attempt}"""
             result["decision"]     = ErrorDecision.REPLAN
             result["user_message"] = "This step is critical — finding alternative approach, sir."
 
-        print(f"[ErrorHandler] Decision: {result['decision'].value} — {result.get('reason', '')}")
+        logger.info("Decision: %s — %s", result["decision"].value, result.get("reason", ""))
         return result
 
     except Exception as e:
-        print(f"[ErrorHandler] ⚠️ Analysis failed: {e} — defaulting to replan")
+        logger.warning("Analysis failed: %s — defaulting to replan", e)
         return {
             "decision":       ErrorDecision.REPLAN,
             "reason":         str(e),
@@ -193,7 +196,7 @@ Return ONLY the Python code, no explanation."""
         }
 
     except Exception as e:
-        print(f"[ErrorHandler] ⚠️ Fix generation failed: {e}")
+        logger.warning("Fix generation failed: %s", e)
         return {
             "step":        step.get("step"),
             "tool":        "generated_code",

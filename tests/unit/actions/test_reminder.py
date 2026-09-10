@@ -11,10 +11,10 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from actions.reminder import reminder
 from acta.safety import DecisionKind, RiskLevel, UntrustedSource, authorize, risk_for
+from actions.reminder import reminder
 
-INJECTED_MESSAGE = 'hello"; rm -rf / # \'quoted\''
+INJECTED_MESSAGE = "hello\"; rm -rf / # 'quoted'"
 FUTURE = {"date": "2099-01-01", "time": "10:00", "message": INJECTED_MESSAGE}
 
 
@@ -161,9 +161,7 @@ def test_list_update_cancel_use_json_store(tmp_path: Path) -> None:
     assert empty == "Нет напоминаний."
 
 
-def test_macos_backend_uses_injected_scheduler(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_macos_backend_uses_injected_scheduler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _blocked(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("real osascript / subprocess must not run")
 
@@ -177,9 +175,7 @@ def test_macos_backend_uses_injected_scheduler(
     assert INJECTED_MESSAGE not in " ".join(sched.calls[0])
 
 
-def test_linux_backend_uses_injected_scheduler(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_linux_backend_uses_injected_scheduler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _blocked(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("real at / subprocess must not run")
 

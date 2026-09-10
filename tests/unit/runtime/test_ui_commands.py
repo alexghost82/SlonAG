@@ -39,12 +39,10 @@ def test_required_event_catalog() -> None:
 def test_control_plane_dispatches_typed_commands() -> None:
     plane = DesktopControlPlane()
     seen: list[str] = []
-    plane.bind_text_handler(lambda text: seen.append(text) or "ok")
+    plane.bind_text_handler(lambda text: seen.append(text) or "ok")  # type: ignore[func-returns-value]
     plane.bind_command("cancel", lambda: seen.append("cancel"))
     plane.bind_command("start_voice", lambda: seen.append("start"))
-    assert (
-        plane.dispatch(UiCommand(UiCommandKind.SEND_MESSAGE, {"text": "hi"})) == "ok"
-    )
+    assert plane.dispatch(UiCommand(UiCommandKind.SEND_MESSAGE, {"text": "hi"})) == "ok"
     plane.dispatch(UiCommand(UiCommandKind.CANCEL))
     plane.dispatch(UiCommand(UiCommandKind.START_VOICE))
     assert seen == ["hi", "cancel", "start"]

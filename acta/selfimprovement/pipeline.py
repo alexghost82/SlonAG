@@ -60,11 +60,15 @@ class SelfImprovementPipeline:
         with self._lock:
             self._state.register_observation()
             self._collector.record_observation(obs)
-            self._state.add_audit_entry(AuditEntry(
-                action=AuditAction.OBSERVE,
-                details={"kind": obs.kind.value, "details": obs.details},
-                message_ru=ru_f(RU_OBSERVATION_TOOL_FAILURE, tool=obs.details.get("tool", "?"), code=obs.details.get("code", "")),
-            ))
+            self._state.add_audit_entry(
+                AuditEntry(
+                    action=AuditAction.OBSERVE,
+                    details={"kind": obs.kind.value, "details": obs.details},
+                    message_ru=ru_f(
+                        RU_OBSERVATION_TOOL_FAILURE, tool=obs.details.get("tool", "?"), code=obs.details.get("code", "")
+                    ),
+                )
+            )
         return obs
 
     def observe_tool_result(
@@ -153,15 +157,20 @@ class SelfImprovementPipeline:
                     version=1,
                     proposed_change=c.proposed_change,
                 )
-                rec.audit(AuditAction.PROPOSED, details={"category": c.category.value},
-                          message_ru=ru_f(RU_CANDIDATE_GENERATED, title=c.title))
+                rec.audit(
+                    AuditAction.PROPOSED,
+                    details={"category": c.category.value},
+                    message_ru=ru_f(RU_CANDIDATE_GENERATED, title=c.title),
+                )
                 self._state.improvements[c.id] = rec
                 with self._lock:
-                    self._state.add_audit_entry(AuditEntry(
-                        action=AuditAction.CANDIDATE_GENERATED,
-                        details={"candidate_id": c.id, "title": c.title},
-                        message_ru=ru_f(RU_CANDIDATE_GENERATED, title=c.title),
-                    ))
+                    self._state.add_audit_entry(
+                        AuditEntry(
+                            action=AuditAction.CANDIDATE_GENERATED,
+                            details={"candidate_id": c.id, "title": c.title},
+                            message_ru=ru_f(RU_CANDIDATE_GENERATED, title=c.title),
+                        )
+                    )
         return candidates
 
     # ── Phase 3: Evaluation ───────────────────────────────────
@@ -194,9 +203,11 @@ class SelfImprovementPipeline:
 
             # Must be approved or proposed to be evaluated
             if rec.status not in (ImprovementStatus.PROPOSED, ImprovementStatus.APPROVED):
-                rec.audit(AuditAction.EVALUATED_FAIL,
-                          details={"reason": "already_in_terminal_state"},
-                          message_ru=ru_f(RU_ERROR_INVALID_STATE_TRANSITION))
+                rec.audit(
+                    AuditAction.EVALUATED_FAIL,
+                    details={"reason": "already_in_terminal_state"},
+                    message_ru=ru_f(RU_ERROR_INVALID_STATE_TRANSITION),
+                )
                 return rec
 
             # Security check: reject changes that weaken security
@@ -208,9 +219,11 @@ class SelfImprovementPipeline:
                 rec.evaluation = EvaluationStatus.FAILED
                 rec.evaluation_reason = ru_f(RU_ERROR_SECURITY_VIOLATION)
                 rec.evaluation_score = 0.0
-                rec.audit(AuditAction.EVALUATED_FAIL,
-                          details={"reason": "security_violation"},
-                          message_ru=ru_f(RU_ERROR_SECURITY_VIOLATION))
+                rec.audit(
+                    AuditAction.EVALUATED_FAIL,
+                    details={"reason": "security_violation"},
+                    message_ru=ru_f(RU_ERROR_SECURITY_VIOLATION),
+                )
                 rec.bump_version(reason="security violation")
                 return rec
 
@@ -219,18 +232,22 @@ class SelfImprovementPipeline:
                 rec.evaluation = EvaluationStatus.PASSED
                 rec.evaluation_reason = reason
                 rec.evaluation_score = score
-                rec.audit(AuditAction.EVALUATED_PASS,
-                          details={"score": score, "reason": reason},
-                          message_ru=ru_f(RU_EVALUATION_PASS, score=score, reason=reason))
+                rec.audit(
+                    AuditAction.EVALUATED_PASS,
+                    details={"score": score, "reason": reason},
+                    message_ru=ru_f(RU_EVALUATION_PASS, score=score, reason=reason),
+                )
                 rec.bump_version(reason="evaluation passed")
             else:
                 rec.status = ImprovementStatus.REJECTED
                 rec.evaluation = EvaluationStatus.FAILED
                 rec.evaluation_reason = reason
                 rec.evaluation_score = score
-                rec.audit(AuditAction.EVALUATED_FAIL,
-                          details={"reason": reason, "score": score},
-                          message_ru=ru_f(RU_EVALUATION_FAIL, reason=reason))
+                rec.audit(
+                    AuditAction.EVALUATED_FAIL,
+                    details={"reason": reason, "score": score},
+                    message_ru=ru_f(RU_EVALUATION_FAIL, reason=reason),
+                )
                 rec.bump_version(reason="evaluation failed")
 
         return rec
@@ -241,14 +258,9 @@ class SelfImprovementPipeline:
         Raises:
             ValueError: If the change weakens security.
         """
-        change_str = str(change).lower()
+        str(change).lower()
 
         # Security boundaries that must never be weakened
-        forbidden_patterns = [
-            "auth", "password", "secret", "token", "key",
-            "permission", "approval", "whitelist", "bypass",
-            "disable_auth", "skip_check", "open_all",
-        ]
         if change.get("target") in ("config", "memory") and not change.get("action"):
             # Only allow known-safe config keys
             safe_keys = {"timeout", "max_turns", "max_tool_calls", "log_level"}
@@ -285,15 +297,18 @@ class SelfImprovementPipeline:
             rec.approved_at = time.monotonic()
             rec.approved_by = approved_by
             self._state.register_approval()
-            rec.audit(AuditAction.APPROVED,
-                      details={"approved_by": approved_by, "message_ru": message_ru},
-                      message_ru=message_ru or ru_f(RU_APPROVE_SUCCESS, title=rec.title))
+            rec.audit(
+                AuditAction.APPROVED,
+                details={"approved_by": approved_by, "message_ru": message_ru},
+                message_ru=message_ru or ru_f(RU_APPROVE_SUCCESS, title=rec.title),
+            )
             rec.bump_version(reason="approved by " + approved_by)
 
         # Record user feedback
         if approved_by != "system" and not message_ru:
             self._collector.record_user_feedback(
-                candidate_id, "approve",
+                candidate_id,
+                "approve",
                 ru_f(RU_APPROVE_SUCCESS, title=rec.title),
             )
 
@@ -317,15 +332,18 @@ class SelfImprovementPipeline:
                 return rec
             old_status = rec.status.value
             rec.status = ImprovementStatus.REJECTED
-            rec.audit(AuditAction.REJECTED,
-                        details={"reason": reason, "previous_status": old_status},
-                        message_ru=message_ru or ru_f(RU_REJECT_SUCCESS, title=rec.title))
+            rec.audit(
+                AuditAction.REJECTED,
+                details={"reason": reason, "previous_status": old_status},
+                message_ru=message_ru or ru_f(RU_REJECT_SUCCESS, title=rec.title),
+            )
             rec.bump_version(reason="rejected" + (" (" + reason + ")" if reason else ""))
 
         # Record user feedback
         if message_ru or reason:
             self._collector.record_user_feedback(
-                candidate_id, "reject",
+                candidate_id,
+                "reject",
                 message_ru or ru_f(RU_REJECT_SUCCESS, title=rec.title),
                 {"reason": reason},
             )
@@ -362,9 +380,9 @@ class SelfImprovementPipeline:
             rollback = apply_bounded_change(rec.proposed_change)
         except Exception as exc:
             with self._lock:
-                rec.audit(AuditAction.APPLIED,
-                          details={"error": str(exc)},
-                          message_ru=ru_f(RU_APPLY_ERROR, error=str(exc)))
+                rec.audit(
+                    AuditAction.APPLIED, details={"error": str(exc)}, message_ru=ru_f(RU_APPLY_ERROR, error=str(exc))
+                )
                 rec.bump_version(reason="apply failed: " + str(exc))
             return {"error": str(exc)}
 
@@ -381,9 +399,11 @@ class SelfImprovementPipeline:
                 "after": self._collector.get_snapshot(),
                 "applied_at": rec.applied_at,
             }
-            rec.audit(AuditAction.APPLIED,
-                      details={"applied_by": approved_by},
-                      message_ru=ru_f(RU_APPLY_SUCCESS, title=rec.title))
+            rec.audit(
+                AuditAction.APPLIED,
+                details={"applied_by": approved_by},
+                message_ru=ru_f(RU_APPLY_SUCCESS, title=rec.title),
+            )
             self._state.improvements[candidate_id] = rec
         return rollback
 
@@ -405,9 +425,11 @@ class SelfImprovementPipeline:
                 return None
 
             if degradation_detected:
-                rec.audit(AuditAction.ROLLED_BACK,
-                          details={"reason": "degradation detected during monitoring"},
-                          message_ru=ru_f(RU_MONITOR_DEGRADATION, title=rec.title))
+                rec.audit(
+                    AuditAction.ROLLED_BACK,
+                    details={"reason": "degradation detected during monitoring"},
+                    message_ru=ru_f(RU_MONITOR_DEGRADATION, title=rec.title),
+                )
                 rec.bump_version(reason="degradation detected")
                 # Auto-reject: set status back to PROPOSED so it can be re-evaluated
                 rec.status = ImprovementStatus.REJECTED
@@ -416,9 +438,11 @@ class SelfImprovementPipeline:
                 return rec
 
             rec.benefit_observed = benefit_observed or "Без деградации"
-            rec.audit(AuditAction.APPLIED,  # monitoring is a post-apply confirmation
-                      details={"benefit_observed": rec.benefit_observed},
-                      message_ru=ru_f(RU_MONITOR_STABLE, title=rec.title))
+            rec.audit(
+                AuditAction.APPLIED,  # monitoring is a post-apply confirmation
+                details={"benefit_observed": rec.benefit_observed},
+                message_ru=ru_f(RU_MONITOR_STABLE, title=rec.title),
+            )
         return rec
 
     # ── Phase 7: Rollback ─────────────────────────────────────
@@ -447,9 +471,11 @@ class SelfImprovementPipeline:
             rec.rolled_back_at = time.monotonic()
             rec.rollback_reason = reason
             self._state.register_rollback()
-            rec.audit(AuditAction.ROLLED_BACK,
-                      details={"reason": reason},
-                      message_ru=ru_f(RU_ROLLBACK_SUCCESS, title=rec.title, reason=reason))
+            rec.audit(
+                AuditAction.ROLLED_BACK,
+                details={"reason": reason},
+                message_ru=ru_f(RU_ROLLBACK_SUCCESS, title=rec.title, reason=reason),
+            )
             rec.bump_version(reason="rolled back: " + reason)
             self._state.improvements[candidate_id] = rec
         save_state(self._state)
@@ -465,10 +491,12 @@ class SelfImprovementPipeline:
                     if rollback_change["target"] == "config":
                         from config.schema import Settings
                         from config.settings import save_settings
+
                         old = Settings(**rollback_data)
                         save_settings(old)
                     elif rollback_change["target"] == "memory":
                         from memory.memory_manager import load_memory, update_memory
+
                         mem = load_memory()
                         cat = rollback_change.get("category", "notes")
                         key = rollback_change.get("key", "")

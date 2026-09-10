@@ -1,4 +1,5 @@
 """Persistent automation engine for one-shot, recurring, and cron triggers."""
+
 from __future__ import annotations
 
 from acta.automation.engine import (

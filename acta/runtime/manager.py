@@ -160,10 +160,7 @@ class RuntimeManager:
                 "pull hook is not configured",
             )
         self._pull(model)
-        self._catalog = [
-            replace(entry, status="installed") if entry.id == model else entry
-            for entry in self._catalog
-        ]
+        self._catalog = [replace(entry, status="installed") if entry.id == model else entry for entry in self._catalog]
 
     def _assert_endpoint(self) -> None:
         if not isinstance(self.endpoint, str) or not self.endpoint.strip():

@@ -26,9 +26,7 @@ def play_wav_bytes(data: bytes) -> None:
             path.unlink(missing_ok=True)
         except OSError:
             pass
-    raise RuntimeError(
-        "No local audio playback backend available (need afplay/aplay/paplay)."
-    )
+    raise RuntimeError("No local audio playback backend available (need afplay/aplay/paplay).")
 
 
 def _play_os_helper(path: Path) -> bool:

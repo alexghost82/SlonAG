@@ -110,7 +110,7 @@ class TestLocalOnlyRegressionGate:
                 candidates=candidates,
                 routing_mode="local_only",
                 configured_provider_id="ollama",
-                availability=availability,
+                availability=availability,  # type: ignore[arg-type]
             )
         assert "no model satisfies" in str(exc_info.value)
 
@@ -150,3 +150,10 @@ class TestLocalOnlyRegressionGate:
                 privacy_profile="fully_local",
             )
         assert "no model satisfies" in str(exc_info.value)
+
+    def test_live_client_factory_fail_closed_local_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("config.schema.settings_forbid_cloud", lambda settings=None: True)
+        from providers.gemini.live import create_live_client
+
+        with pytest.raises(RuntimeError, match="disabled"):
+            create_live_client(api_key="test-key")

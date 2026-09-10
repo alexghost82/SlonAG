@@ -235,9 +235,7 @@ def test_listener_live_models_memory_files_and_task_approval(tmp_path: Path) -> 
 
     class MemoryBackend:
         def __init__(self) -> None:
-            self.records = [
-                Record("m1", SimpleNamespace(value="fact"), "prefers concise output")
-            ]
+            self.records = [Record("m1", SimpleNamespace(value="fact"), "prefers concise output")]
 
         def list(self) -> list[Record]:
             return list(self.records)

@@ -4,6 +4,7 @@ Monitors event frequencies per source_type within a configurable
 time window. Events exceeding the rate limit are silently dropped
 before reaching the relevance filter or downstream action.
 """
+
 from __future__ import annotations
 
 import time
@@ -57,7 +58,8 @@ class AntiSpamFilter:
         """Remove snapshots with zero timestamps."""
         now = now or time.time()
         expired = [
-            et for et, s in self._snapshots.items()
+            et
+            for et, s in self._snapshots.items()
             if not s.timestamps or all(t < now - s.window_seconds for t in s.timestamps)
         ]
         for et in expired:

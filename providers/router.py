@@ -112,9 +112,7 @@ class Router:
     async def list_models(self, provider_id: str | None = None) -> tuple[ModelInfo, ...]:
         """Return canonical models for a provider without exposing its adapter."""
         selected = provider_id or self.provider_id
-        configured = tuple(
-            model for model in self._models if model.provider_id == selected
-        )
+        configured = tuple(model for model in self._models if model.provider_id == selected)
         if configured:
             return configured
         return tuple(await self._resolve(selected).list_models())
@@ -129,17 +127,13 @@ class Router:
         request = self._route_request(request)
         self._require_request_capabilities(request)
         try:
-            response = await self._resolve(
-                request.model.provider_id, base_url=base_url, timeout=timeout
-            ).chat(request)
+            response = await self._resolve(request.model.provider_id, base_url=base_url, timeout=timeout).chat(request)
         except ProviderError as exc:
             fallback_id = self._fallback_provider_id(request.model.provider_id, exc)
             if fallback_id is None:
                 raise
             fallback_request = await self._fallback_request(request, fallback_id)
-            response = await self._resolve(
-                fallback_id, base_url=base_url, timeout=timeout
-            ).chat(fallback_request)
+            response = await self._resolve(fallback_id, base_url=base_url, timeout=timeout).chat(fallback_request)
             return self._validate_response(response, fallback_request)
         return self._validate_response(response, request)
 
@@ -154,9 +148,9 @@ class Router:
         self._require_request_capabilities(request)
         yielded = False
         try:
-            async for event in self._resolve(
-                request.model.provider_id, base_url=base_url, timeout=timeout
-            ).stream(request):
+            async for event in self._resolve(request.model.provider_id, base_url=base_url, timeout=timeout).stream(
+                request
+            ):
                 yielded = True
                 yield _as_chat_event(event)
             return
@@ -167,17 +161,11 @@ class Router:
             if fallback_id is None:
                 raise
         fallback_request = await self._fallback_request(request, fallback_id)
-        async for event in self._resolve(
-            fallback_id, base_url=base_url, timeout=timeout
-        ).stream(fallback_request):
+        async for event in self._resolve(fallback_id, base_url=base_url, timeout=timeout).stream(fallback_request):
             yield _as_chat_event(event)
 
-    async def _fallback_request(
-        self, request: ChatRequest, fallback_id: str
-    ) -> ChatRequest:
-        candidates = tuple(
-            model for model in self._models if model.provider_id == fallback_id
-        )
+    async def _fallback_request(self, request: ChatRequest, fallback_id: str) -> ChatRequest:
+        candidates = tuple(model for model in self._models if model.provider_id == fallback_id)
         if not candidates:
             candidates = tuple(await self._resolve(fallback_id).list_models())
         required = ("text", "tool_calling") if request.tools else ()
@@ -196,15 +184,15 @@ class Router:
         return fallback_request
 
     @staticmethod
-    def _validate_response(
-        response: ChatResponse, request: ChatRequest
-    ) -> ChatResponse:
-        if not (hasattr(response, "text") and hasattr(response, "tool_calls") and hasattr(response, "provider_id") and hasattr(response, "model_id")):
-            raise ProviderError("provider returned an invalid chat response")
-        if (
-            response.provider_id != request.model.provider_id
-            or response.model_id != request.model.model_id
+    def _validate_response(response: ChatResponse, request: ChatRequest) -> ChatResponse:
+        if not (
+            hasattr(response, "text")
+            and hasattr(response, "tool_calls")
+            and hasattr(response, "provider_id")
+            and hasattr(response, "model_id")
         ):
+            raise ProviderError("provider returned an invalid chat response")
+        if response.provider_id != request.model.provider_id or response.model_id != request.model.model_id:
             raise ProviderError(
                 "provider response does not match the selected model",
                 provider_id=request.model.provider_id,
@@ -218,19 +206,17 @@ class Router:
             require_capabilities(request.model, ("text", "tool_calling"))
 
     def _cloud_restricted(self) -> bool:
-        return (
-            self.network_mode in {"offline", "tools_only"}
-            or self.privacy_profile in {"fully_local", "local_with_tools"}
-        )
+        return self.network_mode in {"offline", "tools_only"} or self.privacy_profile in {
+            "fully_local",
+            "local_with_tools",
+        }
 
     def _cloud_allowed(self, provider_id: str) -> bool:
         if self.routing_mode == "local_only" and provider_id in CLOUD_PROVIDER_IDS:
             return False
         return provider_id not in CLOUD_PROVIDER_IDS or not self._cloud_restricted()
 
-    def _route_request(
-        self, request: ChatRequest, *, base_url: str | None = None
-    ) -> ChatRequest:
+    def _route_request(self, request: ChatRequest, *, base_url: str | None = None) -> ChatRequest:
         if self.routing_mode is None:
             return request
         candidates = self._models or (request.model,)
@@ -260,10 +246,7 @@ class Router:
         return "cloud access is disabled"
 
     def _cloud_forbidden_message(self, provider_id: str) -> str:
-        return (
-            f"cloud provider {provider_id!r} is not allowed when "
-            f"{self._restriction_reason()}"
-        )
+        return f"cloud provider {provider_id!r} is not allowed when {self._restriction_reason()}"
 
     def _lookup_key(self, provider_id: str) -> str | None:
         if self._key_provider is None:
@@ -277,14 +260,9 @@ class Router:
     def _missing_cloud_key(self, provider_id: str) -> bool:
         if provider_id in self._injected or provider_id in self._resolved:
             return False
-        return (
-            provider_id in CLOUD_PROVIDER_IDS
-            and self._lookup_key(provider_id) is None
-        )
+        return provider_id in CLOUD_PROVIDER_IDS and self._lookup_key(provider_id) is None
 
-    def _fallback_provider_id(
-        self, failed_provider_id: str, error: BaseException
-    ) -> str | None:
+    def _fallback_provider_id(self, failed_provider_id: str, error: BaseException) -> str | None:
         nxt = self._fallback_policy.next(failed_provider_id, error)
         if nxt is None or nxt == failed_provider_id:
             return None
@@ -316,9 +294,7 @@ class Router:
                 "missing api key",
                 provider_id=provider_id,
             )
-        instance = self._build_from_factory(
-            provider_id, base_url=base_url, timeout=timeout
-        )
+        instance = self._build_from_factory(provider_id, base_url=base_url, timeout=timeout)
         self._resolved[provider_id] = instance
         return instance
 

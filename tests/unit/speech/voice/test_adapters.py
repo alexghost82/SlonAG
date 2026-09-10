@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import threading
 
 import pytest
 
 from providers.contracts import (
     AudioRequest,
-    AudioStream,
-    ModelInfo,
-    SpeechRequest,
     Transcript,
 )
 from runtime.canonical_voice import STTAdapter, TTSAdapter
-
 from tests.unit.speech.voice.fakes import (
     ExplodingTTSProvider,
     FakeSTTProvider,
@@ -38,9 +33,7 @@ class TestSTTAdapter:
     async def test_cancelled_skips_engine(self) -> None:
         provider = FakeSTTProvider(text="should-not-reach")
         cancelled = threading.Event()
-        adapter = STTAdapter(
-            provider, language="ru", cancelled=cancelled
-        )
+        adapter = STTAdapter(provider, language="ru", cancelled=cancelled)
         cancelled.set()  # Mark as cancelled before transcribe
         result = await adapter.transcribe(b"pcm-data")
         assert result == ""
@@ -63,9 +56,7 @@ class TestSTTAdapter:
     async def test_vad_false_skips(self) -> None:
         """VAD detects silence → skip STT engine."""
         provider = FakeSTTProvider(text="should-not-reach")
-        adapter = STTAdapter(
-            provider, language="ru", vad=lambda audio: False
-        )
+        adapter = STTAdapter(provider, language="ru", vad=lambda audio: False)
         result = await adapter.transcribe(b"pcm-data")
         assert result == ""
         assert len(provider.calls) == 0
@@ -78,7 +69,7 @@ class TestSTTAdapter:
         adapter = STTAdapter(
             provider,
             language="ru",
-            vad=lambda audio: (vad_calls.append(audio), True)[1],
+            vad=lambda audio: (vad_calls.append(audio), True)[1],  # type: ignore[func-returns-value]
         )
         result = await adapter.transcribe(b"pcm-speech")
         assert result == "есть речь"
@@ -96,10 +87,11 @@ class TestSTTAdapter:
     @pytest.mark.asyncio
     async def test_exception_returns_empty(self) -> None:
         """Provider exception is caught and returns empty string."""
-        provider = ExplodingTTSProvider()  # uses AssertionError
+        ExplodingTTSProvider()  # uses AssertionError
 
         class ExplodingSTTProvider:
             provider_id = "stt"
+
             async def transcribe(self, request: AudioRequest) -> Transcript:
                 raise AssertionError("STT exploded")
 

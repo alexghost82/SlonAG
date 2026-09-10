@@ -128,7 +128,8 @@ class VisionRuntime:
             self._person_detector = build_person_detector()
         if self.config.enable_ocr:
             from acta.vision.processing import build_ocr as _build_ocr
-            self._ocr = _build_ocr()
+
+            self._ocr = _build_ocr()  # type: ignore[assignment]
 
     def _build_source(self, source_type: str) -> FrameSourceBase:
         src_cfg = dict(self.config.source_config)
@@ -270,7 +271,7 @@ class VisionRuntime:
         text_blocks: list[dict[str, Any]] = []
         if self.config.enable_ocr and self._ocr:
             try:
-                text_blocks = self._ocr.ocr(frame.raw, frame.width, frame.height)
+                text_blocks = self._ocr.ocr(frame.raw, frame.width, frame.height)  # type: ignore[attr-defined]
             except AttributeError:
                 pass  # _ocr might be DetectionBackend, not OCRBackend
 
@@ -279,18 +280,22 @@ class VisionRuntime:
             self._tracker.process_frame(self._frame_index, detections)
             for d in detections:
                 if d.track_id:
-                    await self._trajectory_store.add(d.track_id, {
-                        "frame_index": self._frame_index,
-                        "center_x": d.bbox.center_x,
-                        "center_y": d.bbox.center_y,
-                        "timestamp": frame.timestamp,
-                    })
+                    await self._trajectory_store.add(
+                        d.track_id,
+                        {
+                            "frame_index": self._frame_index,
+                            "center_x": d.bbox.center_x,
+                            "center_y": d.bbox.center_y,
+                            "timestamp": frame.timestamp,
+                        },
+                    )
 
         # Temporal analysis
         temporal_events: list[FrameEvent] = []
         if self.config.enable_temporal:
             temporal_events = self._temporal.process_frame(
-                self._frame_index, detections,
+                self._frame_index,
+                detections,
             )
             for ev in temporal_events:
                 await self._event_queue.put(ev)
@@ -346,6 +351,7 @@ class VisionRuntime:
 
 # ── convenience factory ────────────────────────────────────────────
 
+
 def create_runtime(
     source_type: str,
     config: VisionConfig | None = None,
@@ -362,7 +368,7 @@ def create_runtime(
     **kwargs : Any
         Passed to ``source_config`` (e.g. rtsp_url, camera_id, file_path).
     """
-    cfg = (config or VisionConfig())
+    cfg = config or VisionConfig()
     src_cfg = kwargs.copy()
     src_cfg["type"] = source_type
     cfg.source_config.update(src_cfg)

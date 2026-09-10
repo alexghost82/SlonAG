@@ -15,7 +15,6 @@ from providers.errors import CapabilityError
 from providers.local import LlamaCppChatProvider, OpenAICompatibleChatProvider
 from tests.unit.providers.local.fakes import FakeTransport
 
-
 PROVIDERS = (OpenAICompatibleChatProvider, LlamaCppChatProvider)
 
 
@@ -149,17 +148,10 @@ async def test_stream_assembles_fragmented_tool_arguments(factory) -> None:
         )
     )
 
-    events = [
-        event
-        async for event in factory(transport=transport).stream(
-            _request(factory.provider_id)
-        )
-    ]
+    events = [event async for event in factory(transport=transport).stream(_request(factory.provider_id))]
 
     assert [event.type for event in events] == ["tool_call", "done"]
-    assert events[0].tool_call == ToolCall(
-        id="call-weather", name="get_weather", arguments={"city": "Rome"}
-    )
+    assert events[0].tool_call == ToolCall(id="call-weather", name="get_weather", arguments={"city": "Rome"})
     assert transport.calls[0]["stream"] is True
 
 
@@ -167,9 +159,7 @@ async def test_stream_assembles_fragmented_tool_arguments(factory) -> None:
 async def test_tools_require_explicit_model_capability_before_http(factory) -> None:
     transport = FakeTransport()
     with pytest.raises(CapabilityError, match="does not support tool calling"):
-        await factory(transport=transport).chat(
-            _request(factory.provider_id, tool_calling=False)
-        )
+        await factory(transport=transport).chat(_request(factory.provider_id, tool_calling=False))
     assert transport.calls == []
 
 

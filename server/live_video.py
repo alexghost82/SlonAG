@@ -89,11 +89,7 @@ def mjpeg_bytes(frame: Frame) -> bytes:
     return (
         b"--frame\r\n"
         b"Content-Type: image/jpeg\r\n"
-        b"Content-Length: "
-        + str(len(frame.jpeg)).encode("ascii")
-        + b"\r\n\r\n"
-        + frame.jpeg
-        + b"\r\n"
+        b"Content-Length: " + str(len(frame.jpeg)).encode("ascii") + b"\r\n\r\n" + frame.jpeg + b"\r\n"
     )
 
 

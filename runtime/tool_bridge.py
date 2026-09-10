@@ -35,7 +35,12 @@ def build_live_registry(
 
 
 class LiveToolBridge:
-    """Execute Live function calls through one fail-closed canonical pipeline."""
+    """Forward Live function calls to the stack ToolExecutor / AgentLoop pipeline.
+
+    This is not a second reasoner. When ``executor`` is provided it is used as-is
+    (the same instance ``AgentLoop`` uses). Otherwise a canonical ``ToolExecutor``
+    is built from the injected registry and SafetyPolicy.
+    """
 
     def __init__(
         self,
@@ -44,6 +49,7 @@ class LiveToolBridge:
         speak: Callable[[str], object],
         registry: ToolRegistry | None = None,
         policy: SafetyPolicy | None = None,
+        executor: ToolExecutor | None = None,
         approval_timeout_seconds: float = 30.0,
         dedupe_limit: int = 256,
     ) -> None:
@@ -52,12 +58,20 @@ class LiveToolBridge:
         self._dedupe_limit = max(1, dedupe_limit)
         self._calls: dict[str, asyncio.Future[ToolResult]] = {}
         self._calls_lock = asyncio.Lock()
-        self.registry = registry or build_live_registry(ui=ui, speak=speak)
-        self.executor = ToolExecutor(
-            self.registry,
-            policy or SafetyPolicy(),
-            confirmer=self._confirm,
-        )
+        if executor is not None:
+            self.executor = executor
+            self.registry = (
+                registry
+                or getattr(executor, "registry", None)
+                or build_live_registry(ui=ui, speak=speak)
+            )
+        else:
+            self.registry = registry or build_live_registry(ui=ui, speak=speak)
+            self.executor = ToolExecutor(
+                self.registry,
+                policy or SafetyPolicy(),
+                confirmer=self._confirm,
+            )
 
     def _confirm(self, decision: SafetyDecision) -> bool:
         control_plane = getattr(self.ui, "control_plane", None)

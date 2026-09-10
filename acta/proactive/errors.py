@@ -2,6 +2,7 @@
 
 Messages never include secrets, API keys, tokens, or user data.
 """
+
 from __future__ import annotations
 
 from i18n import t
@@ -17,17 +18,19 @@ CODE_ACTION_BLOCKED = "action_blocked"
 CODE_DUPLICATE_EVENT = "duplicate_event"
 CODE_INVALID_ACTION = "invalid_action"
 
-ERROR_CODES: frozenset[str] = frozenset([
-    CODE_OK,
-    CODE_INVALID_EVENT,
-    CODE_SPAM_DETECTED,
-    CODE_COOLDOWN_ACTIVE,
-    CODE_PERM_DENIED,
-    CODE_RELEVANCE_TOO_LOW,
-    CODE_ACTION_BLOCKED,
-    CODE_DUPLICATE_EVENT,
-    CODE_INVALID_ACTION,
-])
+ERROR_CODES: frozenset[str] = frozenset(
+    [
+        CODE_OK,
+        CODE_INVALID_EVENT,
+        CODE_SPAM_DETECTED,
+        CODE_COOLDOWN_ACTIVE,
+        CODE_PERM_DENIED,
+        CODE_RELEVANCE_TOO_LOW,
+        CODE_ACTION_BLOCKED,
+        CODE_DUPLICATE_EVENT,
+        CODE_INVALID_ACTION,
+    ]
+)
 
 _MESSAGES: dict[str, str] = {
     CODE_OK: t("proactive.ok"),

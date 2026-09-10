@@ -3,27 +3,34 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import asdict, is_dataclass
 
-from providers.contracts import ConversationMessage, ToolCall
+from providers.contracts import (
+    ChatEvent,
+    ChatMessage,
+    ChatProvider,
+    ChatRequest,
+    ChatResponse,
+    ConversationMessage,
+    ModelInfo,
+    ProviderStatus,
+    ToolCall,
+    ToolResultMessage,
+)
 from providers.errors import ProviderError
 
 
-def message_payload(
-    message: ConversationMessage, *, ollama: bool = False
-) -> dict[str, object]:
+def message_payload(message: ConversationMessage, *, ollama: bool = False) -> dict[str, object]:
     """Serialize one canonical message without losing native tool correlation."""
-    if message.role == "tool":
+    if isinstance(message, (ToolResultMessage, ChatMessage)) and message.role == "tool":
         envelope: dict[str, object] = (
-            {"error": message.error}
-            if message.error is not None
-            else {"result": message.result}
+            {"error": message.error} if message.error is not None else {"result": message.result}
         )
         artifacts = getattr(message, "artifacts", ())
         if artifacts:
             envelope["artifacts"] = [
-                asdict(item) if is_dataclass(item) else item for item in artifacts
+                asdict(item) if is_dataclass(item) and not isinstance(item, type) else item for item in artifacts
             ]
         content = json.dumps(envelope)
         if ollama:
@@ -46,11 +53,7 @@ def message_payload(
                 **({} if ollama else {"type": "function"}),
                 "function": {
                     "name": call.name,
-                    "arguments": (
-                        dict(call.arguments)
-                        if ollama
-                        else json.dumps(call.arguments)
-                    ),
+                    "arguments": (dict(call.arguments) if ollama else json.dumps(call.arguments)),
                 },
             }
             for call in calls
@@ -58,9 +61,7 @@ def message_payload(
     return item
 
 
-def messages_payload(
-    messages: Sequence[ConversationMessage], *, ollama: bool = False
-) -> list[dict[str, object]]:
+def messages_payload(messages: Sequence[ConversationMessage], *, ollama: bool = False) -> list[dict[str, object]]:
     return [message_payload(message, ollama=ollama) for message in messages]
 
 
@@ -208,15 +209,7 @@ try:
     from openai import OpenAI  # noqa: E402
 except ImportError:
     # openai SDK not installed; module-level variable still needed for patching in tests
-    OpenAI = None  # type: ignore[misc,assignment]
-
-from providers.contracts import (
-    ChatProvider,
-    ChatRequest,
-    ChatResponse,
-    ModelInfo,
-    ProviderStatus,
-)
+    OpenAI = None
 
 
 class OpenAICompatProvider(ChatProvider):
@@ -254,9 +247,7 @@ class OpenAICompatProvider(ChatProvider):
             return []
 
     async def validate(self) -> ProviderStatus:
-        return ProviderStatus(
-            provider_id=self.provider_id, ok=True, message="openai-compatible ready"
-        )
+        return ProviderStatus(provider_id=self.provider_id, ok=True, message="openai-compatible ready")
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         # Build the kwargs for the OpenAI SDK chat.completions.create call
@@ -268,16 +259,22 @@ class OpenAICompatProvider(ChatProvider):
         }
         if request.tools:
             kwargs["tools"] = [
-                {"type": "function", "function": {
-                    "name": t.name,
-                    "description": t.description or "",
-                    "parameters": t.parameters or {},
-                }}
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description or "",
+                        "parameters": t.parameters or {},
+                    },
+                }
                 for t in request.tools
             ]
 
         if self._client is None:
-            client = OpenAI(api_key=self.provider_id if not self.provider_id.startswith("test") else "test-key", base_url=self._base_url)  # type: ignore[arg-type]
+            client = OpenAI(
+                api_key=self.provider_id if not self.provider_id.startswith("test") else "test-key",
+                base_url=self._base_url,
+            )
         else:
             client = self._client
 
@@ -289,11 +286,13 @@ class OpenAICompatProvider(ChatProvider):
         tc_list: list[ToolCall] = []
         if choice.message.tool_calls:
             for tc in choice.message.tool_calls:
-                tc_list.append(ToolCall(
-                    id=tc.id or "",
-                    name=tc.function.name,
-                    arguments=_parse_tool_call_args(tc.function.arguments, self.provider_id),
-                ))
+                tc_list.append(
+                    ToolCall(
+                        id=tc.id or "",
+                        name=tc.function.name,
+                        arguments=_parse_tool_call_args(tc.function.arguments, self.provider_id),
+                    )
+                )
 
         return ChatResponse(
             text=text,
@@ -301,6 +300,12 @@ class OpenAICompatProvider(ChatProvider):
             model_id=request.model.model_id,
             tool_calls=tuple(tc_list),
         )
+
+    async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
+        response = await self.chat(request)
+        if response.text:
+            yield ChatEvent(type="delta", text=response.text)
+        yield ChatEvent(type="done")
 
 
 def _parse_tool_call_args(raw_args: str, provider_id: str) -> dict[str, object]:

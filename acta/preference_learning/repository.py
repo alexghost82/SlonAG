@@ -157,9 +157,7 @@ class PreferenceRepository:
         with self._lock:
             conn = sqlite3.connect(str(self.db_path))
             try:
-                row = conn.execute(
-                    "SELECT * FROM preferences WHERE id = ?", (item_id,)
-                ).fetchone()
+                row = conn.execute("SELECT * FROM preferences WHERE id = ?", (item_id,)).fetchone()
             finally:
                 conn.close()
 
@@ -175,15 +173,13 @@ class PreferenceRepository:
         with self._lock:
             conn = sqlite3.connect(str(self.db_path))
             try:
-                rows = conn.execute(
-                    "SELECT * FROM preferences ORDER BY updated_at DESC"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM preferences ORDER BY updated_at DESC").fetchall()
             finally:
                 conn.close()
 
         items = [self._row_to_item(row) for row in rows]
         if not include_deleted:
-            items = [i for i in items if not i.active.deleted]
+            items = [i for i in items if i.active is None or not i.active.deleted]
         return items
 
     def delete(self, item_id: str) -> bool:
@@ -206,14 +202,12 @@ class PreferenceRepository:
             try:
                 if include_deleted:
                     return conn.execute("SELECT COUNT(*) FROM preferences").fetchone()[0]
-                rows = conn.execute(
-                    "SELECT * FROM preferences"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM preferences").fetchall()
             finally:
                 conn.close()
         if include_deleted:
             return len(rows)
-        return sum(1 for row in rows if not self._row_to_item(row).active.deleted)
+        return sum(1 for row in rows if (a := self._row_to_item(row).active) is not None and not a.deleted)
 
     def clear_all(self) -> int:
         import sqlite3
@@ -231,9 +225,7 @@ class PreferenceRepository:
     # Search / Retrieve
     # ------------------------------------------------------------------
 
-    def retrieve_matching(
-        self, context: RetrievalContext
-    ) -> list[tuple[LearnedItem, float]]:
+    def retrieve_matching(self, context: RetrievalContext) -> list[tuple[LearnedItem, float]]:
         items = self.list_items(include_deleted=False)
         scored: list[tuple[LearnedItem, float]] = []
         task_lower = context.current_task.lower()
@@ -247,11 +239,9 @@ class PreferenceRepository:
                 scored.append((item, score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        return scored[:context.max_results]
+        return scored[: context.max_results]
 
-    def _compute_relevance(
-        self, item: LearnedItem, context: RetrievalContext, task_lower: str
-    ) -> float:
+    def _compute_relevance(self, item: LearnedItem, context: RetrievalContext, task_lower: str) -> float:
         active = item.active
         if active is None:
             return 0.0
@@ -264,9 +254,7 @@ class PreferenceRepository:
         text_fields = f"{active.value} {active.description} {active.key} {active.category}"
         if context.tool_name and context.tool_name.lower() in text_fields.lower():
             score += 0.15
-        if task_lower and any(
-            word in text_fields.lower() for word in task_lower.split()[:5]
-        ):
+        if task_lower and any(word in text_fields.lower() for word in task_lower.split()[:5]):
             score += 0.1
 
         if active.usage_count > 0:
@@ -286,12 +274,31 @@ class PreferenceRepository:
 
     def _row_to_item(self, row: tuple | list) -> LearnedItem:
         cols = [
-            "id", "key", "value", "version", "type", "action", "priority",
-            "category", "description", "confidence", "decay_policy",
-            "max_reinforcements", "reinforcement_count", "created_at",
-            "updated_at", "last_use_at", "usage_count", "contradicted",
-            "contradiction_evidence", "corrected", "correction_source",
-            "correction_reason", "deleted", "tags", "versions_history",
+            "id",
+            "key",
+            "value",
+            "version",
+            "type",
+            "action",
+            "priority",
+            "category",
+            "description",
+            "confidence",
+            "decay_policy",
+            "max_reinforcements",
+            "reinforcement_count",
+            "created_at",
+            "updated_at",
+            "last_use_at",
+            "usage_count",
+            "contradicted",
+            "contradiction_evidence",
+            "corrected",
+            "correction_source",
+            "correction_reason",
+            "deleted",
+            "tags",
+            "versions_history",
         ]
         d = dict(zip(cols, row))
         d["contradicted"] = bool(d["contradicted"])
@@ -312,25 +319,33 @@ class PreferenceRepository:
             versions = [PreferenceVersion.from_dict(v) for v in versions_list]
         except (json.JSONDecodeError, TypeError):
             # Fallback: single active version
-            versions = [PreferenceVersion(
-                id=d["id"], version=d["version"],
-                type=PreferenceType(d["type"]),
-                action=PreferenceAction(d["action"]),
-                priority=PriorityLevel(d["priority"]),
-                category=d["category"], key=d["key"], value=d["value"],
-                description=d["description"], confidence=d["confidence"],
-                decay_policy=ConfidenceDecayPolicy(d["decay_policy"]),
-                max_reinforcements=d["max_reinforcements"],
-                reinforcement_count=d["reinforcement_count"],
-                created_at=d["created_at"], updated_at=d["updated_at"],
-                last_use_at=d.get("last_use_at", ""),
-                usage_count=d["usage_count"],
-                contradicted=d["contradicted"],
-                contradiction_evidence=contradiction_evidence,
-                correction_source=LearningSource(d.get("correction_source", "manual_entry")),
-                correction_reason=d.get("correction_reason", ""),
-                deleted=d["deleted"], tags=tags,
-            )]
+            versions = [
+                PreferenceVersion(
+                    id=d["id"],
+                    version=d["version"],
+                    type=PreferenceType(d["type"]),
+                    action=PreferenceAction(d["action"]),
+                    priority=PriorityLevel(d["priority"]),
+                    category=d["category"],
+                    key=d["key"],
+                    value=d["value"],
+                    description=d["description"],
+                    confidence=d["confidence"],
+                    decay_policy=ConfidenceDecayPolicy(d["decay_policy"]),
+                    max_reinforcements=d["max_reinforcements"],
+                    reinforcement_count=d["reinforcement_count"],
+                    created_at=d["created_at"],
+                    updated_at=d["updated_at"],
+                    last_use_at=d.get("last_use_at", ""),
+                    usage_count=d["usage_count"],
+                    contradicted=d["contradicted"],
+                    contradiction_evidence=contradiction_evidence,
+                    correction_source=LearningSource(d.get("correction_source", "manual_entry")),
+                    correction_reason=d.get("correction_reason", ""),
+                    deleted=d["deleted"],
+                    tags=tags,
+                )
+            ]
 
         return LearnedItem(
             id=d["id"],

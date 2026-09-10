@@ -8,12 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
-import os
-import sys
-import tempfile
 import threading
-import time
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -22,75 +17,491 @@ import pytest
 
 # ─── Helpers ───────────────────────────────────────────────────────────────
 
+
 def _img_base64(w: int = 64, h: int = 64, label: str = "test") -> str:
     """Return a tiny valid JPEG as base64 (no external deps)."""
     # Minimal JPEG: 1×1 red pixel
-    jpg = bytes([
-        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00,
-        0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB,
-        0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07,
-        0x07, 0x07, 0x09, 0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B,
-        0x0B, 0x0C, 0x19, 0x12, 0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E,
-        0x1D, 0x1A, 0x1C, 0x1C, 0x20, 0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C,
-        0x23, 0x1C, 0x1C, 0x27, 0x30, 0x2D, 0x2C, 0x2F, 0x2F, 0x2C, 0x30,
-        0x31, 0x34, 0x34, 0x30, 0x35, 0x2F, 0x44, 0x43, 0x36, 0x3E, 0x3F,
-        0x4F, 0x52, 0x48, 0x54, 0x54, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00,
-        0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F,
-        0x00, 0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
-        0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5,
-        0x10, 0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03, 0x05, 0x05,
-        0x04, 0x04, 0x00, 0x00, 0x01, 0x7D, 0x01, 0x02, 0x03, 0x00, 0x04,
-        0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
-        0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xA1, 0x08, 0x23, 0x42, 0xB1,
-        0xC1, 0x15, 0x52, 0xD1, 0xF0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09,
-        0x0A, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x25, 0x26, 0x27, 0x28, 0x29,
-        0x2A, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45,
-        0x46, 0x47, 0x48, 0x49, 0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58,
-        0x59, 0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x73,
-        0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x83, 0x84, 0x85, 0x86,
-        0x87, 0x88, 0x89, 0x8A, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98,
-        0x99, 0x9A, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA,
-        0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3,
-        0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xD2, 0xD3, 0xD4, 0xD5,
-        0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6,
-        0xE7, 0xE8, 0xE9, 0xEA, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
-        0xF8, 0xF9, 0xFA, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00,
-        0x3F, 0x00, 0xFB, 0xD5, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB, 0xDB,
-        0xFF, 0xD9,
-    ])
+    jpg = bytes(
+        [
+            0xFF,
+            0xD8,
+            0xFF,
+            0xE0,
+            0x00,
+            0x10,
+            0x4A,
+            0x46,
+            0x49,
+            0x46,
+            0x00,
+            0x01,
+            0x01,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0xFF,
+            0xDB,
+            0x00,
+            0x43,
+            0x00,
+            0x08,
+            0x06,
+            0x06,
+            0x07,
+            0x06,
+            0x05,
+            0x08,
+            0x07,
+            0x07,
+            0x07,
+            0x09,
+            0x09,
+            0x08,
+            0x0A,
+            0x0C,
+            0x14,
+            0x0D,
+            0x0C,
+            0x0B,
+            0x0B,
+            0x0C,
+            0x19,
+            0x12,
+            0x13,
+            0x0F,
+            0x14,
+            0x1D,
+            0x1A,
+            0x1F,
+            0x1E,
+            0x1D,
+            0x1A,
+            0x1C,
+            0x1C,
+            0x20,
+            0x24,
+            0x2E,
+            0x27,
+            0x20,
+            0x22,
+            0x2C,
+            0x23,
+            0x1C,
+            0x1C,
+            0x27,
+            0x30,
+            0x2D,
+            0x2C,
+            0x2F,
+            0x2F,
+            0x2C,
+            0x30,
+            0x31,
+            0x34,
+            0x34,
+            0x30,
+            0x35,
+            0x2F,
+            0x44,
+            0x43,
+            0x36,
+            0x3E,
+            0x3F,
+            0x4F,
+            0x52,
+            0x48,
+            0x54,
+            0x54,
+            0xFF,
+            0xC0,
+            0x00,
+            0x0B,
+            0x08,
+            0x00,
+            0x01,
+            0x00,
+            0x01,
+            0x01,
+            0x01,
+            0x11,
+            0x00,
+            0xFF,
+            0xC4,
+            0x00,
+            0x1F,
+            0x00,
+            0x00,
+            0x01,
+            0x05,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+            0x05,
+            0x06,
+            0x07,
+            0x08,
+            0x09,
+            0x0A,
+            0x0B,
+            0xFF,
+            0xC4,
+            0x00,
+            0xB5,
+            0x10,
+            0x00,
+            0x02,
+            0x01,
+            0x03,
+            0x03,
+            0x02,
+            0x04,
+            0x03,
+            0x05,
+            0x05,
+            0x04,
+            0x04,
+            0x00,
+            0x00,
+            0x01,
+            0x7D,
+            0x01,
+            0x02,
+            0x03,
+            0x00,
+            0x04,
+            0x11,
+            0x05,
+            0x12,
+            0x21,
+            0x31,
+            0x41,
+            0x06,
+            0x13,
+            0x51,
+            0x61,
+            0x07,
+            0x22,
+            0x71,
+            0x14,
+            0x32,
+            0x81,
+            0x91,
+            0xA1,
+            0x08,
+            0x23,
+            0x42,
+            0xB1,
+            0xC1,
+            0x15,
+            0x52,
+            0xD1,
+            0xF0,
+            0x24,
+            0x33,
+            0x62,
+            0x72,
+            0x82,
+            0x09,
+            0x0A,
+            0x16,
+            0x17,
+            0x18,
+            0x19,
+            0x1A,
+            0x25,
+            0x26,
+            0x27,
+            0x28,
+            0x29,
+            0x2A,
+            0x34,
+            0x35,
+            0x36,
+            0x37,
+            0x38,
+            0x39,
+            0x3A,
+            0x43,
+            0x44,
+            0x45,
+            0x46,
+            0x47,
+            0x48,
+            0x49,
+            0x4A,
+            0x53,
+            0x54,
+            0x55,
+            0x56,
+            0x57,
+            0x58,
+            0x59,
+            0x5A,
+            0x63,
+            0x64,
+            0x65,
+            0x66,
+            0x67,
+            0x68,
+            0x69,
+            0x6A,
+            0x73,
+            0x74,
+            0x75,
+            0x76,
+            0x77,
+            0x78,
+            0x79,
+            0x7A,
+            0x83,
+            0x84,
+            0x85,
+            0x86,
+            0x87,
+            0x88,
+            0x89,
+            0x8A,
+            0x92,
+            0x93,
+            0x94,
+            0x95,
+            0x96,
+            0x97,
+            0x98,
+            0x99,
+            0x9A,
+            0xA2,
+            0xA3,
+            0xA4,
+            0xA5,
+            0xA6,
+            0xA7,
+            0xA8,
+            0xA9,
+            0xAA,
+            0xB2,
+            0xB3,
+            0xB4,
+            0xB5,
+            0xB6,
+            0xB7,
+            0xB8,
+            0xB9,
+            0xBA,
+            0xC2,
+            0xC3,
+            0xC4,
+            0xC5,
+            0xC6,
+            0xC7,
+            0xC8,
+            0xC9,
+            0xCA,
+            0xD2,
+            0xD3,
+            0xD4,
+            0xD5,
+            0xD6,
+            0xD7,
+            0xD8,
+            0xD9,
+            0xDA,
+            0xE1,
+            0xE2,
+            0xE3,
+            0xE4,
+            0xE5,
+            0xE6,
+            0xE7,
+            0xE8,
+            0xE9,
+            0xEA,
+            0xF1,
+            0xF2,
+            0xF3,
+            0xF4,
+            0xF5,
+            0xF6,
+            0xF7,
+            0xF8,
+            0xF9,
+            0xFA,
+            0xFF,
+            0xDA,
+            0x00,
+            0x08,
+            0x01,
+            0x01,
+            0x00,
+            0x00,
+            0x3F,
+            0x00,
+            0xFB,
+            0xD5,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xDB,
+            0xFF,
+            0xD9,
+        ]
+    )
     return base64.b64encode(jpg).decode()
 
 
 def _make_provider_mock(provider_id: str, model_info=None, tool_calls=None, text="ok") -> MagicMock:
     """Create a ChatProvider mock with deterministic behaviour."""
     if model_info is None:
-        model_info = type("ModelInfo", (), {
-            "provider_id": provider_id,
-            "model_id": f"test-{provider_id}",
-            "display_name": f"Test {provider_id}",
-            "text": True, "streaming": False, "tool_calling": True,
-            "local": provider_id in ("local", "ollama", "llama_cpp"),
-            "source": provider_id,
-        })()
+        model_info = type(
+            "ModelInfo",
+            (),
+            {
+                "provider_id": provider_id,
+                "model_id": f"test-{provider_id}",
+                "display_name": f"Test {provider_id}",
+                "text": True,
+                "streaming": False,
+                "tool_calling": True,
+                "local": provider_id in ("local", "ollama", "llama_cpp"),
+                "source": provider_id,
+            },
+        )()
     m = MagicMock()
     m.list_models = AsyncMock(return_value=[model_info])
-    m.validate = AsyncMock(return_value=type("ProviderStatus", (), {
-        "provider_id": provider_id, "ok": True, "message": ""
-    })())
-    resp_type = type("ChatResponse", (), {
-        "text": text, "provider_id": provider_id, "model_id": model_info.model_id,
-        "tool_calls": tuple(tool_calls or [])
-    })()
+    m.validate = AsyncMock(
+        return_value=type("ProviderStatus", (), {"provider_id": provider_id, "ok": True, "message": ""})()
+    )
+    resp_type = type(
+        "ChatResponse",
+        (),
+        {
+            "text": text,
+            "provider_id": provider_id,
+            "model_id": model_info.model_id,
+            "tool_calls": tuple(tool_calls or []),
+        },
+    )()
     m.chat = AsyncMock(return_value=resp_type)
     return m
 
@@ -105,6 +516,7 @@ def _tool_call(name: str, args: dict | None = None, call_id: str | None = None) 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def tmp_workspace(tmp_path: Path) -> Path:
     """A clean workspace directory for each test."""
@@ -112,12 +524,14 @@ def tmp_workspace(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def fake_key_provider() -> callable:
+def fake_key_provider() -> callable:  # type: ignore[valid-type]
     """Returns a key_provider that yields a dummy key for cloud providers."""
+
     def provider(name: str) -> str | None:
         if name.endswith("_api_key"):
             return f"test-{name}"
         return None
+
     return provider
 
 
@@ -137,19 +551,26 @@ class TestProviderAgentLoopResponse:
 
     @pytest.mark.asyncio
     async def test_gemini_agentloop_russian(self):
-        from providers.contracts import ChatRequest, ModelInfo, AssistantMessage
         from agent.runtime import AgentLoop, LoopBudget
+        from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="gemini", model_id="test-gemini", display_name="Gemini",
-            text=True, streaming=False, tool_calling=True, source="Google",
+            provider_id="gemini",
+            model_id="test-gemini",
+            display_name="Gemini",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="Google",
         )
         mock_provider = _make_provider_mock(
-            "gemini", model_info=model_info,
+            "gemini",
+            model_info=model_info,
             text="Ответ на русском языке. Все работает.",
         )
         loop = AgentLoop(
-            provider=mock_provider, model=model_info,
+            provider=mock_provider,
+            model=model_info,
             budget=LoopBudget(max_tool_calls=2, max_turns=3),
         )
         result = await loop.run("Привет, как дела?")
@@ -163,31 +584,36 @@ class TestProviderOpenAIToolContinuation:
 
     @pytest.mark.asyncio
     async def test_openai_tool_chain(self):
-        from providers.contracts import (
-            ChatRequest, ModelInfo, AssistantToolCallMessage,
-            ToolCall, ToolResultMessage, UserMessage,
-        )
         from agent.runtime import AgentLoop, LoopBudget
+        from providers.contracts import (
+            ModelInfo,
+        )
 
         model_info = ModelInfo(
-            provider_id="openai", model_id="gpt-4o", display_name="GPT-4o",
-            text=True, streaming=False, tool_calling=True, source="OpenAI",
+            provider_id="openai",
+            model_id="gpt-4o",
+            display_name="GPT-4o",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="OpenAI",
         )
         # First turn: model requests a tool call
         tc = _tool_call("web_search", {"query": "weather today"})
 
-        turn_responses = iter([
-            type("ChatResponse", (), {
-                "text": "", "provider_id": "openai", "model_id": "gpt-4o",
-                "tool_calls": (tc,)
-            })(),
-            # Second turn: model responds with the answer (after we inject the tool result)
-            type("ChatResponse", (), {
-                "text": "Солнечно, +25°C.",
-                "provider_id": "openai", "model_id": "gpt-4o",
-                "tool_calls": ()
-            })(),
-        ])
+        turn_responses = iter(
+            [
+                type(
+                    "ChatResponse", (), {"text": "", "provider_id": "openai", "model_id": "gpt-4o", "tool_calls": (tc,)}
+                )(),
+                # Second turn: model responds with the answer (after we inject the tool result)
+                type(
+                    "ChatResponse",
+                    (),
+                    {"text": "Солнечно, +25°C.", "provider_id": "openai", "model_id": "gpt-4o", "tool_calls": ()},
+                )(),
+            ]
+        )
 
         async def mock_chat(*args, **kwargs):
             return next(turn_responses)
@@ -195,12 +621,14 @@ class TestProviderOpenAIToolContinuation:
         mock_provider = _make_provider_mock("openai", model_info=model_info)
         mock_provider.chat = mock_chat
 
-        registry = MagicMock()
+        MagicMock()
+
         async def fake_exec(tool_name, arguments):
             return type("ToolResult", (), {"content": "Sunny, 25°C"})()
 
         loop = AgentLoop(
-            provider=mock_provider, model=model_info,
+            provider=mock_provider,
+            model=model_info,
             tool_executor=fake_exec,
             budget=LoopBudget(max_tool_calls=2, max_turns=3),
         )
@@ -214,25 +642,34 @@ class TestProviderGeminiToolContinuation:
 
     @pytest.mark.asyncio
     async def test_gemini_tool_chain(self):
-        from providers.contracts import ModelInfo
         from agent.runtime import AgentLoop, LoopBudget
+        from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="gemini", model_id="gemini-2.0-flash", display_name="Gemini",
-            text=True, streaming=False, tool_calling=True, source="Google",
+            provider_id="gemini",
+            model_id="gemini-2.0-flash",
+            display_name="Gemini",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="Google",
         )
         tc = _tool_call("read_file", {"path": "/tmp/test.txt"})
 
-        turn_responses = iter([
-            type("ChatResponse", (), {
-                "text": "", "provider_id": "gemini", "model_id": "gemini-2.0-flash",
-                "tool_calls": (tc,)
-            })(),
-            type("ChatResponse", (), {
-                "text": "Файл пустой.", "provider_id": "gemini", "model_id": "gemini-2.0-flash",
-                "tool_calls": ()
-            })(),
-        ])
+        turn_responses = iter(
+            [
+                type(
+                    "ChatResponse",
+                    (),
+                    {"text": "", "provider_id": "gemini", "model_id": "gemini-2.0-flash", "tool_calls": (tc,)},
+                )(),
+                type(
+                    "ChatResponse",
+                    (),
+                    {"text": "Файл пустой.", "provider_id": "gemini", "model_id": "gemini-2.0-flash", "tool_calls": ()},
+                )(),
+            ]
+        )
 
         async def mock_chat(*args, **kwargs):
             return next(turn_responses)
@@ -244,7 +681,8 @@ class TestProviderGeminiToolContinuation:
             return type("ToolResult", (), {"content": ""})()
 
         loop = AgentLoop(
-            provider=mock_provider, model=model_info,
+            provider=mock_provider,
+            model=model_info,
             tool_executor=fake_exec,
             budget=LoopBudget(max_tool_calls=2, max_turns=3),
         )
@@ -257,25 +695,39 @@ class TestProviderOpenRouterToolContinuation:
 
     @pytest.mark.asyncio
     async def test_openrouter_tool_chain(self):
-        from providers.contracts import ModelInfo
         from agent.runtime import AgentLoop, LoopBudget
+        from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="openrouter", model_id="anthropic/claude-3.5", display_name="Claude",
-            text=True, streaming=False, tool_calling=True, source="OpenRouter",
+            provider_id="openrouter",
+            model_id="anthropic/claude-3.5",
+            display_name="Claude",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="OpenRouter",
         )
         tc = _tool_call("shell_exec", {"cmd": "echo hello"})
 
-        turn_responses = iter([
-            type("ChatResponse", (), {
-                "text": "", "provider_id": "openrouter", "model_id": "anthropic/claude-3.5",
-                "tool_calls": (tc,)
-            })(),
-            type("ChatResponse", (), {
-                "text": "hello", "provider_id": "openrouter", "model_id": "anthropic/claude-3.5",
-                "tool_calls": ()
-            })(),
-        ])
+        turn_responses = iter(
+            [
+                type(
+                    "ChatResponse",
+                    (),
+                    {"text": "", "provider_id": "openrouter", "model_id": "anthropic/claude-3.5", "tool_calls": (tc,)},
+                )(),
+                type(
+                    "ChatResponse",
+                    (),
+                    {
+                        "text": "hello",
+                        "provider_id": "openrouter",
+                        "model_id": "anthropic/claude-3.5",
+                        "tool_calls": (),
+                    },
+                )(),
+            ]
+        )
 
         async def mock_chat(*args, **kwargs):
             return next(turn_responses)
@@ -287,7 +739,8 @@ class TestProviderOpenRouterToolContinuation:
             return type("ToolResult", (), {"content": "hello"})()
 
         loop = AgentLoop(
-            provider=mock_provider, model=model_info,
+            provider=mock_provider,
+            model=model_info,
             tool_executor=fake_exec,
             budget=LoopBudget(max_tool_calls=2, max_turns=3),
         )
@@ -300,27 +753,34 @@ class TestProviderOllamaLocal:
 
     @pytest.mark.asyncio
     async def test_ollama_local_provider(self):
-        from providers.contracts import ChatRequest, ModelInfo, ProviderStatus
+        from providers.contracts import ChatRequest, ModelInfo
 
         model_info = ModelInfo(
-            provider_id="ollama", model_id="llama3.2", display_name="Llama 3.2",
-            text=True, streaming=False, tool_calling=True,
-            local=True, source="Ollama",
+            provider_id="ollama",
+            model_id="llama3.2",
+            display_name="Llama 3.2",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            local=True,
+            source="Ollama",
         )
         mock_provider = _make_provider_mock("ollama", model_info=model_info)
 
         from providers.router import Router
+
         router = Router(
-            "ollama", providers={"ollama": mock_provider},
+            "ollama",
+            providers={"ollama": mock_provider},
             models=(model_info,),
         )
         status = await router.validate()
         assert status.ok is True
 
         request = ChatRequest(
-            model=model_info, messages=[type("UserMessage", (), {
-                "content": "hello", "role": "user", "tool_calls": ()
-            })()], tools=(),
+            model=model_info,
+            messages=[type("UserMessage", (), {"content": "hello", "role": "user", "tool_calls": ()})()],
+            tools=(),
         )
         resp = await router.chat(request)
         assert resp.provider_id == "ollama"
@@ -334,12 +794,17 @@ class TestProviderLMStudio:
         from providers.contracts import ChatRequest, ModelInfo
 
         model_info = ModelInfo(
-            provider_id="openai", model_id="lmstudio/Meta-Llama-3-8B",
-            display_name="Llama 3 8B", text=True, streaming=False,
-            tool_calling=True, source="LM Studio",
+            provider_id="openai",
+            model_id="lmstudio/Meta-Llama-3-8B",
+            display_name="Llama 3 8B",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="LM Studio",
         )
 
         from providers.openai_compat import create_openai_provider
+
         with patch("providers.openai_compat.OpenAI"):
             mock_openai = MagicMock()
             mock_response = MagicMock()
@@ -353,9 +818,9 @@ class TestProviderLMStudio:
                 provider = create_openai_provider(api_key="dummy", base_url="http://localhost:1234/v1")
 
                 request = ChatRequest(
-                    model=model_info, messages=[type("UserMessage", (), {
-                        "content": "test", "role": "user", "tool_calls": ()
-                    })()], tools=(),
+                    model=model_info,
+                    messages=[type("UserMessage", (), {"content": "test", "role": "user", "tool_calls": ()})()],
+                    tools=(),
                 )
                 resp = await provider.chat(request)
                 assert resp.text == "from LM Studio"
@@ -371,11 +836,10 @@ class TestShellTool:
 
     @pytest.mark.asyncio
     async def test_shell_exec_tool(self):
-        from acta.tools.legacy.adapters import legacy_handler_factory
-        from acta.safety.registry import tool_spec
 
         # Get shell_exec handler
         from acta.tools.legacy import LEGACY_HANDLERS
+
         handler = LEGACY_HANDLERS.get("shell_exec")
         assert handler is not None, "shell_exec must be registered"
 
@@ -393,18 +857,25 @@ class TestFilesystemTool:
 
         handler = LEGACY_HANDLERS.get("file_controller")
         assert handler is not None
+        tmp_workspace.mkdir(parents=True, exist_ok=True)
 
-        result = await handler({
-            "action": "create",
-            "path": str(tmp_workspace / "test.txt"),
-            "content": "hello world",
-        })
+        result = await handler(  # type: ignore[misc]
+            {
+                "action": "create",
+                "path": str(tmp_workspace / "test.txt"),
+                "content": "hello world",
+                "roots": (tmp_workspace,),
+            }
+        )
         assert result is not None
 
-        result = await handler({
-            "action": "read",
-            "path": str(tmp_workspace / "test.txt"),
-        })
+        result = await handler(  # type: ignore[misc]
+            {
+                "action": "read",
+                "path": str(tmp_workspace / "test.txt"),
+                "roots": (tmp_workspace,),
+            }
+        )
         assert "hello world" in str(result)
 
 
@@ -457,10 +928,12 @@ class TestVisionTools:
             mock_engine.analyze.return_value = {"labels": ["test"], "text": "detected"}
             mock_build.return_value = mock_engine
 
-            result = await handler({
-                "image_b64": deterministic_img,
-                "prompt": "what is this",
-            })
+            result = await handler(  # type: ignore[misc]
+                {
+                    "image_b64": deterministic_img,
+                    "prompt": "what is this",
+                }
+            )
             assert result is not None
 
 
@@ -469,17 +942,19 @@ class TestRTSPVision:
 
     @pytest.mark.asyncio
     async def test_rtsp_pipeline(self, tmp_path: Path):
+        from acta.vision.config import VisionConfig
         from acta.vision.fixtures.rtsp import create_rtsp_fixture
         from acta.vision.provider import VisionProvider
-        from acta.vision.config import VisionConfig
 
         # Deterministic: try real RTSP fixture, fall back to image source
         try:
             fixture = await create_rtsp_fixture(num_frames=10, fps=5.0).start()
             try:
                 config = VisionConfig(
-                    enable_tracking=True, enable_object_detection=True,
-                    enable_temporal=True, max_frame_queue=20,
+                    enable_tracking=True,
+                    enable_object_detection=True,
+                    enable_temporal=True,
+                    max_frame_queue=20,
                 )
                 provider = VisionProvider(
                     source_type="rtsp",
@@ -497,11 +972,14 @@ class TestRTSPVision:
         except Exception:
             # Fallback: deterministic image source (no ffmpeg needed)
             from acta.vision.fixtures.image import create_test_image
+
             img = tmp_path / "frame.png"
             create_test_image(path=str(img))
             config = VisionConfig(
-                enable_tracking=True, enable_object_detection=True,
-                enable_temporal=True, max_frame_queue=20,
+                enable_tracking=True,
+                enable_object_detection=True,
+                enable_temporal=True,
+                max_frame_queue=20,
             )
             provider = VisionProvider(
                 source_type="image",
@@ -529,8 +1007,10 @@ class TestTemporalVision:
         create_test_image(path=str(img_path))
 
         config = VisionConfig(
-            enable_tracking=True, enable_temporal=True,
-            track_ttl_seconds=5.0, max_active_tracks=20,
+            enable_tracking=True,
+            enable_temporal=True,
+            track_ttl_seconds=5.0,
+            max_active_tracks=20,
         )
         provider = VisionProvider(
             source_type="image",
@@ -556,23 +1036,26 @@ class TestVisionComputerClosedLoop:
     async def test_vision_to_computer_loop(self, tmp_path: Path):
         # Mock pyautogui before any import to avoid tkinter requirement on headless systems
         from unittest.mock import MagicMock as _MagicMock
+
         _mock_pg = _MagicMock()
         _mock_pg.position.return_value = (0, 0)
         _mock_pg.size.return_value = (1920, 1080)
         _mock_pg.scroll.return_value = None
         import sys
+
         sys.modules["pyautogui"] = _mock_pg
 
+        from acta.tools.legacy import LEGACY_HANDLERS
         from acta.vision.config import VisionConfig
         from acta.vision.fixtures.image import create_test_image
         from acta.vision.provider import VisionProvider
-        from acta.tools.legacy import LEGACY_HANDLERS
 
         img_path = tmp_path / "frame.png"
         create_test_image(path=str(img_path))
 
         config = VisionConfig(
-            enable_tracking=True, enable_object_detection=True,
+            enable_tracking=True,
+            enable_object_detection=True,
             enable_ocr=True,
         )
         provider = VisionProvider(
@@ -597,7 +1080,7 @@ class TestVisionComputerClosedLoop:
             assert computer_handler is not None
 
             # Should be able to call computer_control without crashing
-            result = await computer_handler({"action": "list"})
+            result = await computer_handler({"action": "list"})  # type: ignore[misc]
             assert result is not None
 
         await provider.stop()
@@ -636,8 +1119,8 @@ class TestPreferencesCorrections:
 
     @pytest.mark.asyncio
     async def test_memory_preference_update(self, tmp_path: Path):
-        from acta.memory.repository import MemoryRepository
         from acta.memory.database import init_db
+        from acta.memory.repository import MemoryRepository
 
         db_path = tmp_path / "prefs.db"
         init_db(db_path)
@@ -696,6 +1179,7 @@ class TestProviderIndependentVoice:
     async def test_voice_stt_tts(self):
         # STT check
         from acta.tools.legacy import LEGACY_HANDLERS
+
         stt_handler = LEGACY_HANDLERS.get("stt_listen")
         assert stt_handler is not None
 
@@ -734,9 +1218,7 @@ class TestSubagent:
     async def test_subagent_creation(self):
         from agent.subagent import SubagentSession
 
-        session = SubagentSession(
-            session_id="sub-1", goal="test goal", workspace_id="ws"
-        )
+        session = SubagentSession(session_id="sub-1", goal="test goal", workspace_id="ws")
         assert session is not None
         assert session.goal == "test goal"
 
@@ -746,13 +1228,14 @@ class TestParentSubagentMCP:
 
     @pytest.mark.asyncio
     async def test_parent_subagent_mcp_chain(self):
-        from agent.subagent import SubagentSession
         from acta.mcp.client import MCPClient
+        from agent.subagent import SubagentSession
 
         parent_id = f"parent-{uuid.uuid4().hex[:8]}"
         child = SubagentSession(
             session_id=f"child-{uuid.uuid4().hex[:8]}",
-            goal="find data", workspace_id="ws",
+            goal="find data",
+            workspace_id="ws",
         )
         client = MCPClient(name="child_mcp", server="test", transport="stdio")
 
@@ -790,10 +1273,7 @@ class TestRestartAutomation:
 
         engine = AutomationEngine()
         engine.register(
-            type("AutomationRule", (), {
-                "name": "r1", "trigger": {"event": "boot"},
-                "action": {"type": "notify"}
-            })(),
+            type("AutomationRule", (), {"name": "r1", "trigger": {"event": "boot"}, "action": {"type": "notify"}})(),
         )
         engine.start()
         engine.stop()
@@ -813,7 +1293,8 @@ class TestProactiveAgent:
 
         # Add a proactive task
         task_id = scheduler.schedule_once(
-            topic="check_status", payload={"key": "val"},
+            topic="check_status",
+            payload={"key": "val"},
             delay_seconds=0.1,
         )
         assert task_id is not None
@@ -836,8 +1317,10 @@ class TestGatewayApproval:
 
         gate = ApprovalGate()
         request_id = await gate.request(
-            tool="shell_exec", args={"cmd": "ls"},
-            user_id="u1", workspace="desktop",
+            tool="shell_exec",
+            args={"cmd": "ls"},
+            user_id="u1",
+            workspace="desktop",
         )
         assert request_id is not None
 
@@ -852,7 +1335,9 @@ class TestServerRoutes:
     @pytest.mark.asyncio
     async def test_server_routes_exist(self):
         from server.schemas import (
-            ChatRequestSchema, SessionCreateSchema, ToolResultSchema,
+            ChatRequestSchema,
+            SessionCreateSchema,
+            ToolResultSchema,
         )
 
         # Schemas must be instantiable
@@ -876,9 +1361,11 @@ class TestDocumentsRetrieval:
         (docs_path / "test.md").write_text("# Test Document\n\nSome content.\n")
 
         from unittest.mock import patch
+
         with patch("pathlib.Path.glob") as mock_glob:
             mock_glob.return_value = [docs_path / "test.md"]
             from actions.file_controller import FileController
+
             fc = FileController()
             result = fc._read_file(str(docs_path / "test.md"))
             assert "Test Document" in result
@@ -908,18 +1395,27 @@ class TestRemoteFallback:
 
     @pytest.mark.asyncio
     async def test_fallback_policy(self):
-        from providers.router import Router, FallbackPolicy
+        from providers.router import FallbackPolicy, Router
 
         class TestFallbackPolicy(FallbackPolicy):
             name = "test_fallback"
+
             def next(self, failed: str, error: BaseException) -> str | None:
                 return "openai"
 
-        model_info = type("ModelInfo", (), {
-            "provider_id": "gemini", "model_id": "test",
-            "display_name": "Test", "text": True,
-            "tool_calling": True, "source": "Google", "local": False,
-        })()
+        model_info = type(
+            "ModelInfo",
+            (),
+            {
+                "provider_id": "gemini",
+                "model_id": "test",
+                "display_name": "Test",
+                "text": True,
+                "tool_calling": True,
+                "source": "Google",
+                "local": False,
+            },
+        )()
 
         router = Router(
             "gemini",
@@ -939,13 +1435,19 @@ class TestCancelProvider:
         from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="gemini", model_id="test", display_name="Test",
-            text=True, streaming=False, tool_calling=True, source="Google",
+            provider_id="gemini",
+            model_id="test",
+            display_name="Test",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="Google",
         )
         cancel_event = threading.Event()
         loop = AgentLoop(
             provider=_make_provider_mock("gemini", model_info=model_info),
-            model=model_info, cancel_event=cancel_event,
+            model=model_info,
+            cancel_event=cancel_event,
             budget=LoopBudget(max_tool_calls=10, max_turns=5, timeout_seconds=5.0),
         )
         # Cancel before start
@@ -1056,8 +1558,13 @@ class TestWorkspaceIsolation:
         safe1 = validate_path(str(ws1 / "file.txt"), str(ws1))
         assert safe1 is not None
 
-        # Path traversal attempt
-        unsafe = validate_path(str(ws1 / "../workspace2/secret.txt"), str(ws1))
+        from acta.filesystem.security import PathDenied, TraversalDetected
+
+        # Path traversal attempt — deny is success (raise or None).
+        try:
+            unsafe = validate_path(str(ws1 / "../workspace2/secret.txt"), str(ws1))
+        except (TraversalDetected, PathDenied):
+            return
         assert unsafe is None
 
 
@@ -1067,7 +1574,6 @@ class TestSessionIsolation:
     @pytest.mark.asyncio
     async def test_session_isolation(self):
         from sessions.engine import SessionEngine
-        from sessions import ModelPolicy, TranscriptKind
 
         engine = SessionEngine()
         s1 = engine.create(title="s1", agent_id="slon", workspace_id="w1")
@@ -1085,8 +1591,8 @@ class TestMemoryIsolation:
 
     @pytest.mark.asyncio
     async def test_memory_isolation(self, tmp_path: Path):
-        from acta.memory.repository import MemoryRepository
         from acta.memory.database import init_db
+        from acta.memory.repository import MemoryRepository
 
         db = tmp_path / "iso.db"
         init_db(db)
@@ -1124,13 +1630,30 @@ class TestPathTraversalSymlink:
         except OSError:
             pass  # not supported on this system
 
-        # Direct traversal
-        result = validate_path(str(tmp_path / ".." / ".." / "etc" / "passwd"), str(tmp_path))
-        assert result is None
+        from acta.filesystem.security import PathDenied, SymlinkEscape, TraversalDetected
 
-        # Via symlink
-        result = validate_path(str(link / "secret.txt"), str(tmp_path))
-        assert result is None
+        def _denied(path_raw: str, roots: str) -> None:
+            try:
+                result = validate_path(path_raw, roots)
+            except (TraversalDetected, PathDenied, SymlinkEscape):
+                return
+            assert result is None
+
+        # Direct traversal
+        _denied(str(tmp_path / ".." / ".." / "etc" / "passwd"), str(tmp_path))
+
+        # Via symlink that escapes the workspace root
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "classified.txt").write_text("SHOULD NOT READ")
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        escape = ws / "escape"
+        try:
+            escape.symlink_to(outside)
+        except OSError:
+            escape = link
+        _denied(str(escape / "classified.txt"), str(ws))
 
 
 class TestSSRF:
@@ -1152,25 +1675,34 @@ class TestRevokedCredentials:
 
     @pytest.mark.asyncio
     async def test_missing_api_key(self):
-        from providers.router import Router, ProviderAuthError
         from providers.contracts import ModelInfo
+        from providers.router import ProviderAuthError, Router
 
         model_info = ModelInfo(
-            provider_id="openai", model_id="gpt-4o", display_name="GPT-4o",
-            text=True, tool_calling=True, source="OpenAI", local=False,
+            provider_id="openai",
+            model_id="gpt-4o",
+            display_name="GPT-4o",
+            text=True,
+            tool_calling=True,
+            source="OpenAI",
+            local=False,
         )
 
         router = Router(
-            "openai", models=(model_info,),
+            "openai",
+            models=(model_info,),
             key_provider=lambda n: None,  # No keys at all
         )
         with pytest.raises(ProviderAuthError):
             from providers.contracts import ChatRequest
-            await router.chat(ChatRequest(
-                model=model_info, messages=[type("UserMessage", (), {
-                    "content": "hi", "role": "user", "tool_calls": ()
-                })()], tools=(),
-            ))
+
+            await router.chat(
+                ChatRequest(
+                    model=model_info,
+                    messages=[type("UserMessage", (), {"content": "hi", "role": "user", "tool_calls": ()})()],
+                    tools=(),
+                )
+            )
 
 
 class TestUncertainRecovery:
@@ -1178,29 +1710,35 @@ class TestUncertainRecovery:
 
     @pytest.mark.asyncio
     async def test_recovery_after_failure(self):
-        from agent.runtime import AgentLoop, LoopBudget, AgentLoopResult
+        from agent.runtime import AgentLoop, LoopBudget
         from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="test", model_id="test", display_name="Test",
-            text=True, tool_calling=True, source="test", local=True,
+            provider_id="test",
+            model_id="test",
+            display_name="Test",
+            text=True,
+            tool_calling=True,
+            source="test",
+            local=True,
         )
 
         call_count = [0]
+
         async def failing_chat(*args, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise Exception("transient error")
-            return type("ChatResponse", (), {
-                "text": "recovered", "provider_id": "test",
-                "model_id": "test", "tool_calls": ()
-            })()
+            return type(
+                "ChatResponse", (), {"text": "recovered", "provider_id": "test", "model_id": "test", "tool_calls": ()}
+            )()
 
         mock = _make_provider_mock("test", model_info=model_info)
         mock.chat = failing_chat
 
         loop = AgentLoop(
-            provider=mock, model=model_info,
+            provider=mock,
+            model=model_info,
             budget=LoopBudget(max_tool_calls=1, max_turns=3),
         )
         result = await loop.run("test")
@@ -1227,32 +1765,39 @@ class TestFirstRunRestart:
     async def test_first_run_startup(self, tmp_path: Path):
         """Simulate first-run → initial AgentLoop execution → restart → production mode."""
         from agent.runtime import AgentLoop, LoopBudget
-        from config.settings import default_settings
         from config.schema import Settings
+        from config.settings import default_settings
 
         # 1. Settings load (first-run defaults)
         settings = default_settings()
         assert isinstance(settings, Settings)
 
         # 2. Router can be created with local provider (no keys needed)
+        from providers.contracts import ModelInfo
         from providers.router import Router
-        from providers.contracts import ModelInfo, ChatRequest
 
         model_info = ModelInfo(
-            provider_id="local", model_id="local-model", display_name="Local",
-            text=True, tool_calling=True, source="local", local=True,
+            provider_id="local",
+            model_id="local-model",
+            display_name="Local",
+            text=True,
+            tool_calling=True,
+            source="local",
+            local=True,
         )
         mock_provider = _make_provider_mock("local", model_info=model_info)
 
         router = Router(
-            "local", models=(model_info,),
+            "local",
+            models=(model_info,),
             providers={"local": mock_provider},
             network_mode="local_only",
         )
 
         # 3. AgentLoop runs with router
         loop = AgentLoop(
-            provider=mock_provider, model=model_info,
+            provider=mock_provider,
+            model=model_info,
             budget=LoopBudget(max_tool_calls=2, max_turns=2),
         )
         result = await loop.run("Hello from first-run")
@@ -1278,17 +1823,23 @@ class TestE2EConsistency:
     @pytest.mark.asyncio
     async def test_full_provider_to_agentloop_chain(self):
         """Test 1-6 combined: full chain works for a provider."""
-        from providers.contracts import ModelInfo
         from agent.runtime import AgentLoop, LoopBudget
+        from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="openai", model_id="gpt-4o", display_name="GPT-4o",
-            text=True, streaming=False, tool_calling=True, source="OpenAI",
+            provider_id="openai",
+            model_id="gpt-4o",
+            display_name="GPT-4o",
+            text=True,
+            streaming=False,
+            tool_calling=True,
+            source="OpenAI",
         )
         mock = _make_provider_mock("openai", model_info=model_info, text="done")
 
         loop = AgentLoop(
-            provider=mock, model=model_info,
+            provider=mock,
+            model=model_info,
             budget=LoopBudget(max_tool_calls=2, max_turns=2),
         )
         result = await loop.run("answer me")
@@ -1298,26 +1849,37 @@ class TestE2EConsistency:
     @pytest.mark.asyncio
     async def test_tool_chain_e2e(self, tmp_workspace: Path):
         """E2E: model → tool call → execution → model → answer."""
-        from providers.contracts import ModelInfo
         from agent.runtime import AgentLoop, LoopBudget
+        from providers.contracts import ModelInfo
 
         model_info = ModelInfo(
-            provider_id="gemini", model_id="test", display_name="Gemini",
-            text=True, tool_calling=True, source="Google",
+            provider_id="gemini",
+            model_id="test",
+            display_name="Gemini",
+            text=True,
+            tool_calling=True,
+            source="Google",
         )
 
         tc = _tool_call("file_controller", {"action": "read", "path": str(tmp_workspace / "e2e.txt")})
 
-        turns = iter([
-            type("ChatResponse", (), {
-                "text": "", "provider_id": "gemini", "model_id": "test",
-                "tool_calls": (tc,)
-            })(),
-            type("ChatResponse", (), {
-                "text": "The file content was read successfully.",
-                "provider_id": "gemini", "model_id": "test", "tool_calls": ()
-            })(),
-        ])
+        turns = iter(
+            [
+                type(
+                    "ChatResponse", (), {"text": "", "provider_id": "gemini", "model_id": "test", "tool_calls": (tc,)}
+                )(),
+                type(
+                    "ChatResponse",
+                    (),
+                    {
+                        "text": "The file content was read successfully.",
+                        "provider_id": "gemini",
+                        "model_id": "test",
+                        "tool_calls": (),
+                    },
+                )(),
+            ]
+        )
 
         async def mock_chat(*args, **kwargs):
             return next(turns)
@@ -1329,10 +1891,11 @@ class TestE2EConsistency:
             return type("ToolResult", (), {"content": "e2e content"})()
 
         loop = AgentLoop(
-            provider=mock, model=model_info,
+            provider=mock,
+            model=model_info,
             tool_executor=fake_exec,
             budget=LoopBudget(max_tool_calls=2, max_turns=3),
         )
         result = await loop.run("read the file")
         assert result.ok is True
-        assert "content" in result.final_answer.lower() or "file" in result.final_answer.lower()
+        assert "content" in result.final_answer.lower() or "file" in result.final_answer.lower()  # type: ignore[union-attr]

@@ -11,9 +11,7 @@ from types import MappingProxyType
 from i18n import t
 
 MAX_ENVELOPE_BYTES = 256 * 1024
-ALLOWED_NAMESPACES = frozenset(
-    {"session", "agent", "node", "automation", "approval", "media", "system"}
-)
+ALLOWED_NAMESPACES = frozenset({"session", "agent", "node", "automation", "approval", "media", "system"})
 
 
 class GatewayProtocolError(ValueError):
@@ -56,15 +54,16 @@ class GatewayEnvelope:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "type": self.type, "timestamp": self.timestamp,
-            "session_id": self.session_id, "request_id": self.request_id,
+            "id": self.id,
+            "type": self.type,
+            "timestamp": self.timestamp,
+            "session_id": self.session_id,
+            "request_id": self.request_id,
             "payload": dict(self.payload),
         }
 
     def to_json(self) -> bytes:
-        raw = json.dumps(
-            self.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        raw = json.dumps(self.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(raw) > MAX_ENVELOPE_BYTES:
             raise GatewayProtocolError("oversized_frame", t("error.oversized_frame"))
         return raw
@@ -94,6 +93,9 @@ class GatewayEnvelope:
 
 
 __all__ = [
-    "ALLOWED_NAMESPACES", "GatewayEnvelope", "GatewayProtocolError",
-    "MAX_ENVELOPE_BYTES", "utc_timestamp",
+    "ALLOWED_NAMESPACES",
+    "GatewayEnvelope",
+    "GatewayProtocolError",
+    "MAX_ENVELOPE_BYTES",
+    "utc_timestamp",
 ]

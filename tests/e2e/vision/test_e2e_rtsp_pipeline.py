@@ -11,7 +11,6 @@ Full integration test exercising the entire pipeline:
 """
 
 import asyncio
-import time
 from pathlib import Path
 
 import pytest
@@ -19,7 +18,6 @@ import pytest
 from acta.vision.config import VisionConfig
 from acta.vision.fixtures.rtsp import create_rtsp_fixture
 from acta.vision.provider import VisionProvider
-from acta.vision.types import FrameSource
 
 
 @pytest.fixture
@@ -237,7 +235,7 @@ class TestE2EReconnect:
             source_config={"rtsp_url": "rtsp://localhost:9999/nonexistent"},
             config=config,
         )
-        ok = await provider.start()
+        await provider.start()
         # May or may not succeed depending on environment
         # The important thing is it doesn't crash
 
@@ -260,6 +258,7 @@ class TestE2EReconnect:
 
         img_path = tmp_path / "test.png"
         from acta.vision.fixtures.image import create_test_image
+
         create_test_image(path=str(img_path))
 
         provider = VisionProvider(
@@ -292,6 +291,7 @@ class TestE2EReconnect:
 
         img_path = tmp_path / "test.png"
         from acta.vision.fixtures.image import create_test_image
+
         create_test_image(path=str(img_path))
 
         provider = VisionProvider(
@@ -314,6 +314,7 @@ class TestE2EFixtures:
 
     def test_create_test_image(self, tmp_path: Path):
         from acta.vision.fixtures.image import create_test_image
+
         p = tmp_path / "test.png"
         data = create_test_image(path=str(p))
         assert len(data) > 0
@@ -321,29 +322,34 @@ class TestE2EFixtures:
 
     def test_create_moving_images(self, tmp_path: Path):
         from acta.vision.fixtures.image import create_moving_object_image
+
         frames = create_moving_object_image(path=str(tmp_path))
         assert len(frames) > 0
 
     def test_create_grid_image(self, tmp_path: Path):
         from acta.vision.fixtures.image import create_grid_image
+
         p = tmp_path / "grid.png"
         data = create_grid_image(path=str(p))
         assert len(data) > 0
 
     def test_create_text_image(self, tmp_path: Path):
         from acta.vision.fixtures.image import create_text_image
+
         p = tmp_path / "text.png"
         data = create_text_image(path=str(p))
         assert len(data) > 0
 
     def test_create_person_roi(self, tmp_path: Path):
         from acta.vision.fixtures.image import create_person_roi
+
         p = tmp_path / "person.png"
         data = create_person_roi(path=str(p))
         assert len(data) > 0
 
     def test_create_test_video(self, tmp_path: Path):
         from acta.vision.fixtures.video import create_test_video
+
         p = tmp_path / "test.mp4"
         path = create_test_video(path=str(p))
         assert path.exists()

@@ -84,11 +84,7 @@ class McpStdioTransport:
             if future is not None and not future.done():
                 if "error" in msg:
                     error = msg["error"]
-                    future.set_exception(
-                        RuntimeError(
-                            f"MCP error: {error.get('message', 'неизвестная ошибка')}"
-                        )
-                    )
+                    future.set_exception(RuntimeError(f"MCP error: {error.get('message', 'неизвестная ошибка')}"))
                 else:
                     future.set_result(msg.get("result"))
 
@@ -185,8 +181,4 @@ class McpStdioTransport:
 
     @property
     def is_connected(self) -> bool:
-        return (
-            not self._closed
-            and self._process is not None
-            and self._process.returncode is None
-        )
+        return not self._closed and self._process is not None and self._process.returncode is None

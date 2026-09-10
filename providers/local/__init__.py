@@ -26,11 +26,13 @@ def register_factories() -> None:
     register("local", OpenAICompatibleChatProvider)
     register("ollama", OllamaChatProvider)
     register("llama_cpp", LlamaCppChatProvider)
+
     # openai_compat: factory that returns an instance with provider_id="openai_compat"
     def _openai_compat_factory(**kwargs):
         instance = OpenAICompatibleChatProvider(**kwargs)
         instance.provider_id = "openai_compat"
         return instance
+
     register("openai_compat", _openai_compat_factory)
 
 
@@ -48,4 +50,5 @@ __all__ = [
     "TransportResponse",
     "is_loopback_url",
     "register_factories",
+    "resolve_local_capabilities",
 ]

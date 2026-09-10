@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from providers.contracts import ChatRequest, ModelInfo, UserMessage
 from providers.router import NeverFallbackPolicy, Router
+
+logger = logging.getLogger(__name__)
 
 
 class LocalOnlyBlocked(RuntimeError):

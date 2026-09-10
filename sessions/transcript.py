@@ -41,14 +41,16 @@ def entry_fields(message: ConversationMessage) -> list[TranscriptFields]:
             for index, call in enumerate(message.tool_calls)
         ]
     if isinstance(message, ToolResultMessage):
-        return [{
-            "kind": TranscriptKind.TOOL_RESULT,
-            "role": "tool",
-            "tool_call_id": message.tool_call_id,
-            "tool_name": message.tool_name,
-            "data": {"result": message.result, "error": message.error},
-            "artifacts": tuple(_artifact(item) for item in message.artifacts),
-        }]
+        return [
+            {
+                "kind": TranscriptKind.TOOL_RESULT,
+                "role": "tool",
+                "tool_call_id": message.tool_call_id,
+                "tool_name": message.tool_name,
+                "data": {"result": message.result, "error": message.error},
+                "artifacts": tuple(_artifact(item) for item in message.artifacts),
+            }
+        ]
     if isinstance(message, UserMessage):
         return [{"kind": TranscriptKind.TEXT, "role": "user", "text": message.content}]
     if isinstance(message, SystemMessage):
@@ -67,9 +69,7 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
     def flush_calls() -> None:
         nonlocal pending_calls, pending_turn, pending_text
         if pending_calls:
-            result.append(
-                AssistantToolCallMessage(tuple(pending_calls), content=pending_text)
-            )
+            result.append(AssistantToolCallMessage(tuple(pending_calls), content=pending_text))
         pending_calls = []
         pending_turn = None
         pending_text = ""
@@ -81,16 +81,11 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
             pending_turn = entry.turn_id
             pending_text = pending_text or entry.text or ""
             arguments = entry.data if isinstance(entry.data, dict) else {}
-            pending_calls.append(
-                ToolCall(entry.tool_call_id or "", entry.tool_name or "", arguments)
-            )
+            pending_calls.append(ToolCall(entry.tool_call_id or "", entry.tool_name or "", arguments))
             continue
         flush_calls()
         if entry.kind is TranscriptKind.TEXT:
-            if (
-                entry.role == "assistant"
-                and entry.state is not TranscriptState.COMPLETED
-            ):
+            if entry.role == "assistant" and entry.state is not TranscriptState.COMPLETED:
                 continue
             if entry.role == "user":
                 result.append(UserMessage(entry.text or ""))
@@ -100,12 +95,15 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
                 result.append(AssistantMessage(entry.text or ""))
         elif entry.kind is TranscriptKind.TOOL_RESULT:
             payload = entry.data if isinstance(entry.data, dict) else {}
-            result.append(ToolResultMessage(
-                tool_call_id=entry.tool_call_id or "",
-                tool_name=entry.tool_name or "",
-                result=payload.get("result"), error=payload.get("error"),
-                artifacts=entry.artifacts,
-            ))
+            result.append(
+                ToolResultMessage(
+                    tool_call_id=entry.tool_call_id or "",
+                    tool_name=entry.tool_name or "",
+                    result=payload.get("result"),
+                    error=payload.get("error"),
+                    artifacts=entry.artifacts,
+                )
+            )
     flush_calls()
     protocol_safe: list[ConversationMessage] = []
     index = 0
@@ -128,11 +126,13 @@ def messages_from_entries(entries: Iterable[TranscriptEntry]) -> tuple[Conversat
                 protocol_safe.append(tool_result)
                 cursor += 1
             for call_id, name in expected.items():
-                protocol_safe.append(ToolResultMessage(
-                    tool_call_id=call_id,
-                    tool_name=name,
-                    error="Execution was interrupted; result is unknown and was not replayed.",
-                ))
+                protocol_safe.append(
+                    ToolResultMessage(
+                        tool_call_id=call_id,
+                        tool_name=name,
+                        error="Execution was interrupted; result is unknown and was not replayed.",
+                    )
+                )
             index = cursor
             continue
         if isinstance(message, ToolResultMessage):

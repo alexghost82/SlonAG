@@ -15,6 +15,7 @@ from agent.latency import LatencyTrace
 from i18n import t
 from agent.steering import SteeringKind, SteeringQueue, SteeringSignal
 from acta.tools.contracts import ToolResult
+from runtime.metrics import inc
 from providers.contracts import (
     AssistantMessage,
     AssistantToolCallMessage,
@@ -212,6 +213,7 @@ class AgentLoop:
     ) -> AgentLoopResult:
         """Executes the multi-turn agent loop until a final answer or termination condition is reached."""
         # Check for pre-set cancellation at loop start
+        inc("agent_requests_total")
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise asyncio.CancelledError("Agent cancelled before start")
 
@@ -264,8 +266,10 @@ class AgentLoop:
                         append_message(UserMessage(text))
 
             if self.budget.turn_count >= self.budget.max_turns:
+                inc("agent_failures_total")
                 return AgentLoopResult(False, steps=steps, reason=f"Max turns ({self.budget.max_turns}) reached")
             self.budget.turn_count += 1
+            inc("agent_loop_turns")
 
             # Dispatch call to model provider
             try:
@@ -274,6 +278,8 @@ class AgentLoop:
                     self._call_provider(messages, user_goal), timeout=self.budget.remaining_seconds()
                 )
             except TimeoutError:
+                inc("agent_failures_total")
+                inc("provider_failures_total")
                 return AgentLoopResult(False, steps=steps, reason=f"Timeout ({self.budget.timeout_seconds:.1f}s) exceeded")
             except asyncio.CancelledError:
                 raise
@@ -282,7 +288,9 @@ class AgentLoop:
                 import logging
                 logging.getLogger(__name__).warning("Provider call failed, will retry: %s", exc)
                 self.budget.provider_retry_count += 1
+                inc("provider_failures_total")
                 if self.budget.provider_retry_count >= self.budget.max_provider_retries:
+                    inc("agent_failures_total")
                     return AgentLoopResult(
                         False,
                         steps=steps,
@@ -313,6 +321,16 @@ class AgentLoop:
                 # Record for loop detection
                 for tc in tool_calls:
                     self.loop_detector.record_call(tc.name, dict(tc.arguments))
+
+                # Turn/tool/time budget wins when already exhausted. LoopDetector
+                # still fires for runaway calls while budget remains.
+                exceeded, reason = self.budget.is_exceeded()
+                if exceeded:
+                    return AgentLoopResult(
+                        ok=False,
+                        steps=steps,
+                        reason=reason or "Budget exceeded",
+                    )
 
                 # Check loop before executing
                 loop_detected, loop_reason = self.loop_detector.check_loop()
@@ -372,6 +390,7 @@ class AgentLoop:
                     try:
                         exec_result = await self._execute_tool(tool_id, tool_name, args, user_goal)
                     except Exception as exc:
+                        inc("tool_failures_total")
                         observations.append(
                             Observation(
                                 tool_call_id=tool_id,
@@ -516,7 +535,12 @@ class AgentLoop:
             effective_messages = list(messages)
 
         req = ChatRequest(model=self.model, messages=tuple(effective_messages), tools=tools)
-        response = await self.provider.chat(req)
+        try:
+            response = await self.provider.chat(req)
+        except Exception:
+            inc("provider_failures_total")
+            raise
+        inc("provider_requests_total")
         if not (hasattr(response, "text") and hasattr(response, "tool_calls") and hasattr(response, "provider_id") and hasattr(response, "model_id")):
             raise TypeError("provider.chat() must return an object with text, tool_calls, provider_id, model_id attributes")
         return response
@@ -524,6 +548,7 @@ class AgentLoop:
     async def _execute_tool(
         self, tool_call_id: str, tool_name: str, args: dict, goal: str
     ) -> Any:
+        inc("tool_calls_total")
         executor = self.tool_executor
         if executor is None:
             try:

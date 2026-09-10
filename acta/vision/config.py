@@ -79,6 +79,7 @@ class VisionConfig:
     def with_source(self, source_type: str, **kwargs: Any) -> VisionConfig:
         """Return a copy with source_config updated."""
         import copy
+
         c = copy.copy(self)
         c.source_config["type"] = source_type
         c.source_config.update(kwargs)

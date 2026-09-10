@@ -1,9 +1,12 @@
+import logging
 import sys
 import threading
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
 from i18n import t
@@ -70,7 +73,7 @@ def _inject_context(
                 combined = "\n\n---\n\n".join(all_results)
                 translated = _translate_to_goal_language(combined, goal)
                 params["content"] = translated
-                print(t("actions.injecting_translated"))
+                logger.info("%s", t("actions.injecting_translated"))
 
     return params
 
@@ -102,7 +105,7 @@ def _translate_to_goal_language(content: str, goal: str) -> str:
         model = genai.GenerativeModel("gemini-2.5-flash")
 
         target_lang = _detect_language(goal)
-        print(t("actions.translating_to", lang=target_lang))
+        logger.info("%s", t("actions.translating_to", lang=target_lang))
 
         prompt = (
             f"You are a professional translator. "
@@ -116,10 +119,10 @@ def _translate_to_goal_language(content: str, goal: str) -> str:
         )
         response = model.generate_content(prompt)
         translated = response.text.strip()
-        print(t("actions.translation_done", lang=target_lang))
+        logger.info("%s", t("actions.translation_done", lang=target_lang))
         return translated
     except Exception as e:
-        print(t("actions.translation_failed", e=str(e)))
+        logger.warning("%s", t("actions.translation_failed", e=str(e)))
         return content
 
 
@@ -224,7 +227,7 @@ class AgentExecutor:
         from agent.error_handler import ErrorDecision, analyze_error, generate_fix
         from agent.planner import create_plan, replan
 
-        print(f"\n[Executor] {goal}")
+        logger.info("Executor goal: %s", goal)
 
         replan_attempts = 0
         completed_steps = []
@@ -257,7 +260,7 @@ class AgentExecutor:
 
                 params = _inject_context(params, tool, step_results, goal=goal)
 
-                print(f"\n[Executor] {t("planner.plan_step", step=step_num, tool=tool, desc=desc)}")
+                logger.info("%s", t("planner.plan_step", step=step_num, tool=tool, desc=desc))
 
                 attempt = 1
                 step_ok = False
@@ -269,17 +272,17 @@ class AgentExecutor:
                         result = self._call_tool(tool, params, speak, intent=goal)
                         step_results[step_num] = result
                         completed_steps.append(step)
-                        print(
-                            f"[Executor] ✅ Step {step_num} done: {str(result)[:100]}"
-                        )
+                        logger.info("Step %s done: %s", step_num, str(result)[:100])
                         step_ok = True
                         break
 
                     except Exception as e:
                         error_msg = str(e)
-                        print(
-                            f"[Executor] ❌ Step {step_num} attempt {attempt} "
-                            f"failed: {error_msg}"
+                        logger.warning(
+                            "Step %s attempt %s failed: %s",
+                            step_num,
+                            attempt,
+                            error_msg,
                         )
 
                         recovery = analyze_error(step, error_msg, attempt=attempt)
@@ -296,7 +299,7 @@ class AgentExecutor:
                             continue
 
                         elif decision == ErrorDecision.SKIP:
-                            print(f"[Executor] {t("actions.skipping_step", step=step_num)}")
+                            logger.info("%s", t("actions.skipping_step", step=step_num))
                             completed_steps.append(step)
                             step_ok = True
                             break
@@ -327,7 +330,7 @@ class AgentExecutor:
                                     step_ok = True
                                     break
                                 except Exception as fix_err:
-                                    print(f"[Executor] {t("actions.fix_failed", err=str(fix_err))}")
+                                    logger.warning("%s", t("actions.fix_failed", err=str(fix_err)))
 
                             failed_step = step
                             failed_error = error_msg

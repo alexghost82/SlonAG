@@ -103,15 +103,9 @@ def test_select_filters_by_all_required_scopes() -> None:
 
 def test_select_combines_filters_and_keeps_deterministic_order() -> None:
     registry = ToolRegistry()
-    registry.register(
-        _spec("zeta", capabilities=frozenset({"tools"}), scopes=frozenset({"local"}))
-    )
-    registry.register(
-        _spec("alpha", capabilities=frozenset({"tools"}), scopes=frozenset({"local"}))
-    )
-    registry.register(
-        _spec("cloud", capabilities=frozenset({"tools"}), scopes=frozenset({"cloud"}))
-    )
+    registry.register(_spec("zeta", capabilities=frozenset({"tools"}), scopes=frozenset({"local"})))
+    registry.register(_spec("alpha", capabilities=frozenset({"tools"}), scopes=frozenset({"local"})))
+    registry.register(_spec("cloud", capabilities=frozenset({"tools"}), scopes=frozenset({"cloud"})))
 
     selected = registry.select(capabilities={"tools"}, scopes={"local"})
 

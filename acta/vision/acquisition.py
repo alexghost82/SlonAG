@@ -74,7 +74,6 @@ class FrameSourceBase(ABC):
                 traceback.print_exc()
         return False
 
-    @property
     def is_connected(self) -> bool:
         return not self._stopped
 
@@ -89,20 +88,13 @@ class FrameSourceBase(ABC):
                 traceback.print_exc()
 
     @abstractmethod
-    def _start_impl(self) -> None:
-        ...
+    def _start_impl(self) -> None: ...
 
     @abstractmethod
-    def _stop_impl(self) -> None:
-        ...
+    def _stop_impl(self) -> None: ...
 
     @abstractmethod
-    async def acquire_frame(self) -> Frame | None:
-        ...
-
-    @abstractmethod
-    def is_connected(self) -> bool:
-        ...
+    async def acquire_frame(self) -> Frame | None: ...
 
 
 class ImageSource(FrameSourceBase):
@@ -145,11 +137,12 @@ class ImageSource(FrameSourceBase):
 class ScreenshotSource(FrameSourceBase):
     """Acquire frames via mss (cross-platform screenshot)."""
 
-    _mss = None
+    _mss: Any = None
 
     def _start_impl(self) -> None:
         if ScreenshotSource._mss is None:
-            import mss  # type: ignore[import-untyped]
+            import mss
+
             ScreenshotSource._mss = mss.mss()
         self._monitor = ScreenshotSource._mss.monitors[0]
 
@@ -160,14 +153,17 @@ class ScreenshotSource(FrameSourceBase):
         if self._monitor is None:
             return None
         try:
-            img = ScreenshotSource._mss.grab(self._monitor)
-            raw = img.bgra  # type: ignore[attr-defined]
+            mss_client = ScreenshotSource._mss
+            if mss_client is None:
+                return None
+            img = mss_client.grab(self._monitor)
+            raw = img.bgra
             return Frame(
                 index=0,
                 source=FrameSource.SCREENSHOT,
                 raw=bytes(raw),
-                width=img.width,  # type: ignore[attr-defined]
-                height=img.height,  # type: ignore[attr-defined]
+                width=img.width,
+                height=img.height,
             )
         except Exception:
             return None
@@ -186,6 +182,7 @@ class ScreenSource(FrameSourceBase):
     def _start_impl(self) -> None:
         try:
             import PIL.Image  # noqa: F401
+
             self._screenshot_func = PIL.Image.screencrop if hasattr(PIL.Image, "screencrop") else None
         except ImportError:
             self._screenshot_func = None
@@ -197,8 +194,9 @@ class ScreenSource(FrameSourceBase):
         if self._screenshot_func is None:
             try:
                 import PIL.Image as Image
+
                 screenshot = Image.new("RGB", (100, 100))
-                screenshot = Image.open("/dev/null") if os.path.exists("/dev/null") else None
+                screenshot = Image.open("/dev/null") if os.path.exists("/dev/null") else None  # type: ignore[assignment]
                 if screenshot is None:
                     return None
             except Exception:
@@ -219,7 +217,8 @@ class CameraSource(FrameSourceBase):
         self.camera_id = config.extra.get("camera_id", 0)
 
     def _start_impl(self) -> None:
-        import cv2  # type: ignore[import-untyped]
+        import cv2
+
         self._cap = cv2.VideoCapture(self.camera_id)
         if not self._cap.isOpened():
             self._cap = None
@@ -268,11 +267,11 @@ class RTSPSource(FrameSourceBase):
     def __init__(self, config: AcquisitionConfig) -> None:
         super().__init__(config)
         self.stream_url = config.extra.get("rtsp_url", "rtsp://localhost:8554/live")
-        self._process = None
+        self._process: Any = None
         self._frame_index = 0
         self._use_tcp_mock: bool = config.extra.get("use_tcp_mock", False)
-        self._tcp_reader = None
-        self._tcp_writer = None
+        self._tcp_reader: Any = None
+        self._tcp_writer: Any = None
         self._tcp_connected: bool = False
 
     def _parse_rtsp_port(self) -> int:
@@ -295,15 +294,24 @@ class RTSPSource(FrameSourceBase):
         else:
             # Real RTSP: spawn ffmpeg subprocess
             import subprocess  # noqa: F401
+
             self._process = subprocess.Popen(
                 [
-                    "ffmpeg", "-nostdin", "-y",
-                    "-fflags", "nobuffer",
-                    "-rtsp_transport", "tcp",
-                    "-i", self.stream_url,
-                    "-f", "image2pipe",
-                    "-vcodec", "mjpeg",
-                    "-pix_fmt", "yuvj444p",
+                    "ffmpeg",
+                    "-nostdin",
+                    "-y",
+                    "-fflags",
+                    "nobuffer",
+                    "-rtsp_transport",
+                    "tcp",
+                    "-i",
+                    self.stream_url,
+                    "-f",
+                    "image2pipe",
+                    "-vcodec",
+                    "mjpeg",
+                    "-pix_fmt",
+                    "yuvj444p",
                     "pipe:1",
                 ],
                 stdout=subprocess.PIPE,
@@ -347,9 +355,7 @@ class RTSPSource(FrameSourceBase):
                 return None
 
             # Read 4-byte big-endian size prefix
-            size_data = await asyncio.wait_for(
-                self._tcp_reader.readexactly(4), timeout=2.0
-            )
+            size_data = await asyncio.wait_for(self._tcp_reader.readexactly(4), timeout=2.0)
             if not size_data:
                 # Connection closed
                 self._tcp_connected = False
@@ -363,9 +369,7 @@ class RTSPSource(FrameSourceBase):
                 self._tcp_connected = False
                 return None
 
-            raw = await asyncio.wait_for(
-                self._tcp_reader.readexactly(size), timeout=2.0
-            )
+            raw = await asyncio.wait_for(self._tcp_reader.readexactly(size), timeout=2.0)
             if not raw:
                 self._tcp_connected = False
                 return None
@@ -403,7 +407,7 @@ class RTSPSource(FrameSourceBase):
             if end != -1:
                 # Found a complete JPEG frame
                 jpeg_data = self._buf[: end + 2]
-                self._buf = self._buf[end + 2:]
+                self._buf = self._buf[end + 2 :]
                 self._frame_index += 1
                 return Frame(
                     index=self._frame_index,
@@ -425,11 +429,7 @@ class RTSPSource(FrameSourceBase):
             if getattr(self, "_lazy_connect_pending", False):
                 return True  # will be validated when we try to read
             return self._tcp_connected
-        return (
-            self._process is not None
-            and self._process.poll() is None
-            and self._process.stdout is not None
-        )
+        return self._process is not None and self._process.poll() is None and self._process.stdout is not None
 
     async def _tcp_connect(self) -> None:
         """Connect to the mock RTSP fixture server via TCP.
@@ -439,9 +439,7 @@ class RTSPSource(FrameSourceBase):
         """
         port = self._parse_rtsp_port()
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection("127.0.0.1", port), timeout=3.0
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", port), timeout=3.0)
             # Send a simple request so the fixture server starts sending frames
             request = b"GET /live HTTP/1.0\r\nHost: localhost\r\n\r\n"
             writer.write(request)

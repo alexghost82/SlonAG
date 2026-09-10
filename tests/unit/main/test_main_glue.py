@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-
-import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from acta.safety import (
-    DecisionKind, RiskLevel, SafetyDecision, UntrustedSource,
+    DecisionKind,
+    RiskLevel,
+    SafetyDecision,
+    UntrustedSource,
 )
 from acta.tools import ToolRegistry, ToolSpec
 from sessions import ModelPolicy, SessionManager, SessionStore, TranscriptKind
@@ -97,13 +100,18 @@ def test_live_uses_explicit_audio_model_metadata() -> None:
 def test_live_events_keep_session_identity_across_connection_generations() -> None:
     mod = _load_main_module()
     ui = type(
-        "UI", (), {
-            "on_text_command": None, "control_plane": None, "muted": False,
-            "set_state": lambda *_args: None, "write_log": lambda *_args: None,
+        "UI",
+        (),
+        {
+            "on_text_command": None,
+            "control_plane": None,
+            "muted": False,
+            "set_state": lambda *_args: None,
+            "write_log": lambda *_args: None,
         },
     )()
     live = mod.SlonLive(ui, session_id="logical-session")
-    events = []
+    events = []  # type: ignore[var-annotated]
     live.runtime_events.subscribe(events.append)
 
     live._on_connected(object(), object())
@@ -112,9 +120,7 @@ def test_live_events_keep_session_identity_across_connection_generations() -> No
     live._on_connected(object(), object())
     live._emit_event(mod.RuntimeEventKind.LISTENING)
 
-    assert [event.session_id for event in events] == [
-        "logical-session", "logical-session"
-    ]
+    assert [event.session_id for event in events] == ["logical-session", "logical-session"]
     assert [event.connection_generation for event in events] == [1, 2]
 
 
@@ -124,17 +130,20 @@ async def test_live_close_is_idempotent_and_closes_logical_session() -> None:
     closed = []
     manager = SimpleNamespace(
         create=lambda **_kwargs: SimpleNamespace(id="session-close"),
-        close=lambda session_id, *, workspace_id: closed.append(
-            (session_id, workspace_id)
-        ),
+        close=lambda session_id, *, workspace_id: closed.append((session_id, workspace_id)),
     )
     stack = SimpleNamespace(
-        session_manager=manager, tool_registry=None, safety=None,
+        session_manager=manager,
+        tool_registry=None,
+        safety=None,
         summary_lines=lambda: [],
     )
     ui = SimpleNamespace(
-        on_text_command=None, control_plane=None, muted=False,
-        set_state=lambda *_args: None, write_log=lambda *_args: None,
+        on_text_command=None,
+        control_plane=None,
+        muted=False,
+        set_state=lambda *_args: None,
+        write_log=lambda *_args: None,
     )
     live = mod.SlonLive(ui, runtime_stack=stack)
     live.session = SimpleNamespace(close=AsyncMock())
@@ -153,41 +162,53 @@ async def test_live_tool_call_and_result_are_durable_and_correlated(
     mod = _load_main_module()
     manager = SessionManager(SessionStore(tmp_path / "sessions.sqlite3"))
     registry = ToolRegistry()
-    registry.register(ToolSpec(
-        name="read", description="read", input_schema={"type": "object"},
-        output_schema=None, handler=lambda arguments: {"value": arguments["value"]},
-        risk=RiskLevel.READ, read_only=True, idempotent=True,
-        side_effects=False, parallel_safe=True,
-    ))
+    registry.register(
+        ToolSpec(
+            name="read",
+            description="read",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda arguments: {"value": arguments["value"]},
+            risk=RiskLevel.READ,
+            read_only=True,
+            idempotent=True,
+            side_effects=False,
+            parallel_safe=True,
+        )
+    )
     policy = SimpleNamespace(
         validate_args=lambda _name, arguments: dict(arguments),
         authorize=lambda name, arguments, **_kwargs: SafetyDecision(
-            DecisionKind.ALLOW, name, RiskLevel.READ, UntrustedSource.USER,
-            "read", dict(arguments),
+            DecisionKind.ALLOW,
+            name,
+            RiskLevel.READ,
+            UntrustedSource.USER,
+            "read",
+            dict(arguments),
         ),
     )
     stack = SimpleNamespace(
-        session_manager=manager, tool_registry=registry, safety=policy,
+        session_manager=manager,
+        tool_registry=registry,
+        safety=policy,
         summary_lines=lambda: [],
     )
     ui = SimpleNamespace(
-        on_text_command=None, control_plane=None, muted=False, current_file=None,
-        set_state=lambda *_args: None, write_log=lambda *_args: None,
+        on_text_command=None,
+        control_plane=None,
+        muted=False,
+        current_file=None,
+        set_state=lambda *_args: None,
+        write_log=lambda *_args: None,
     )
     live = mod.SlonLive(ui, runtime_stack=stack)
 
-    response = await live._execute_tool(
-        SimpleNamespace(id="call-live", name="read", args={"value": 7})
-    )
+    response = await live._execute_tool(SimpleNamespace(id="call-live", name="read", args={"value": 7}))
 
     assert response.id == "call-live"
     transcript = manager.get(live.session_id, workspace_id="desktop").transcript
-    assert [entry.kind for entry in transcript] == [
-        TranscriptKind.TOOL_CALL, TranscriptKind.TOOL_RESULT
-    ]
-    assert [entry.tool_call_id for entry in transcript] == [
-        "call-live", "call-live"
-    ]
+    assert [entry.kind for entry in transcript] == [TranscriptKind.TOOL_CALL, TranscriptKind.TOOL_RESULT]
+    assert [entry.tool_call_id for entry in transcript] == ["call-live", "call-live"]
 
 
 @pytest.mark.asyncio
@@ -197,26 +218,44 @@ async def test_live_parallel_batch_persists_calls_then_ordered_results(
     mod = _load_main_module()
     manager = SessionManager(SessionStore(tmp_path / "sessions.sqlite3"))
     registry = ToolRegistry()
-    registry.register(ToolSpec(
-        name="read", description="read", input_schema={"type": "object"},
-        output_schema=None, handler=lambda arguments: arguments.get("value"),
-        risk=RiskLevel.READ, read_only=True, idempotent=True,
-        side_effects=False, parallel_safe=True,
-    ))
+    registry.register(
+        ToolSpec(
+            name="read",
+            description="read",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda arguments: arguments.get("value"),
+            risk=RiskLevel.READ,
+            read_only=True,
+            idempotent=True,
+            side_effects=False,
+            parallel_safe=True,
+        )
+    )
     policy = SimpleNamespace(
         validate_args=lambda _name, arguments: dict(arguments),
         authorize=lambda name, arguments, **_kwargs: SafetyDecision(
-            DecisionKind.ALLOW, name, RiskLevel.READ, UntrustedSource.USER,
-            "read", dict(arguments),
+            DecisionKind.ALLOW,
+            name,
+            RiskLevel.READ,
+            UntrustedSource.USER,
+            "read",
+            dict(arguments),
         ),
     )
     stack = SimpleNamespace(
-        session_manager=manager, tool_registry=registry, safety=policy,
+        session_manager=manager,
+        tool_registry=registry,
+        safety=policy,
         summary_lines=lambda: [],
     )
     ui = SimpleNamespace(
-        on_text_command=None, control_plane=None, muted=False, current_file=None,
-        set_state=lambda *_args: None, write_log=lambda *_args: None,
+        on_text_command=None,
+        control_plane=None,
+        muted=False,
+        current_file=None,
+        set_state=lambda *_args: None,
+        write_log=lambda *_args: None,
     )
     live = mod.SlonLive(ui, runtime_stack=stack)
     calls = [
@@ -234,7 +273,7 @@ async def test_live_parallel_batch_persists_calls_then_ordered_results(
         (TranscriptKind.TOOL_RESULT, "a"),
         (TranscriptKind.TOOL_RESULT, "b"),
     ]
-    assert transcript[2].data["result"] == "first"
+    assert transcript[2].data["result"] == "first"  # type: ignore[index]
 
 
 @pytest.mark.asyncio
@@ -246,17 +285,20 @@ async def test_live_close_logical_state_survives_provider_close_error() -> None:
         close=lambda session_id, *, workspace_id: closed.append(session_id),
     )
     stack = SimpleNamespace(
-        session_manager=manager, tool_registry=None, safety=None,
+        session_manager=manager,
+        tool_registry=None,
+        safety=None,
         summary_lines=lambda: [],
     )
     ui = SimpleNamespace(
-        on_text_command=None, control_plane=None, muted=False,
-        set_state=lambda *_args: None, write_log=lambda *_args: None,
+        on_text_command=None,
+        control_plane=None,
+        muted=False,
+        set_state=lambda *_args: None,
+        write_log=lambda *_args: None,
     )
     live = mod.SlonLive(ui, runtime_stack=stack)
-    live.session = SimpleNamespace(
-        close=AsyncMock(side_effect=RuntimeError("provider close failed"))
-    )
+    live.session = SimpleNamespace(close=AsyncMock(side_effect=RuntimeError("provider close failed")))
 
     with pytest.raises(RuntimeError, match="provider close failed"):
         await live.close()
@@ -267,18 +309,24 @@ def test_live_resume_rejects_different_persisted_model(tmp_path: Path) -> None:
     mod = _load_main_module()
     manager = SessionManager(SessionStore(tmp_path / "sessions.sqlite3"))
     session = manager.create(
-        title="existing", agent_id="slon",
+        title="existing",
+        agent_id="slon",
         model_policy=ModelPolicy("gemini", "other-model"),
         workspace_id="desktop",
     )
     manager.close(session.id, workspace_id="desktop")
     stack = SimpleNamespace(
-        session_manager=manager, tool_registry=None, safety=None,
+        session_manager=manager,
+        tool_registry=None,
+        safety=None,
         summary_lines=lambda: [],
     )
     ui = SimpleNamespace(
-        on_text_command=None, control_plane=None, muted=False,
-        set_state=lambda *_args: None, write_log=lambda *_args: None,
+        on_text_command=None,
+        control_plane=None,
+        muted=False,
+        set_state=lambda *_args: None,
+        write_log=lambda *_args: None,
     )
     with pytest.raises(ValueError, match="model policy"):
         mod.SlonLive(ui, runtime_stack=stack, session_id=session.id)

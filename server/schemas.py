@@ -57,6 +57,16 @@ _ERROR_KEYS: dict[str, str] = {
 }
 
 _UNKNOWN_KEY = "api.unknown"
+_MESSAGES = {
+    CODE_OK: "OK",
+    CODE_INVALID_REQUEST: "Invalid request",
+    CODE_MISSING_FIELD: "Missing field",
+    CODE_INVALID_TYPE: "Invalid type",
+    CODE_UNAUTHORIZED: "Unauthorized",
+    CODE_NOT_FOUND: "Not found",
+    CODE_APPROVAL_REQUIRED: "Approval required",
+    CODE_IDEMPOTENCY_CONFLICT: "Idempotency conflict",
+}
 
 
 def api_message(code: str) -> str:
@@ -837,6 +847,29 @@ def schema_field_names(cls: type[object]) -> frozenset[str]:
     return frozenset(f.name for f in fields(cls))  # type: ignore[arg-type]
 
 
+@dataclass
+class ChatRequestSchema:
+    """Compatibility alias fields used by e2e import tests. Not a new wire format."""
+
+    model: str = ""
+    messages: list[object] | None = None
+    message: str = ""
+    idempotency_key: str = ""
+    conversation_id: str | None = None
+
+
+@dataclass
+class SessionCreateSchema:
+    session_id: str = ""
+    agent_id: str = ""
+
+
+@dataclass
+class ToolResultSchema:
+    tool_name: str = ""
+    content: str = ""
+
+
 __all__ = [
     "API_VERSION_PREFIX",
     "CODE_APPROVAL_REQUIRED",
@@ -853,7 +886,10 @@ __all__ = [
     "ApprovalInfo",
     "ApprovalListResponse",
     "ChatRequest",
+    "ChatRequestSchema",
     "ChatStreamEvent",
+    "SessionCreateSchema",
+    "ToolResultSchema",
     "MemoryDeleteRequest",
     "MemoryEntry",
     "MemoryGetResponse",
@@ -894,7 +930,10 @@ __all__ = [
     "ApprovalInfo",
     "ApprovalListResponse",
     "ChatRequest",
+    "ChatRequestSchema",
     "ChatStreamEvent",
+    "SessionCreateSchema",
+    "ToolResultSchema",
     "MemoryDeleteRequest",
     "MemoryEntry",
     "MemoryGetResponse",

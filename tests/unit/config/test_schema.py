@@ -162,6 +162,7 @@ def test_rejects_malformed_local_model_config(payload, match):
 
 # ── Tests for model_id and provider_settings ──────────────────────────
 
+
 def test_model_id_empty_by_default():
     s = validate_settings({})
     assert s.model_id == ""
@@ -202,9 +203,7 @@ def test_provider_settings_rejects_unknown_provider():
 
 def test_provider_settings_rejects_invalid_remote_enabled():
     with pytest.raises(SettingsValidationError, match="remote_enabled"):
-        validate_settings(
-            {"provider_settings": {"ollama": {"remote_enabled": "yes"}}}
-        )
+        validate_settings({"provider_settings": {"ollama": {"remote_enabled": "yes"}}})
 
 
 def test_provider_settings_round_trip():
@@ -234,9 +233,7 @@ def test_provider_settings_rejects_non_object_value():
 def test_provider_settings_rejects_unknown_keys_in_nested():
     # provider_settings.{pid} accepts base_url and remote_enabled only
     with pytest.raises(SettingsValidationError, match="unknown field"):
-        validate_settings(
-            {"provider_settings": {"ollama": {"unknown_key": "x", "base_url": ""}}}
-        )
+        validate_settings({"provider_settings": {"ollama": {"unknown_key": "x", "base_url": ""}}})
 
 
 def test_openai_compat_provider_settings():

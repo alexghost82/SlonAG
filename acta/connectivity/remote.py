@@ -156,6 +156,7 @@ class RemoteAdapter:
         """
         try:
             import websockets
+
             return await websockets.connect(
                 url,
                 timeout=self.connect_timeout,
@@ -191,9 +192,9 @@ class RemoteAdapter:
         import random
 
         key = base64.b64encode(random.randbytes(16)).decode("ascii")
-        accept = base64.b64encode(
-            hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
-        ).decode("ascii")
+        base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode(
+            "ascii"
+        )
 
         request = (
             f"GET {parsed.path or '/'} HTTP/1.1\r\n"
@@ -237,15 +238,18 @@ class _StdlibWebSocketForRemote:
 
     async def send(self, data: str) -> None:
         import json as _json
+
         if not isinstance(data, str):
             data = _json.dumps(data)
         from acta.connectivity.transport import _encode_text_frame
+
         frame = _encode_text_frame(data.encode("utf-8"))
         self.writer.write(frame)
         await self.writer.drain()
 
     async def recv(self) -> str | None:
         from acta.connectivity.transport import _decode_text_frame
+
         data = await self.reader.read(65536)
         if not data:
             return None
@@ -253,7 +257,8 @@ class _StdlibWebSocketForRemote:
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
         import acta.connectivity.transport as _t
-        frame = _t._encode_text_frame(b"")
+
+        _t._encode_text_frame(b"")
         self.writer.close()
         try:
             await self.writer.wait_closed()

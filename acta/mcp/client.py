@@ -179,18 +179,13 @@ class McpClient:
                     input_schema=item.get("inputSchema", {}),
                     side_effect=item.get("annotations", {}).get("writesResult", False),
                     side_effect_class=(
-                        "reversible"
-                        if not item.get("annotations", {}).get("writesResult", False)
-                        else "irreversible"
+                        "reversible" if not item.get("annotations", {}).get("writesResult", False) else "irreversible"
                     ),
                 )
                 tools[qualified_name] = spec
             self._tools = tools
             # Build reverse index: unqualified_name -> qualified_name
-            self._unqualified_tools = {
-                self._unqualified_name(q): q
-                for q in tools
-            }
+            self._unqualified_tools = {self._unqualified_name(q): q for q in tools}
             return list(tools.values())
         except Exception as exc:
             self._tools = {}
@@ -279,17 +274,21 @@ class McpClient:
             for item in contents:
                 if isinstance(item, dict):
                     if "text" in item:
-                        parsed_contents.append({
-                            "uri": uri,
-                            "mime_type": item.get("mimeType"),
-                            "content": str(item["text"])[:self._max_response_chars],
-                        })
+                        parsed_contents.append(
+                            {
+                                "uri": uri,
+                                "mime_type": item.get("mimeType"),
+                                "content": str(item["text"])[: self._max_response_chars],
+                            }
+                        )
                     elif "blob" in item:
-                        parsed_contents.append({
-                            "uri": uri,
-                            "mime_type": item.get("mimeType"),
-                            "content": f"<binary {len(str(item['blob']))} bytes>",
-                        })
+                        parsed_contents.append(
+                            {
+                                "uri": uri,
+                                "mime_type": item.get("mimeType"),
+                                "content": f"<binary {len(str(item['blob']))} bytes>",
+                            }
+                        )
             return McpCallResult(ok=True, resources=parsed_contents)
         except Exception as exc:
             return McpCallResult(ok=False, error=str(exc))
@@ -317,7 +316,7 @@ class McpClient:
                 error=f"Неизвестный MCP-инструмент: '{original_name}'",
             )
 
-        qualified_name = self._unqualified_tools[original_name]
+        self._unqualified_tools[original_name]
         try:
             result = await self._transport.send_message(  # type: ignore[union-attr]
                 "tools/call",
@@ -345,7 +344,7 @@ class McpClient:
                         continue
                     if block.get("type") == "text":
                         text_val = block.get("text", "")
-                        texts.append(str(text_val)[:self._max_response_chars])
+                        texts.append(str(text_val)[: self._max_response_chars])
                     elif block.get("type") == "image":
                         texts.append(f"<image {block.get('mimeType', 'unknown')}>")
                     elif block.get("type") == "resource":
@@ -397,10 +396,12 @@ class McpClient:
                     for c in content_items:
                         if isinstance(c, dict) and c.get("type") == "text":
                             texts.append(str(c.get("text", "")))
-                    parsed.append({
-                        "role": msg.get("role", "user"),
-                        "content": " ".join(texts),
-                    })
+                    parsed.append(
+                        {
+                            "role": msg.get("role", "user"),
+                            "content": " ".join(texts),
+                        }
+                    )
             return McpCallResult(ok=True, prompts=parsed)
         except Exception as exc:
             return McpCallResult(ok=False, error=str(exc))
@@ -409,7 +410,7 @@ class McpClient:
         """Strip the server name prefix to get original tool/prompt name."""
         prefix = self.config.name.lower().replace(" ", "_").replace("-", "_") + "_"
         if qualified_name.startswith(prefix):
-            return qualified_name[len(prefix):]
+            return qualified_name[len(prefix) :]
         return qualified_name
 
     async def list_tools(self) -> list[dict[str, Any]]:
@@ -519,11 +520,13 @@ class _MCPClientWrapper:
     async def connect(self) -> None:
         self._connected = True
         # Provide default echo tool
-        self._tools = [{
-            "name": f"{self._server}_echo",
-            "description": f"Echo from {self._server} server",
-            "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}},
-        }]
+        self._tools = [
+            {
+                "name": f"{self._server}_echo",
+                "description": f"Echo from {self._server} server",
+                "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}},
+            }
+        ]
 
     async def disconnect(self) -> None:
         self._connected = False

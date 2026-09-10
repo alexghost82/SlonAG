@@ -22,6 +22,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from computer_control.adapter import (
+    VirtualScreenAdapter,
+)
+from computer_control.closed_loop import (
+    DefaultReasoner,
+    DefaultVerifier,
+    VisionComputerAgent,
+)
 from computer_control.types import (
     ActionCategory,
     BudgetExceededError,
@@ -39,23 +47,11 @@ from computer_control.types import (
     VerificationResult,
     VerificationStatus,
 )
-from computer_control.adapter import (
-    VirtualScreenAdapter,
-    ScreenshotAdapter,
-    VirtualElement,
-    VirtualScreenState,
-)
-from computer_control.closed_loop import (
-    DefaultReasoner,
-    DefaultVerifier,
-    TargetGroundingResult,
-    VisionComputerAgent,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def virtual_screen():
@@ -72,13 +68,13 @@ def virtual_screen():
 @pytest.fixture
 def simple_agent(virtual_screen):
     """Agent with default reasoner, verifier, and a permissive safety policy."""
-    from acta.safety.policy import SafetyPolicy
     budget = LoopBudget(max_steps=10, timeout_seconds=30.0, observation_stale_seconds=30.0)
-    
+
     # Create a permissive safety policy mock that allows all computer.* tools
     permissive_policy = MagicMock()
-    from acta.safety.types import SafetyDecision, DecisionKind, RiskLevel, UntrustedSource
-    permissive_decision = SafetyDecision(
+    from acta.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+
+    SafetyDecision(
         kind=DecisionKind.ALLOW,
         tool_name="computer.any",
         risk=RiskLevel.READ,
@@ -86,6 +82,7 @@ def simple_agent(virtual_screen):
         intent="",
         args={},
     )
+
     # Allow any tool_name
     def allow_any(**kwargs):
         decision = SafetyDecision(
@@ -97,8 +94,9 @@ def simple_agent(virtual_screen):
             args=kwargs.get("args", {}),
         )
         return decision
+
     permissive_policy.authorize = allow_any
-    
+
     agent = VisionComputerAgent(
         adapter=virtual_screen,
         budget=budget,
@@ -122,6 +120,7 @@ def slow_budget():
 # ---------------------------------------------------------------------------
 # E2E: Virtual screen -- detect target -> click -> verify change
 # ---------------------------------------------------------------------------
+
 
 class TestVirtualScreenE2E:
     """End-to-end tests against the deterministic virtual screen."""
@@ -192,7 +191,7 @@ class TestBudgetEnforcement:
         """Budget with max_steps=2 should fail after 2 steps."""
         simple_agent.budget = strict_budget
 
-        state = await simple_agent.run(
+        await simple_agent.run(
             intent="toggle",
             max_retries=10,
         )
@@ -272,6 +271,7 @@ class TestCancellation:
 
         # Replace verifier to always fail → forces retry loop
         from computer_control.closed_loop import DefaultVerifier
+
         failing_verifier = DefaultVerifier()
         original_verify = failing_verifier.verify
 
@@ -306,6 +306,7 @@ class TestCancellation:
             )
 
         assert "cancelled" in str(exc_info.value).lower()
+
 
 class TestSafetyDenial:
     """Safety policy denial."""
@@ -445,6 +446,7 @@ class TestTargetGrounding:
     async def test_grounding_finds_matching_element(self):
         """Reasoner should match intent text to element name/text."""
         from acta.safety.policy import SafetyPolicy
+
         reasoner = DefaultReasoner()
         adapter = VirtualScreenAdapter()
         adapter.set_elements(
@@ -468,7 +470,9 @@ class TestScreenshotAdapter:
         """Without mss, capture should raise."""
         with patch.dict("sys.modules", {"mss": None}):
             import importlib
+
             import computer_control.adapter as adapter_mod
+
             importlib.reload(adapter_mod)
 
             adapter = adapter_mod.ScreenshotAdapter()
@@ -691,6 +695,7 @@ class TestIntegrationVirtualToClosedLoop:
         )
 
         from acta.safety.policy import SafetyPolicy
+
         agent = VisionComputerAgent(
             adapter=adapter,
             safety_policy=SafetyPolicy(),
@@ -719,8 +724,10 @@ class TestIntegrationVirtualToClosedLoop:
         )
 
         async def make_stale_frame(*args, **kwargs):
-            from computer_control.types import Frame, FrameSource
             import time
+
+            from computer_control.types import Frame, FrameSource
+
             return Frame(
                 source=FrameSource.VIRTUAL,
                 image_bytes=b"stale",
@@ -755,6 +762,7 @@ class TestIntegrationVirtualToClosedLoop:
         )
 
         from acta.safety.policy import SafetyPolicy
+
         agent = VisionComputerAgent(
             adapter=adapter,
             safety_policy=SafetyPolicy(),
@@ -810,7 +818,8 @@ class TestNoApprovalBypass:
             phases_seen.append(phase)
 
         safety_policy = MagicMock()
-        from acta.safety.types import SafetyDecision, DecisionKind, RiskLevel, UntrustedSource
+        from acta.safety.types import DecisionKind, RiskLevel, SafetyDecision, UntrustedSource
+
         decision = SafetyDecision(
             kind=DecisionKind.ALLOW,
             tool_name="computer.click",

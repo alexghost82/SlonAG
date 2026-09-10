@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from acta.runtime.profiles import (
+    BAND_8_16,
     BAND_16_32,
     BAND_32_64,
     BAND_64_PLUS,
-    BAND_8_16,
     HARDWARE_PROFILES,
     recommend_for_ram,
 )

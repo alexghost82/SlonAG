@@ -51,11 +51,7 @@ def require_capabilities(model: ModelInfo, required: Collection[str]) -> None:
     deliberately treated as unsupported, which keeps local model capability
     discovery conservative.
     """
-    missing = tuple(
-        capability
-        for capability in dict.fromkeys(required)
-        if not bool(getattr(model, capability, False))
-    )
+    missing = tuple(capability for capability in dict.fromkeys(required) if not bool(getattr(model, capability, False)))
     if missing:
         names = ", ".join(repr(capability) for capability in missing)
         raise CapabilityError(
@@ -75,6 +71,7 @@ def require_provider_match(model: ModelInfo, provider_id: str) -> None:
             model_id=model.model_id,
         )
 
+
 __all__ = [
     "KNOWN_ROLES",
     "ROLE_CAPABILITY_FLAGS",
@@ -83,4 +80,3 @@ __all__ = [
     "require_provider_match",
     "supports",
 ]
-

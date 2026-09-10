@@ -48,7 +48,5 @@ def test_recent_returns_newest_window() -> None:
 
 
 def test_safe_domain_strips_credentials_and_query() -> None:
-    assert safe_domain(f"https://user:{SECRET}@api.example.com/path?token={TOKEN}") == (
-        "api.example.com"
-    )
+    assert safe_domain(f"https://user:{SECRET}@api.example.com/path?token={TOKEN}") == ("api.example.com")
     assert SECRET not in redact_secrets(f"Bearer {SECRET}")

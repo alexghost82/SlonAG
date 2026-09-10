@@ -15,36 +15,28 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from agent.observation import Observation, ObservationKind
-from agent.runtime import AgentLoop, AgentLoopResult, LoopBudget
-from agent.subagent import (
-    SubagentConfig,
-    SubagentHandle,
-    SubagentResult,
-    SubagentRuntime,
-)
 from acta.mcp.integration import McpIntegration
 from acta.mcp.types import McpServerConfig, McpTransportKind
 from acta.safety.policy import SafetyPolicy
-from acta.safety.types import RiskLevel, UntrustedSource
 from acta.tools.builtin import build_builtin_registry
 from acta.tools.contracts import ToolResult
 from acta.tools.executor import ToolExecutor
-from acta.tools.registry import ToolRegistry
+from agent.runtime import AgentLoop, LoopBudget
+from agent.subagent import (
+    SubagentConfig,
+    SubagentResult,
+    SubagentRuntime,
+)
 from providers.contracts import (
-    ChatMessage,
-    ChatProvider,
     ChatRequest,
     ChatResponse,
     ModelInfo,
     ToolCall,
 )
-
 
 OFFLINE_MODEL = ModelInfo(
     provider_id="offline",
@@ -59,6 +51,7 @@ OFFLINE_MODEL = ModelInfo(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_test_mcp_config(**overrides: object) -> McpServerConfig:
     base: dict[str, object] = {
         "name": "test_mcp",
@@ -72,7 +65,7 @@ def _make_test_mcp_config(**overrides: object) -> McpServerConfig:
     return McpServerConfig(**base)  # type: ignore[arg-type]
 
 
-def _make_response(text: str, tool_calls=()) -> ChatResponse:  # type: ignore[assignment]
+def _make_response(text: str, tool_calls=()) -> ChatResponse:
     return ChatResponse(
         text=text,
         provider_id=OFFLINE_MODEL.provider_id,
@@ -84,6 +77,7 @@ def _make_response(text: str, tool_calls=()) -> ChatResponse:  # type: ignore[as
 # ---------------------------------------------------------------------------
 # 1. Parent -> Subagent -> MCP tool E2E
 # ---------------------------------------------------------------------------
+
 
 class TestCombinedSubagentMcp:
     """Full Parent -> Subagent -> MCP -> Tool -> Result -> Parent E2E."""
@@ -116,7 +110,7 @@ class TestCombinedSubagentMcp:
         assert echo_spec is not None
 
         # Verify MCP tool runs through the registry handler
-        echo_result = await echo_spec.handler(message="direct registry call")
+        echo_result = await echo_spec.handler(message="direct registry call")  # type: ignore[misc]
         assert isinstance(echo_result, ToolResult)
         assert echo_result.ok
         assert "direct registry call" in str(echo_result.message)
@@ -157,7 +151,7 @@ class TestCombinedSubagentMcp:
 
         resp_idx = [0]
 
-        async def mock_chat(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def mock_chat(req: ChatRequest) -> ChatResponse:
             resp = responses[resp_idx[0]]
             resp_idx[0] += 1
             return resp
@@ -217,7 +211,7 @@ class TestCombinedSubagentMcp:
         ]
         resp_idx = [0]
 
-        async def parent_chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def parent_chat(request: ChatRequest) -> ChatResponse:
             resp = responses[resp_idx[0]]
             resp_idx[0] += 1
             return resp
@@ -244,7 +238,7 @@ class TestCombinedSubagentMcp:
 
         assert isinstance(subagent_result, SubagentResult)
         assert subagent_result.ok is True
-        assert "echo" in subagent_result.answer.lower() or "delegated" in subagent_result.answer.lower()
+        assert "echo" in subagent_result.answer.lower() or "delegated" in subagent_result.answer.lower()  # type: ignore[union-attr]
 
         await runtime.cancel_all()
         await integration.stop()
@@ -270,21 +264,23 @@ class TestCombinedSubagentMcp:
 
         results = []
 
-        async def make_provider(label: str):  # type: ignore[no-untyped-def]
+        async def make_provider(label: str):
             responses = [
                 _make_response(
                     f"{label}: calling echo.",
-                    tool_calls=(ToolCall(
-                        id=f"call-{label}",
-                        name="test_mcp_echo",
-                        arguments={"message": f"{label} message"},
-                    ),),
+                    tool_calls=(
+                        ToolCall(
+                            id=f"call-{label}",
+                            name="test_mcp_echo",
+                            arguments={"message": f"{label} message"},
+                        ),
+                    ),
                 ),
                 _make_response(f"{label} done."),
             ]
             idx = [0]
 
-            async def chat(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+            async def chat(req: ChatRequest) -> ChatResponse:
                 resp = responses[idx[0]]
                 idx[0] += 1
                 return resp
@@ -307,7 +303,7 @@ class TestCombinedSubagentMcp:
             h = await runtime.create_and_run(
                 config_i,
                 parent_tools=shared_registry,
-                provider=MagicMock(chat=chat_fn),  # type: ignore[arg-type]
+                provider=MagicMock(chat=chat_fn),
             )
             handles.append(h)
 
@@ -318,7 +314,7 @@ class TestCombinedSubagentMcp:
         for r in results:
             assert isinstance(r, SubagentResult)
             assert r.ok is True
-            assert "echo" in r.answer.lower() or "done" in r.answer.lower()
+            assert "echo" in r.answer.lower() or "done" in r.answer.lower()  # type: ignore[union-attr]
 
         await runtime.cancel_all()
         await integration.stop()
@@ -346,17 +342,19 @@ class TestCombinedSubagentMcp:
         subagent_responses = [
             _make_response(
                 "Running echo via MCP.",
-                tool_calls=(ToolCall(
-                    id="call-sub-1",
-                    name="test_mcp_echo",
-                    arguments={"message": "combined e2e echo"},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-sub-1",
+                        name="test_mcp_echo",
+                        arguments={"message": "combined e2e echo"},
+                    ),
+                ),
             ),
             _make_response("Subagent finished: combined e2e echo."),
         ]
         s_idx = [0]
 
-        async def subagent_provider_fn(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def subagent_provider_fn(req: ChatRequest) -> ChatResponse:
             r = subagent_responses[s_idx[0]]
             s_idx[0] += 1
             return r
@@ -376,12 +374,12 @@ class TestCombinedSubagentMcp:
         sub_result = await runtime.create_and_run(
             sub_config,
             parent_tools=shared_registry,
-            provider=MagicMock(chat=subagent_provider_fn),  # type: ignore[arg-type]
+            provider=MagicMock(chat=subagent_provider_fn),
         )
 
         assert isinstance(sub_result, SubagentResult)
         assert sub_result.ok is True
-        assert "combined e2e echo" in sub_result.answer.lower() or "echo" in sub_result.answer.lower()
+        assert "combined e2e echo" in sub_result.answer.lower() or "echo" in sub_result.answer.lower()  # type: ignore[union-attr]
 
         # Parent synthesizes subagent result
         final_answer = f"[Subagent] {sub_result.answer}"
@@ -394,6 +392,7 @@ class TestCombinedSubagentMcp:
 # ---------------------------------------------------------------------------
 # 2. Security: MCP tool flows through SafetyPolicy
 # ---------------------------------------------------------------------------
+
 
 class TestMcpSecurityIntegration:
     """MCP tools must not bypass SafetyPolicy, ToolExecutor, or Approval."""
@@ -424,9 +423,7 @@ class TestMcpSecurityIntegration:
                 break
         assert write_note_spec is not None
 
-        result = await write_note_spec.handler(
-            title="Test", content="Hello"
-        )
+        result = await write_note_spec.handler(title="Test", content="Hello")  # type: ignore[misc]
         # With approval_required=True and side-effect, should require approval
         assert isinstance(result, ToolResult)
         if result.code == "approval_required":
@@ -460,7 +457,7 @@ class TestMcpSecurityIntegration:
                 break
         assert echo_spec is not None
 
-        result = await echo_spec.handler(message="no approval needed")
+        result = await echo_spec.handler(message="no approval needed")  # type: ignore[misc]
         assert isinstance(result, ToolResult)
         assert result.ok is True
         assert "no approval needed" in str(result.message)
@@ -471,6 +468,7 @@ class TestMcpSecurityIntegration:
 # ---------------------------------------------------------------------------
 # 3. Parent -> Subagent -> MCP failure propagation
 # ---------------------------------------------------------------------------
+
 
 class TestCombinedFailurePropagation:
     """Failure cases in the combined chain."""
@@ -493,14 +491,16 @@ class TestCombinedFailurePropagation:
         await integration.discover_tools()
 
         # Provider that calls a non-existent MCP tool
-        async def fail_chat(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def fail_chat(req: ChatRequest) -> ChatResponse:
             return _make_response(
                 "Calling unknown tool.",
-                tool_calls=(ToolCall(
-                    id="call-bad",
-                    name="nonexistent_tool_xyz",
-                    arguments={},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-bad",
+                        name="nonexistent_tool_xyz",
+                        arguments={},
+                    ),
+                ),
             )
 
         sub_config = SubagentConfig(
@@ -518,7 +518,7 @@ class TestCombinedFailurePropagation:
         result = await runtime.create_and_run(
             sub_config,
             parent_tools=shared_registry,
-            provider=MagicMock(chat=fail_chat),  # type: ignore[arg-type]
+            provider=MagicMock(chat=fail_chat),
         )
 
         # Subagent should fail gracefully
@@ -532,6 +532,7 @@ class TestCombinedFailurePropagation:
 # ---------------------------------------------------------------------------
 # 4. Combined E2E: Timeout, Cancellation, Budget, Max Depth, Forbidden, Late
 # ---------------------------------------------------------------------------
+
 
 class TestCombinedTimeout:
     """Combined timeout scenarios: Parent -> Subagent -> MCP timeout."""
@@ -557,14 +558,16 @@ class TestCombinedTimeout:
         await integration.discover_tools()
 
         # Provider: subagent asks to run slow_operation (will timeout at 1s)
-        async def slow_provider(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def slow_provider(req: ChatRequest) -> ChatResponse:
             return _make_response(
                 "Running slow operation.",
-                tool_calls=(ToolCall(
-                    id="call-slow",
-                    name="test_slow_operation",
-                    arguments={"duration_seconds": 15.0},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-slow",
+                        name="test_slow_operation",
+                        arguments={"duration_seconds": 15.0},
+                    ),
+                ),
             )
 
         # Use very tight timeout so the subagent exits quickly after MCP failure
@@ -584,13 +587,17 @@ class TestCombinedTimeout:
         result = await runtime.create_and_run(
             sub_config,
             parent_tools=shared_registry,
-            provider=MagicMock(chat=slow_provider),  # type: ignore[arg-type]
+            provider=MagicMock(chat=slow_provider),
         )
 
         assert isinstance(result, SubagentResult)
         # Either MCP timeout (timeout) or subagent timeout, both are valid
         # The key is the subagent handles MCP failure gracefully
-        assert result.ok is True or (result.error is not None and "timeout" in result.error.lower()) or ("timeout" in result.reason.lower() or "turn" in result.reason.lower())
+        assert (
+            result.ok is True
+            or (result.error is not None and "timeout" in result.error.lower())
+            or ("timeout" in result.reason.lower() or "turn" in result.reason.lower())
+        )
 
         await runtime.cancel_all()
         await integration.stop()
@@ -619,24 +626,26 @@ class TestCombinedTimeout:
         responses = [
             _make_response(
                 "Running slow op.",
-                tool_calls=(ToolCall(
-                    id="call-timeout",
-                    name="test_slow_operation",
-                    arguments={"duration_seconds": 15.0},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-timeout",
+                        name="test_slow_operation",
+                        arguments={"duration_seconds": 15.0},
+                    ),
+                ),
             ),
             _make_response("MCP timed out, task complete."),
         ]
         idx = [0]
 
-        async def mock_chat(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def mock_chat(req: ChatRequest) -> ChatResponse:
             r = responses[idx[0]]
             idx[0] += 1
             return r
 
         loop_result = await AgentLoop(
             model=OFFLINE_MODEL,
-            provider=MagicMock(chat=mock_chat),  # type: ignore[arg-type]
+            provider=MagicMock(chat=mock_chat),
             tool_executor=executor,
             budget=LoopBudget(max_turns=3, max_tool_calls=3, timeout_seconds=30),
         ).run(user_goal="Run slow operation then finish")
@@ -668,14 +677,16 @@ class TestCombinedCancellation:
         await integration.discover_tools()
 
         # Provider that would block indefinitely
-        async def blocking_provider(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def blocking_provider(req: ChatRequest) -> ChatResponse:
             return _make_response(
                 "Running indefinitely.",
-                tool_calls=(ToolCall(
-                    id="call-block",
-                    name="test_slow_operation",
-                    arguments={"duration_seconds": 60.0},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-block",
+                        name="test_slow_operation",
+                        arguments={"duration_seconds": 60.0},
+                    ),
+                ),
             )
 
         sub_config = SubagentConfig(
@@ -692,11 +703,11 @@ class TestCombinedCancellation:
 
         runtime = SubagentRuntime(max_concurrency=2)
 
-        async def _run_then_cancel():  # type: ignore[no-untyped-def]
+        async def _run_then_cancel():
             result = await runtime.create_and_run(
                 sub_config,
                 parent_tools=shared_registry,
-                provider=MagicMock(chat=blocking_provider),  # type: ignore[arg-type]
+                provider=MagicMock(chat=blocking_provider),
             )
             return result
 
@@ -708,8 +719,8 @@ class TestCombinedCancellation:
         try:
             result = await asyncio.wait_for(task, timeout=5.0)
             assert isinstance(result, SubagentResult)
-            assert result.ok is False or "cancel" in result.error.lower() or "cancel" in result.reason.lower()
-        except asyncio.TimeoutError:
+            assert result.ok is False or "cancel" in result.error.lower() or "cancel" in result.reason.lower()  # type: ignore[union-attr]
+        except TimeoutError:
             # If it hangs, that's also a form of failure - but we must not hang the test
             pytest.fail("Subagent did not respond to cancellation within 5s")
 
@@ -737,14 +748,16 @@ class TestCombinedBudget:
         await integration.discover_tools()
 
         # Provider: always requests MCP tool call (never finishes)
-        async def greedy_provider(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def greedy_provider(req: ChatRequest) -> ChatResponse:
             return _make_response(
                 "Need more tools.",
-                tool_calls=(ToolCall(
-                    id="call-greedy",
-                    name="test_mcp_echo",
-                    arguments={"message": "greedy"},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-greedy",
+                        name="test_mcp_echo",
+                        arguments={"message": "greedy"},
+                    ),
+                ),
             )
 
         # Very tight budget: only 1 tool call allowed
@@ -764,7 +777,7 @@ class TestCombinedBudget:
         result = await runtime.create_and_run(
             sub_config,
             parent_tools=shared_registry,
-            provider=MagicMock(chat=greedy_provider),  # type: ignore[arg-type]
+            provider=MagicMock(chat=greedy_provider),
         )
 
         assert isinstance(result, SubagentResult)
@@ -812,7 +825,7 @@ class TestCombinedMaxDepth:
                 parent_workspace_id="ws-001",
             ),
             parent_tools=shared_registry,
-            provider=MagicMock(chat=lambda req: _make_response("Level 1 done.")),  # type: ignore[arg-type]
+            provider=MagicMock(chat=lambda req: _make_response("Level 1 done.")),
         )
         assert isinstance(sub1_result, SubagentResult)
 
@@ -832,7 +845,7 @@ class TestCombinedMaxDepth:
                 parent_workspace_id="ws-001",
             ),
             parent_tools=shared_registry,
-            provider=MagicMock(chat=lambda req: _make_response("Level 2")),  # type: ignore[arg-type]
+            provider=MagicMock(chat=lambda req: _make_response("Level 2")),
         )
         # When max_delegation_depth=0, a subagent with a non-root parent_run_id
         # that is itself a subagent result will hit the depth check
@@ -874,21 +887,23 @@ class TestCombinedForbiddenTool:
             parent_workspace_id="ws-001",
         )
 
-        async def deny_provider(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def deny_provider(req: ChatRequest) -> ChatResponse:
             return _make_response(
                 "Calling denied tool.",
-                tool_calls=(ToolCall(
-                    id="call-denied",
-                    name="test_mcp_echo",
-                    arguments={"message": "denied"},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-denied",
+                        name="test_mcp_echo",
+                        arguments={"message": "denied"},
+                    ),
+                ),
             )
 
         runtime = SubagentRuntime(max_concurrency=2)
         result = await runtime.create_and_run(
             sub_config,
             parent_tools=shared_registry,
-            provider=MagicMock(chat=deny_provider),  # type: ignore[arg-type]
+            provider=MagicMock(chat=deny_provider),
         )
 
         # Tool should be blocked by the filtered registry (absent) or safety
@@ -921,7 +936,7 @@ class TestCombinedLateCompletion:
         await integration.discover_tools()
 
         # Provider that always responds (no blocking)
-        async def late_provider(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def late_provider(req: ChatRequest) -> ChatResponse:
             return _make_response("Late completion test.", tool_calls=())
 
         sub_config = SubagentConfig(
@@ -940,11 +955,11 @@ class TestCombinedLateCompletion:
         result = await runtime.create_and_run(
             sub_config,
             parent_tools=shared_registry,
-            provider=MagicMock(chat=late_provider),  # type: ignore[arg-type]
+            provider=MagicMock(chat=late_provider),
         )
 
         assert isinstance(result, SubagentResult)
-        assert "Late completion" in result.answer or "Late completion" in str(result.error)
+        assert "Late completion" in result.answer or "Late completion" in str(result.error)  # type: ignore[operator]
 
         await runtime.cancel_all()
         await integration.stop()
@@ -976,17 +991,19 @@ class TestCombinedParentSynthesis:
         responses = [
             _make_response(
                 "Echoing via MCP.",
-                tool_calls=(ToolCall(
-                    id="call-synth",
-                    name="test_mcp_echo",
-                    arguments={"message": "synthesis test"},
-                ),),
+                tool_calls=(
+                    ToolCall(
+                        id="call-synth",
+                        name="test_mcp_echo",
+                        arguments={"message": "synthesis test"},
+                    ),
+                ),
             ),
             _make_response("Echo returned, task complete."),
         ]
         idx = [0]
 
-        async def echo_provider(req: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def echo_provider(req: ChatRequest) -> ChatResponse:
             r = responses[idx[0]]
             idx[0] += 1
             return r
@@ -1003,12 +1020,12 @@ class TestCombinedParentSynthesis:
                 parent_workspace_id="ws-001",
             ),
             parent_tools=shared_registry,
-            provider=MagicMock(chat=echo_provider),  # type: ignore[arg-type]
+            provider=MagicMock(chat=echo_provider),
         )
 
         assert isinstance(sub_result, SubagentResult)
         assert sub_result.ok is True
-        assert "synthesis test" in sub_result.answer.lower() or "echo" in sub_result.answer.lower()
+        assert "synthesis test" in sub_result.answer.lower() or "echo" in sub_result.answer.lower()  # type: ignore[union-attr]
 
         # Parent synthesizes with Russian text
         synthesized = f"Результат подзадачи: {sub_result.answer}"
@@ -1049,7 +1066,10 @@ class TestCombinedResourcePrompt:
         # Read a known resource
         resource_result = await integration.read_resource("memo://test/note")
         assert resource_result.ok is True
-        assert len(resource_result.resources) > 0 and "test memo content" in str(resource_result.resources[0].get("content", "")).lower()
+        assert (
+            len(resource_result.resources) > 0
+            and "test memo content" in str(resource_result.resources[0].get("content", "")).lower()
+        )
 
         # Verify resource templates
         templates = integration.resource_templates

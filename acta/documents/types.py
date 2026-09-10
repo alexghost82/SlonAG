@@ -37,14 +37,7 @@ class DocumentExtract:
 def wrap_untrusted(text: str, kind: DocumentKind) -> str:
     """Fence extracted text so it cannot be read as a system or tool payload."""
     escaped = text.replace("```", "`\u200b``")
-    return (
-        f"{UNTRUSTED_OPEN}\n"
-        f"{UNTRUSTED_NOTICE}\n"
-        f"```{kind}\n"
-        f"{escaped}\n"
-        f"```\n"
-        f"{UNTRUSTED_CLOSE}"
-    )
+    return f"{UNTRUSTED_OPEN}\n{UNTRUSTED_NOTICE}\n```{kind}\n{escaped}\n```\n{UNTRUSTED_CLOSE}"
 
 
 __all__ = [

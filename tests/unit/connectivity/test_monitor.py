@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 from acta.connectivity.monitor import ConnectivityMonitor
-from acta.connectivity.types import ConnectionState, TransportKind
 
 
 class TestConnectivityMonitor:
@@ -79,6 +77,3 @@ class TestConnectivityMonitor:
             loop.run_until_complete(monitor.stop())
         finally:
             loop.close()
-
-
-import asyncio

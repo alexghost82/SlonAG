@@ -7,20 +7,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent.observation import Observation, ObservationKind
-from agent.runtime import AgentLoop, LoopBudget
+from acta.safety.policy import SafetyPolicy
+from acta.safety.types import RiskLevel
+from acta.tools.contracts import SideEffectClass, ToolResult, ToolSpec
+from acta.tools.registry import ToolRegistry
+from agent.runtime import LoopBudget
 from agent.subagent import (
     SubagentConfig,
     SubagentHandle,
     SubagentResult,
     SubagentRuntime,
 )
-from acta.safety.policy import SafetyPolicy
-from acta.safety.types import RiskLevel
-from acta.tools.contracts import SideEffectClass, ToolResult, ToolSpec
-from acta.tools.registry import ToolRegistry
 from providers.contracts import (
-    ChatProvider,
     ChatRequest,
     ChatResponse,
     ModelInfo,
@@ -37,7 +35,7 @@ def _make_model(**overrides: object) -> ModelInfo:
         tool_calling=True,
     )
     base.update(overrides)
-    return ModelInfo(**base)
+    return ModelInfo(**base)  # type: ignore[arg-type]
 
 
 def _make_config(**overrides: object) -> SubagentConfig:
@@ -57,7 +55,8 @@ def _make_config(**overrides: object) -> SubagentConfig:
 def _echo_tool() -> ToolSpec:
     async def handler(**kwargs: object) -> ToolResult:
         msg = kwargs.get("message", "")
-        return ToolResult(ok=True, message=f"echo: {msg}")
+        return ToolResult(ok=True, message=f"echo: {msg}")  # type: ignore[call-arg]
+
     return ToolSpec(
         name="echo",
         description="Echo a message",
@@ -75,7 +74,8 @@ def _echo_tool() -> ToolSpec:
 
 def _write_tool() -> ToolSpec:
     async def handler(**kwargs: object) -> ToolResult:
-        return ToolResult(ok=True, message="written")
+        return ToolResult(ok=True, message="written")  # type: ignore[call-arg]
+
     return ToolSpec(
         name="write_file",
         description="Write a file",
@@ -104,17 +104,19 @@ def _make_response(text: str, tool_calls: list[ToolCall] | None = None) -> ChatR
 # Basic lifecycle
 # ---------------------------------------------------------------------------
 
+
 class TestSubagentBasicLifecycle:
     @pytest.mark.asyncio
     async def test_subagent_runs_to_completion(self) -> None:
         runtime = SubagentRuntime(max_concurrency=4)
         config = _make_config(delegation_task="Say hello")
 
-        async def chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def chat(request: ChatRequest) -> ChatResponse:
             return _make_response("Hello from subagent.")
 
         result = await runtime.create_and_run(
-            config, provider=MagicMock(chat=chat),  # type: ignore[arg-type]
+            config,
+            provider=MagicMock(chat=chat),
         )
         assert isinstance(result, SubagentResult)
         assert result.ok
@@ -126,11 +128,12 @@ class TestSubagentContextIsolation:
         runtime = SubagentRuntime(max_concurrency=4)
         config = _make_config(parent_session_id="parent-sess", delegation_task="Isolated test")
 
-        async def chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def chat(request: ChatRequest) -> ChatResponse:
             return _make_response("ok")
 
         result = await runtime.create_and_run(
-            config, provider=MagicMock(chat=chat),  # type: ignore[arg-type]
+            config,
+            provider=MagicMock(chat=chat),
         )
         assert result.ok
 
@@ -138,6 +141,7 @@ class TestSubagentContextIsolation:
 # ---------------------------------------------------------------------------
 # Budget
 # ---------------------------------------------------------------------------
+
 
 class TestSubagentBudget:
     @pytest.mark.asyncio
@@ -154,7 +158,7 @@ class TestSubagentBudget:
 
         turn = [0]
 
-        async def chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def chat(request: ChatRequest) -> ChatResponse:
             turn[0] += 1
             if turn[0] <= 2:
                 calls = [ToolCall(id=f"call-{turn[0]}", name="echo", arguments={"message": f"t{turn[0]}"})]
@@ -162,7 +166,9 @@ class TestSubagentBudget:
             return _make_response("done")
 
         result = await runtime.create_and_run(
-            config, parent_tools=registry, provider=MagicMock(chat=chat),  # type: ignore[arg-type]
+            config,
+            parent_tools=registry,
+            provider=MagicMock(chat=chat),
         )
         assert result.tool_calls <= 2
 
@@ -170,6 +176,7 @@ class TestSubagentBudget:
 # ---------------------------------------------------------------------------
 # Timeout
 # ---------------------------------------------------------------------------
+
 
 class TestSubagentTimeout:
     @pytest.mark.asyncio
@@ -182,12 +189,13 @@ class TestSubagentTimeout:
             timeout_seconds=0.5,
         )
 
-        async def slow(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def slow(request: ChatRequest) -> ChatResponse:
             await asyncio.sleep(5)
             return _make_response("slow")
 
         result = await runtime.create_and_run(
-            config, provider=MagicMock(chat=slow),  # type: ignore[arg-type]
+            config,
+            provider=MagicMock(chat=slow),
         )
         assert isinstance(result, SubagentResult)
         assert result.ok is False
@@ -198,12 +206,13 @@ class TestSubagentTimeout:
 # Cancellation
 # ---------------------------------------------------------------------------
 
+
 class TestSubagentCancellation:
     @pytest.mark.asyncio
     async def test_cancel_subagent(self) -> None:
         runtime = SubagentRuntime(max_concurrency=4)
 
-        async def slow(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def slow(request: ChatRequest) -> ChatResponse:
             await asyncio.sleep(10)
             return _make_response("slow")
 
@@ -214,13 +223,18 @@ class TestSubagentCancellation:
             parent_workspace_id="ws-001",
         )
         handle._task = asyncio.create_task(
-            runtime._run_subagent(  # type: ignore[arg-type]
-                "test-001", "Long task", _make_model(),
-                LoopBudget(timeout_seconds=30), ToolRegistry(),
-                SafetyPolicy(), slow, handle._cancel_event,
+            runtime._run_subagent(
+                "test-001",
+                "Long task",
+                _make_model(),
+                LoopBudget(timeout_seconds=30),
+                ToolRegistry(),
+                SafetyPolicy(),
+                slow,  # type: ignore[arg-type]
+                handle._cancel_event,
             )
         )
-        runtime._active["test-001"] = handle  # type: ignore[assignment]
+        runtime._active["test-001"] = handle
 
         await asyncio.sleep(0.1)
         await handle.cancel()
@@ -232,12 +246,13 @@ class TestSubagentCancellation:
 # Concurrency
 # ---------------------------------------------------------------------------
 
+
 class TestSubagentConcurrency:
     @pytest.mark.asyncio
     async def test_cancel_all(self) -> None:
         runtime = SubagentRuntime(max_concurrency=4)
 
-        async def slow(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def slow(request: ChatRequest) -> ChatResponse:
             await asyncio.sleep(5)
             return _make_response("slow")
 
@@ -250,13 +265,18 @@ class TestSubagentConcurrency:
                 parent_workspace_id="ws-001",
             )
             h._task = asyncio.create_task(
-                runtime._run_subagent(  # type: ignore[arg-type]
-                    f"sub-{i}", f"Task {i}", _make_model(),
-                    LoopBudget(timeout_seconds=30), ToolRegistry(),
-                    SafetyPolicy(), slow, h._cancel_event,
+                runtime._run_subagent(
+                    f"sub-{i}",
+                    f"Task {i}",
+                    _make_model(),
+                    LoopBudget(timeout_seconds=30),
+                    ToolRegistry(),
+                    SafetyPolicy(),
+                    slow,  # type: ignore[arg-type]
+                    h._cancel_event,
                 )
             )
-            runtime._active[f"sub-{i}"] = h  # type: ignore[assignment]
+            runtime._active[f"sub-{i}"] = h
             handles.append(h)
 
         assert runtime.active_count == 3
@@ -270,17 +290,19 @@ class TestSubagentConcurrency:
 # Depth
 # ---------------------------------------------------------------------------
 
+
 class TestSubagentDepth:
     @pytest.mark.asyncio
     async def test_max_depth(self) -> None:
         runtime = SubagentRuntime(max_concurrency=4, max_delegation_depth=1)
         config = _make_config(parent_run_id="run-001", delegation_task="Nested")
 
-        async def chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def chat(request: ChatRequest) -> ChatResponse:
             return _make_response("ok")
 
         result = await runtime.create_and_run(
-            config, provider=MagicMock(chat=chat),  # type: ignore[arg-type]
+            config,
+            provider=MagicMock(chat=chat),
         )
         assert isinstance(result, SubagentResult)
 
@@ -288,6 +310,7 @@ class TestSubagentDepth:
 # ---------------------------------------------------------------------------
 # Tool filtering
 # ---------------------------------------------------------------------------
+
 
 class TestSubagentToolFiltering:
     @pytest.mark.asyncio
@@ -299,11 +322,13 @@ class TestSubagentToolFiltering:
 
         config = _make_config(delegation_task="echo only", denied_tools=frozenset(["write_file"]))
 
-        async def chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def chat(request: ChatRequest) -> ChatResponse:
             return _make_response("echo ok")
 
         result = await runtime.create_and_run(
-            config, parent_tools=registry, provider=MagicMock(chat=chat),  # type: ignore[arg-type]
+            config,
+            parent_tools=registry,
+            provider=MagicMock(chat=chat),
         )
         assert isinstance(result, SubagentResult)
 
@@ -315,11 +340,13 @@ class TestSubagentToolFiltering:
 
         config = _make_config(delegation_task="echo only", allowed_tools=frozenset(["echo"]))
 
-        async def chat(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def chat(request: ChatRequest) -> ChatResponse:
             return _make_response("echo only")
 
         result = await runtime.create_and_run(
-            config, parent_tools=registry, provider=MagicMock(chat=chat),  # type: ignore[arg-type]
+            config,
+            parent_tools=registry,
+            provider=MagicMock(chat=chat),
         )
         assert isinstance(result, SubagentResult)
 
@@ -328,16 +355,17 @@ class TestSubagentToolFiltering:
 # Failure propagation
 # ---------------------------------------------------------------------------
 
+
 class TestSubagentFailurePropagation:
     @pytest.mark.asyncio
     async def test_provider_error(self) -> None:
         runtime = SubagentRuntime(max_concurrency=4)
         config = _make_config(delegation_task="failing", timeout_seconds=2)
 
-        async def failing(request: ChatRequest) -> ChatResponse:  # type: ignore[no-untyped-def]
+        async def failing(request: ChatRequest) -> ChatResponse:
             raise RuntimeError("Provider connection lost")
 
-        result = await runtime.create_and_run(config, provider=failing)
+        result = await runtime.create_and_run(config, provider=failing)  # type: ignore[arg-type]
         assert isinstance(result, SubagentResult)
         assert result.ok is False
 
@@ -345,6 +373,7 @@ class TestSubagentFailurePropagation:
 # ---------------------------------------------------------------------------
 # SubagentHandle
 # ---------------------------------------------------------------------------
+
 
 class TestSubagentHandle:
     def test_handle_is_done_initially(self) -> None:
@@ -356,5 +385,3 @@ class TestSubagentHandle:
         h = SubagentHandle(subagent_id="t", parent_run_id="r", parent_session_id="s", parent_workspace_id="w")
         await h.cancel()
         assert h.is_done is False
-
-

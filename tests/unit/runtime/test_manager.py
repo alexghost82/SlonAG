@@ -19,7 +19,6 @@ from acta.runtime import (
     runtime_message_ru,
 )
 from providers.local.endpoint import is_loopback_url
-
 from tests.unit.runtime.fakes import FakeRunner, MemoryErrorRunner
 
 
@@ -121,9 +120,7 @@ def test_allow_remote_permits_example_com() -> None:
         (False, True),
     ),
 )
-def test_pull_without_confirms_raises(
-    confirm_size: bool, confirm_license: bool
-) -> None:
+def test_pull_without_confirms_raises(confirm_size: bool, confirm_license: bool) -> None:
     calls: list[str] = []
     manager = RuntimeManager(RuntimeKind.OLLAMA, FakeRunner(), pull=calls.append)
     with pytest.raises(RuntimeManagerError) as exc_info:

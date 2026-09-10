@@ -138,10 +138,11 @@ def _run_action(checked: dict[str, object], hooks: _Hooks) -> str:
             result = create_directory(path_raw, roots=roots)
         case "delete":
             recursive = bool(checked.get("recursive", False))
+            del recursive
             result = trash(path_raw, roots=roots)  # Legacy: delete → trash
             if result.ok and hooks.trash is not None:
                 try:
-                    hooks.trash(Path(path_raw))
+                    hooks.trash(Path(path_raw).expanduser().resolve())
                 except Exception:
                     pass
         case "move":

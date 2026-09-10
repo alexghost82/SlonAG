@@ -46,9 +46,7 @@ class SessionStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         try:
-            self._connection = sqlite3.connect(
-                self.path, check_same_thread=False, isolation_level=None
-            )
+            self._connection = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
             self._connection.row_factory = sqlite3.Row
             self._connection.execute("PRAGMA foreign_keys = ON")
             self._connection.execute("PRAGMA busy_timeout = 5000")
@@ -112,11 +110,18 @@ class SessionStore:
             self._connection.execute(
                 """INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    session.id, session.created_at, session.updated_at, session.title,
-                    session.agent_id, session.model_policy.provider_id,
-                    session.model_policy.model_id, session.workspace_id,
-                    session.status.value, _json(session.context_state),
-                    session.memory_scope, session.permissions_profile,
+                    session.id,
+                    session.created_at,
+                    session.updated_at,
+                    session.title,
+                    session.agent_id,
+                    session.model_policy.provider_id,
+                    session.model_policy.model_id,
+                    session.workspace_id,
+                    session.status.value,
+                    _json(session.context_state),
+                    session.memory_scope,
+                    session.permissions_profile,
                 ),
             )
 
@@ -131,14 +136,14 @@ class SessionStore:
     def get_session_unhydrated(self, session_id: str) -> Session | None:
         """Read lifecycle metadata without recursively loading transcript/runs."""
         with self._lock:
-            row = self._connection.execute(
-                "SELECT * FROM sessions WHERE id = ?", (session_id,)
-            ).fetchone()
+            row = self._connection.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
         if row is None:
             return None
         return Session(
-            id=str(row["id"]), created_at=str(row["created_at"]),
-            updated_at=str(row["updated_at"]), title=str(row["title"]),
+            id=str(row["id"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+            title=str(row["title"]),
             agent_id=str(row["agent_id"]),
             model_policy=ModelPolicy(str(row["provider_id"]), str(row["model_id"])),
             workspace_id=str(row["workspace_id"]),
@@ -148,9 +153,7 @@ class SessionStore:
             permissions_profile=str(row["permissions_profile"]),
         )
 
-    def list_sessions(
-        self, *, workspace_id: str, query: str | None = None
-    ) -> list[Session]:
+    def list_sessions(self, *, workspace_id: str, query: str | None = None) -> list[Session]:
         sql = "SELECT * FROM sessions WHERE workspace_id = ?"
         values: list[object] = [workspace_id]
         if query:
@@ -177,21 +180,16 @@ class SessionStore:
             )
         return cursor.rowcount > 0
 
-    def resume_session(
-        self, session_id: str, *, workspace_id: str, updated_at: str
-    ) -> bool:
+    def resume_session(self, session_id: str, *, workspace_id: str, updated_at: str) -> bool:
         with self.transaction():
             cursor = self._connection.execute(
                 """UPDATE sessions SET status = ?, updated_at = ?
                 WHERE id = ? AND workspace_id = ? AND status = ?""",
-                (SessionStatus.ACTIVE.value, updated_at, session_id, workspace_id,
-                 SessionStatus.CLOSED.value),
+                (SessionStatus.ACTIVE.value, updated_at, session_id, workspace_id, SessionStatus.CLOSED.value),
             )
         return cursor.rowcount > 0
 
-    def archive_session(
-        self, session_id: str, *, workspace_id: str, updated_at: str
-    ) -> bool:
+    def archive_session(self, session_id: str, *, workspace_id: str, updated_at: str) -> bool:
         with self.transaction():
             active = self._connection.execute(
                 """SELECT 1 FROM session_runs
@@ -203,14 +201,18 @@ class SessionStore:
             cursor = self._connection.execute(
                 """UPDATE sessions SET status = ?, updated_at = ?
                 WHERE id = ? AND workspace_id = ? AND status IN (?, ?)""",
-                (SessionStatus.ARCHIVED.value, updated_at, session_id, workspace_id,
-                 SessionStatus.ACTIVE.value, SessionStatus.CLOSED.value),
+                (
+                    SessionStatus.ARCHIVED.value,
+                    updated_at,
+                    session_id,
+                    workspace_id,
+                    SessionStatus.ACTIVE.value,
+                    SessionStatus.CLOSED.value,
+                ),
             )
         return cursor.rowcount > 0
 
-    def close_session(
-        self, session_id: str, *, workspace_id: str, updated_at: str
-    ) -> bool:
+    def close_session(self, session_id: str, *, workspace_id: str, updated_at: str) -> bool:
         with self.transaction():
             row = self._connection.execute(
                 "SELECT status FROM sessions WHERE id = ? AND workspace_id = ?",
@@ -252,10 +254,7 @@ class SessionStore:
                 raise KeyError(entry.session_id)
             if str(owner["status"]) != SessionStatus.ACTIVE.value:
                 raise SessionInactiveError("session is not active")
-            if (
-                entry.tool_call_id
-                and entry.kind in (TranscriptKind.TOOL_CALL, TranscriptKind.TOOL_RESULT)
-            ):
+            if entry.tool_call_id and entry.kind in (TranscriptKind.TOOL_CALL, TranscriptKind.TOOL_RESULT):
                 existing = self._connection.execute(
                     """SELECT * FROM transcript_entries
                     WHERE session_id = ? AND kind = ? AND tool_call_id = ?
@@ -264,10 +263,12 @@ class SessionStore:
                 ).fetchone()
                 if existing is not None:
                     return _entry_from_row(existing)
-            sequence = int(self._connection.execute(
-                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM transcript_entries WHERE session_id = ?",
-                (entry.session_id,),
-            ).fetchone()[0])
+            sequence = int(
+                self._connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) + 1 FROM transcript_entries WHERE session_id = ?",
+                    (entry.session_id,),
+                ).fetchone()[0]
+            )
             stored = TranscriptEntry(**{**entry.__dict__, "sequence": sequence})
             self._connection.execute(
                 """INSERT INTO transcript_entries
@@ -275,10 +276,19 @@ class SessionStore:
                  text, tool_call_id, tool_name, data, artifacts, media_references)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    stored.id, stored.session_id, stored.turn_id, stored.sequence,
-                    stored.kind.value, stored.state.value, stored.created_at,
-                    stored.role, stored.text, stored.tool_call_id, stored.tool_name,
-                    _json(stored.data), _json(stored.artifacts),
+                    stored.id,
+                    stored.session_id,
+                    stored.turn_id,
+                    stored.sequence,
+                    stored.kind.value,
+                    stored.state.value,
+                    stored.created_at,
+                    stored.role,
+                    stored.text,
+                    stored.tool_call_id,
+                    stored.tool_name,
+                    _json(stored.data),
+                    _json(stored.artifacts),
                     _json(stored.media_references),
                 ),
             )
@@ -311,16 +321,21 @@ class SessionStore:
                 raise SessionInactiveError("session is not active")
             self._connection.execute(
                 "INSERT INTO session_runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (run.id, run.session_id, run.turn_id, run.status.value,
-                 run.started_at, run.updated_at, run.effective_provider_id,
-                 run.effective_model_id),
+                (
+                    run.id,
+                    run.session_id,
+                    run.turn_id,
+                    run.status.value,
+                    run.started_at,
+                    run.updated_at,
+                    run.effective_provider_id,
+                    run.effective_model_id,
+                ),
             )
 
     def update_run_status(self, run_id: str, status: RunStatus, updated_at: str) -> bool:
         with self.transaction():
-            row = self._connection.execute(
-                "SELECT status FROM session_runs WHERE id = ?", (run_id,)
-            ).fetchone()
+            row = self._connection.execute("SELECT status FROM session_runs WHERE id = ?", (run_id,)).fetchone()
             if row is None:
                 return False
             current = RunStatus(str(row["status"]))
@@ -335,9 +350,7 @@ class SessionStore:
             )
         return cursor.rowcount > 0
 
-    def update_run_effective_model(
-        self, run_id: str, provider_id: str, model_id: str, updated_at: str
-    ) -> bool:
+    def update_run_effective_model(self, run_id: str, provider_id: str, model_id: str, updated_at: str) -> bool:
         with self.transaction():
             cursor = self._connection.execute(
                 """UPDATE session_runs
@@ -374,11 +387,14 @@ class SessionStore:
         workspace_id = str(row["workspace_id"])
         session_id = str(row["id"])
         return Session(
-            id=session_id, created_at=str(row["created_at"]),
-            updated_at=str(row["updated_at"]), title=str(row["title"]),
+            id=session_id,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+            title=str(row["title"]),
             agent_id=str(row["agent_id"]),
             model_policy=ModelPolicy(str(row["provider_id"]), str(row["model_id"])),
-            workspace_id=workspace_id, status=SessionStatus(str(row["status"])),
+            workspace_id=workspace_id,
+            status=SessionStatus(str(row["status"])),
             transcript=tuple(self.list_entries(session_id, workspace_id=workspace_id)),
             context_state=json.loads(str(row["context_state"])),
             memory_scope=str(row["memory_scope"]),
@@ -409,11 +425,17 @@ def _backup_is_valid(connection: sqlite3.Connection) -> bool:
 
 def _entry_from_row(row: sqlite3.Row) -> TranscriptEntry:
     return TranscriptEntry(
-        id=str(row["id"]), session_id=str(row["session_id"]),
-        turn_id=str(row["turn_id"]), sequence=int(row["sequence"]),
-        kind=TranscriptKind(str(row["kind"])), state=TranscriptState(str(row["state"])),
-        created_at=str(row["created_at"]), role=row["role"], text=row["text"],
-        tool_call_id=row["tool_call_id"], tool_name=row["tool_name"],
+        id=str(row["id"]),
+        session_id=str(row["session_id"]),
+        turn_id=str(row["turn_id"]),
+        sequence=int(row["sequence"]),
+        kind=TranscriptKind(str(row["kind"])),
+        state=TranscriptState(str(row["state"])),
+        created_at=str(row["created_at"]),
+        role=row["role"],
+        text=row["text"],
+        tool_call_id=row["tool_call_id"],
+        tool_name=row["tool_name"],
         data=json.loads(str(row["data"])),
         artifacts=tuple(json.loads(str(row["artifacts"]))),
         media_references=tuple(json.loads(str(row["media_references"]))),
@@ -422,15 +444,20 @@ def _entry_from_row(row: sqlite3.Row) -> TranscriptEntry:
 
 def _run_from_row(row: sqlite3.Row) -> SessionRun:
     return SessionRun(
-        id=str(row["id"]), session_id=str(row["session_id"]),
-        turn_id=str(row["turn_id"]), status=RunStatus(str(row["status"])),
-        started_at=str(row["started_at"]), updated_at=str(row["updated_at"]),
+        id=str(row["id"]),
+        session_id=str(row["session_id"]),
+        turn_id=str(row["turn_id"]),
+        status=RunStatus(str(row["status"])),
+        started_at=str(row["started_at"]),
+        updated_at=str(row["updated_at"]),
         effective_provider_id=row["effective_provider_id"],
         effective_model_id=row["effective_model_id"],
     )
 
 
 __all__ = [
-    "SessionCorruptionError", "SessionInactiveError", "SessionStore",
+    "SessionCorruptionError",
+    "SessionInactiveError",
+    "SessionStore",
     "SessionStoreError",
 ]

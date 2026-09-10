@@ -13,6 +13,7 @@ from .types import Observation, ObservationKind
 @dataclass
 class ToolMetric:
     """Per-tool accumulated metrics."""
+
     tool_name: str
     call_count: int = 0
     success_count: int = 0
@@ -27,6 +28,7 @@ class ToolMetric:
 @dataclass
 class ProviderMetric:
     """Per-provider accumulated metrics."""
+
     provider_id: str
     call_count: int = 0
     success_count: int = 0
@@ -39,6 +41,7 @@ class ProviderMetric:
 @dataclass
 class WorkflowMetric:
     """Per-session workflow statistics."""
+
     session_id: str
     tool_calls: int = 0
     turns: int = 0
@@ -49,6 +52,7 @@ class WorkflowMetric:
 @dataclass
 class UserFeedback:
     """A user's explicit feedback on an improvement."""
+
     candidate_id: str
     feedback_type: str  # "approve" | "reject" | "feedback"
     message_ru: str
@@ -72,6 +76,7 @@ class MetricsCollector:
     @classmethod
     def instance(cls) -> MetricsCollector:
         import acta.selfimprovement
+
         return acta.selfimprovement.get_collector()
 
     # ── Tool metrics ──────────────────────────────────────────
@@ -244,12 +249,14 @@ class MetricsCollector:
             },
         )
         self._observations.append(obs)
-        self._preference_corrections.append({
-            "type": correction_type,
-            "description": description,
-            "details": details,
-            "at": time.monotonic(),
-        })
+        self._preference_corrections.append(
+            {
+                "type": correction_type,
+                "description": description,
+                "details": details,
+                "at": time.monotonic(),
+            }
+        )
         return obs
 
     # ── User feedback ─────────────────────────────────────────
@@ -292,7 +299,7 @@ class MetricsCollector:
         with self._lock:
             self._observations.append(obs)
             if len(self._observations) > self._max_observations:
-                self._observations = self._observations[-self._max_observations:]
+                self._observations = self._observations[-self._max_observations :]
 
     def recent_observations(
         self,

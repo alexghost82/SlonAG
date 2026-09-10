@@ -2,11 +2,14 @@ from __future__ import annotations
 
 #web_search.py
 import json
+import logging
 
 from i18n import t
 
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 def _get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -82,7 +85,7 @@ def _compare(items: list[str], aspect: str) -> str:
     try:
         return _gemini_search(query)
     except Exception as e:
-        print(f"[WebSearch] ⚠️ Gemini compare failed: {e} — falling back to DDG")
+        logger.warning("Gemini compare failed: %s — falling back to DDG", e)
 
     # DDG fallback: fetch results per item and merge
     all_results: dict[str, list] = {}
@@ -121,7 +124,7 @@ def web_search(
     if player:
         player.write_log(f"[Search] mode={mode}")
 
-    print(f"[WebSearch] 🔍 query_length={len(query)} mode={mode}")
+    logger.info("query_length=%s mode=%s", len(query), mode)
 # replace: result = _gemini_search(query) block with:
     try:
         from providers.text_ops import client
@@ -129,15 +132,15 @@ def web_search(
             query,
             system="You are a web search assistant. Answer factually and concisely."
         )
-        print("[WebSearch] ✅ OpenRouter OK.")
+        logger.info("text_ops search ok")
         return result
     except Exception as e:
-        print(f"[WebSearch] ⚠️ OpenRouter failed ({e}) — trying DDG...")
+        logger.warning("text_ops search failed (%s) — trying DDG...", e)
         results = _ddg_search(query)
         result  = _format_ddg(query, results)
-        print(f"[WebSearch] ✅ DDG: {len(results)} result(s).")
+        logger.info("DDG: %s result(s)", len(results))
         return result
     
     except Exception as e:
-        print(f"[WebSearch] ❌ All backends failed: {e}")
+        logger.error("All backends failed: %s", e)
         return f"Search failed, sir: {e}"

@@ -2,13 +2,10 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from acta.workflow_learning.observer import ActionObserver
 from acta.workflow_learning.types import (
     ActionSequence,
     ActionSequenceEvent,
-    WorkflowCandidate,
     WorkflowState,
     WorkflowStep,
 )
@@ -170,21 +167,13 @@ class TestSequenceAnalysis:
         assert hash1 == hash2  # Same tool names, same success
 
     def test_different_tools_different_hash(self):
-        seq1 = ActionSequence(
-            steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True)]
-        )
-        seq2 = ActionSequence(
-            steps=[WorkflowStep(tool_name="file_read", args={"path": "/tmp/x"}, ok=True)]
-        )
+        seq1 = ActionSequence(steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True)])
+        seq2 = ActionSequence(steps=[WorkflowStep(tool_name="file_read", args={"path": "/tmp/x"}, ok=True)])
         assert ActionObserver._sequence_hash(seq1) != ActionObserver._sequence_hash(seq2)
 
     def test_success_vs_failure_different_hash(self):
-        seq1 = ActionSequence(
-            steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True)]
-        )
-        seq2 = ActionSequence(
-            steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=False)]
-        )
+        seq1 = ActionSequence(steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=True)])
+        seq2 = ActionSequence(steps=[WorkflowStep(tool_name="shell_exec", args={"cmd": "ls"}, ok=False)])
         assert ActionObserver._sequence_hash(seq1) != ActionObserver._sequence_hash(seq2)
 
     def test_empty_sequence_hash_deterministic(self):

@@ -16,35 +16,13 @@ Run: pytest tests/test_filesystem_security.py -v
 
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import threading
 from pathlib import Path
 from unittest import TestCase
 
-from acta.filesystem.security import (
-    Cancelled,
-    MAX_FILE_SIZE,
-    MAX_READ_BYTES,
-    MAX_WRITE_BYTES,
-    PathDenied,
-    SizeExceeded,
-    SymlinkEscape,
-    TraversalDetected,
-    _check_cancel,
-    _is_forbidden_system_path,
-    _has_traversal_component,
-    _raw_is_forbidden,
-    _safe_relative,
-    default_allowlist_roots,
-    detect_file_type,
-    read_safe,
-    validate_path,
-    validate_write_size,
-)
 from acta.filesystem.operations import (
-    FileSystemResult,
     copy,
     create_directory,
     create_file,
@@ -53,14 +31,26 @@ from acta.filesystem.operations import (
     filesystem_operation,
     list_directory,
     metadata,
-    organize_desktop,
     read,
     rename,
     search,
     trash,
     write,
 )
-
+from acta.filesystem.security import (
+    MAX_WRITE_BYTES,
+    Cancelled,
+    PathDenied,
+    SizeExceeded,
+    SymlinkEscape,
+    TraversalDetected,
+    _check_cancel,
+    _is_forbidden_system_path,
+    _raw_is_forbidden,
+    detect_file_type,
+    validate_path,
+    validate_write_size,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -353,6 +343,7 @@ class TestCancellation(TestCase):
         with self.assertRaises(Cancelled):
             _check_cancel(event)
 
+
 class TestUnifiedFilesystemOperation(TestCase):
     """Test the single filesystem_operation dispatcher."""
 
@@ -368,9 +359,7 @@ class TestUnifiedFilesystemOperation(TestCase):
         self.assertEqual(result.data, "dispatched")
 
     def test_write_via_dispatch(self):
-        result = filesystem_operation(
-            "write", path="dispatched.txt", content="data", roots=self.roots
-        )
+        result = filesystem_operation("write", path="dispatched.txt", content="data", roots=self.roots)
         self.assertTrue(result.ok)
         self.assertTrue((self.ws / "dispatched.txt").exists())
 
@@ -403,17 +392,13 @@ class TestE2EFileSecurityFlow(TestCase):
 
     def test_full_flow_blocked_traversal(self):
         """Agent tries ../ escape — must be denied before any filesystem access."""
-        result = filesystem_operation(
-            "write", path="../etc/evil.txt", content="malicious", roots=self.roots
-        )
+        result = filesystem_operation("write", path="../etc/evil.txt", content="malicious", roots=self.roots)
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "path_denied")
 
     def test_full_flow_blocked_system_path(self):
         """Agent tries writing to /etc — must be denied."""
-        result = filesystem_operation(
-            "write", path="/etc/evil.txt", content="malicious", roots=self.roots
-        )
+        result = filesystem_operation("write", path="/etc/evil.txt", content="malicious", roots=self.roots)
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "path_denied")
 
@@ -449,4 +434,5 @@ class TestE2EFileSecurityFlow(TestCase):
 
 if __name__ == "__main__":
     import unittest
+
     unittest.main()

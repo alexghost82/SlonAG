@@ -39,14 +39,10 @@ class RecordingPolicy:
         return SafetyDecision(
             kind=self.kind,
             tool_name=name,
-            risk=(
-                RiskLevel.CONFIRM
-                if self.kind is DecisionKind.CONFIRM
-                else RiskLevel.READ
-            ),
+            risk=(RiskLevel.CONFIRM if self.kind is DecisionKind.CONFIRM else RiskLevel.READ),
             source=source,
             intent=intent,
-            args=dict(args),
+            args=dict(args),  # type: ignore[call-overload]
         )
 
 
@@ -65,7 +61,7 @@ def build_executor(
             "Search",
             {},
             None,
-            handler,
+            handler,  # type: ignore[arg-type]
             RiskLevel.READ,
             timeout_seconds=timeout,
             idempotent=idempotent,
@@ -81,9 +77,7 @@ def test_execution_order_and_native_result() -> None:
         policy.events.append("handler")
         return ToolResult(ok=True, code="searched", data=dict(args))
 
-    result = build_executor(handler, policy).execute(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = build_executor(handler, policy).execute("web_search", {"value": "x"}, source=UntrustedSource.USER)
 
     assert result.ok and result.code == "searched"
     assert result.data == {"value": "x"}
@@ -101,9 +95,7 @@ def test_denied_or_unconfirmed_never_calls_handler(kind: DecisionKind) -> None:
         nonlocal called
         called = True
 
-    result = build_executor(handler, policy).execute(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = build_executor(handler, policy).execute("web_search", {"value": "x"}, source=UntrustedSource.USER)
 
     assert not result.ok
     assert not called
@@ -134,11 +126,13 @@ def test_canonical_tool_call_id_reaches_confirmation_for_single_and_batch() -> N
     executor = build_executor(
         lambda arguments: arguments,
         policy,
-        confirmer=lambda decision: correlated.append(decision.tool_call_id) or True,
+        confirmer=lambda decision: correlated.append(decision.tool_call_id) or True,  # type: ignore[func-returns-value]
     )
 
     first = executor.execute(
-        "web_search", {"value": "single"}, source=UntrustedSource.USER,
+        "web_search",
+        {"value": "single"},
+        source=UntrustedSource.USER,
         tool_call_id="provider-single",
     )
     batch = executor.execute_many(
@@ -220,9 +214,7 @@ def test_handler_exception_is_normalized_without_details() -> None:
     def handler(args: Mapping[str, object]) -> None:
         raise RuntimeError("api-key=do-not-leak")
 
-    result = build_executor(handler, policy).execute(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = build_executor(handler, policy).execute("web_search", {"value": "x"}, source=UntrustedSource.USER)
 
     assert result.code == "handler_error"
     assert "api-key" not in result.message
@@ -239,9 +231,9 @@ def test_timeout_is_bounded_and_handler_is_not_retried() -> None:
         release.wait(1.0)
 
     try:
-        result = build_executor(
-            handler, RecordingPolicy(), timeout=0.01, idempotent=True
-        ).execute("web_search", {"value": "x"}, source=UntrustedSource.USER)
+        result = build_executor(handler, RecordingPolicy(), timeout=0.01, idempotent=True).execute(
+            "web_search", {"value": "x"}, source=UntrustedSource.USER
+        )
         assert result.code == "timeout" and result.retryable
         assert calls == 1
         assert result.warnings
@@ -317,19 +309,27 @@ def test_execute_many_side_effects_are_sequential() -> None:
 def test_tool_spec_rejects_parallel_side_effect_metadata() -> None:
     with pytest.raises(ValueError, match="parallel_safe"):
         ToolSpec(
-            name="unsafe", description="unsafe", input_schema={"type": "object"},
-            output_schema=None, handler=lambda _arguments: None,
-            risk=RiskLevel.CONFIRM, parallel_safe=True,
+            name="unsafe",
+            description="unsafe",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda _arguments: None,
+            risk=RiskLevel.CONFIRM,
+            parallel_safe=True,
         )
 
 
 def test_tool_spec_rejects_inconsistent_side_effect_class() -> None:
     with pytest.raises(ValueError, match="disagree"):
         ToolSpec(
-            name="inconsistent", description="inconsistent",
-            input_schema={"type": "object"}, output_schema=None,
-            handler=lambda _arguments: None, risk=RiskLevel.READ,
-            side_effects=False, side_effect_class=SideEffectClass.IRREVERSIBLE,
+            name="inconsistent",
+            description="inconsistent",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=lambda _arguments: None,
+            risk=RiskLevel.READ,
+            side_effects=False,
+            side_effect_class=SideEffectClass.IRREVERSIBLE,
         )
 
 
@@ -346,11 +346,20 @@ def test_duplicate_parallel_safe_calls_are_serialized() -> None:
         active -= 1
         return arguments
 
-    registry.register(ToolSpec(
-        name="read", description="read", input_schema={"type": "object"},
-        output_schema=None, handler=handler, risk=RiskLevel.READ,
-        read_only=True, idempotent=True, side_effects=False, parallel_safe=True,
-    ))
+    registry.register(
+        ToolSpec(
+            name="read",
+            description="read",
+            input_schema={"type": "object"},
+            output_schema=None,
+            handler=handler,
+            risk=RiskLevel.READ,
+            read_only=True,
+            idempotent=True,
+            side_effects=False,
+            parallel_safe=True,
+        )
+    )
     executor = ToolExecutor(registry, RecordingPolicy())  # type: ignore[arg-type]
     executor.execute_many(
         (("read", {"value": 1}), ("read", {"value": 1})),
@@ -365,9 +374,7 @@ def test_approval_and_handler_timing_are_reported_separately() -> None:
         RecordingPolicy(DecisionKind.CONFIRM),
         confirmer=lambda _decision: True,
     )
-    result = executor.execute(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = executor.execute("web_search", {"value": "x"}, source=UntrustedSource.USER)
     assert result.approval_started_at is not None
     assert result.approval_finished_at is not None
     assert result.handler_started_at is not None
@@ -379,9 +386,7 @@ def test_approval_and_handler_timing_are_reported_separately() -> None:
     ("legacy", "message", "data"),
     [(None, "", None), ("done", "done", None), ({"x": 1}, "", {"x": 1})],
 )
-def test_minimal_legacy_normalization(
-    legacy: object, message: str, data: object
-) -> None:
+def test_minimal_legacy_normalization(legacy: object, message: str, data: object) -> None:
     result = build_executor(lambda args: legacy, RecordingPolicy()).execute(
         "web_search", {"value": "x"}, source=UntrustedSource.USER
     )
@@ -391,9 +396,7 @@ def test_minimal_legacy_normalization(
 @pytest.mark.asyncio
 async def test_execute_async_success_is_not_retryable() -> None:
     executor = build_executor(lambda arguments: arguments, RecordingPolicy())
-    result = await executor.execute_async(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = await executor.execute_async("web_search", {"value": "x"}, source=UntrustedSource.USER)
     assert result.ok is True
     assert result.retryable is False
 
@@ -404,9 +407,7 @@ async def test_execute_async_non_idempotent_failure_is_not_retryable() -> None:
         raise ConnectionError("transient")
 
     executor = build_executor(handler, RecordingPolicy(), idempotent=False)
-    result = await executor.execute_async(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = await executor.execute_async("web_search", {"value": "x"}, source=UntrustedSource.USER)
     assert result.ok is False
     assert result.retryable is False
 
@@ -417,9 +418,7 @@ async def test_execute_async_idempotent_timeout_is_retryable() -> None:
         time.sleep(0.2)
 
     executor = build_executor(handler, RecordingPolicy(), timeout=0.01, idempotent=True)
-    result = await executor.execute_async(
-        "web_search", {"value": "x"}, source=UntrustedSource.USER
-    )
+    result = await executor.execute_async("web_search", {"value": "x"}, source=UntrustedSource.USER)
     assert result.code == "timeout"
     assert result.retryable is True
 

@@ -87,8 +87,7 @@ class MemoryInjector:
 
     # ── persistence: called AFTER each turn ────────────────────────────
 
-    def persist_candidate(
-        self, user_input: str, assistant_output: str) -> list[str]:
+    def persist_candidate(self, user_input: str, assistant_output: str) -> list[str]:
         """Extract and persist durable facts from the conversation turn.
 
         Returns a list of keys that were stored.

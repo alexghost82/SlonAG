@@ -23,7 +23,10 @@ capability as ``false`` and the result still completes without error.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from acta.vision.config import VisionConfig
 from acta.vision.processing import detect_capabilities
@@ -35,6 +38,8 @@ from acta.vision.types import (
     VisionAnalysis,
     VisionRuntimeStatus,
 )
+from providers.contracts import VisionRequest, VisionResponse
+from providers.errors import CapabilityError, ProviderError
 
 
 class VisionProvider:
@@ -126,8 +131,10 @@ class VisionProvider:
                 "confidence": d.confidence,
                 "track_id": d.track_id,
                 "bbox": {
-                    "x_min": d.bbox.x_min, "y_min": d.bbox.y_min,
-                    "x_max": d.bbox.x_max, "y_max": d.bbox.y_max,
+                    "x_min": d.bbox.x_min,
+                    "y_min": d.bbox.y_min,
+                    "x_max": d.bbox.x_max,
+                    "y_max": d.bbox.y_max,
                 },
             }
             for d in detections
@@ -214,6 +221,7 @@ def create_vision_provider(
     """Convenience factory."""
     return VisionProvider(source_type, source_config, config)
 
+
 # ───────────────────────────────────────────────────────────────────────────
 # Security constants and untrusted fencing
 # ───────────────────────────────────────────────────────────────────────────
@@ -258,17 +266,11 @@ def wrap_untrusted_image_text(text: str) -> str:
 # LocalVisionProvider — security-gated, ephemeral-image vision analysis
 # ───────────────────────────────────────────────────────────────────────────
 
-from dataclasses import dataclass
-from pathlib import Path
-from uuid import uuid4
-
-from providers.contracts import VisionRequest, VisionResponse
-from providers.errors import CapabilityError, ProviderError
-
 
 @dataclass(frozen=True)
 class VisionTaskRequest:
     """Extended VisionRequest with a ``kind`` selector."""
+
     model: Any  # ModelInfo
     image: bytes
     prompt: str = ""
@@ -277,8 +279,9 @@ class VisionTaskRequest:
 
 class _EngineProtocol:
     """Minimal protocol expected of a vision analysis engine."""
+
     def analyze(self, image: bytes, prompt: str, kind: str) -> str:
-        ...  # pragma: no cover
+        raise NotImplementedError
 
 
 class LocalVisionProvider:
@@ -412,11 +415,12 @@ class LocalVisionProvider:
         return DEFAULT_KIND
 
 
-
 def register_factory() -> None:
     """Register ``LocalVisionProvider`` factory with the providers registry."""
     from providers.registry import register
+
     register(PROVIDER_ID, LocalVisionProvider)
+
 
 __all__ = [
     "DEFAULT_KIND",

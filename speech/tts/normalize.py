@@ -8,6 +8,7 @@ try:
     from localization.ru_locale import normalize_yo as _normalize_yo
     from localization.ru_locale import plural_ru
 except ImportError:  # pragma: no cover - localization is present in this repo
+
     def _normalize_yo(text: str) -> str:
         return text
 
@@ -20,6 +21,7 @@ except ImportError:  # pragma: no cover - localization is present in this repo
         if 2 <= mod10 <= 4 and not 12 <= mod100 <= 14:
             return few
         return many
+
 
 _ONES_M = (
     "ноль",

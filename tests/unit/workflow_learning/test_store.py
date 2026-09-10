@@ -1,9 +1,6 @@
 """Tests for workflow_learning.store."""
 
 import json
-from pathlib import Path
-
-import pytest
 
 from acta.workflow_learning.store import WorkflowStore
 from acta.workflow_learning.types import (
@@ -11,7 +8,6 @@ from acta.workflow_learning.types import (
     WorkflowCandidate,
     WorkflowState,
     WorkflowTemplate,
-    WorkflowStep,
 )
 
 
@@ -19,7 +15,7 @@ class TestWorkflowStore:
     """Tests for WorkflowStore persistence."""
 
     def test_initial_data_structure(self, tmp_path):
-        store = WorkflowStore(store_path=tmp_path / "workflows.json")
+        WorkflowStore(store_path=tmp_path / "workflows.json")
         data = json.loads((tmp_path / "workflows.json").read_text())
         assert "candidates" in data
         assert "templates" in data
@@ -90,10 +86,24 @@ class TestWorkflowStore:
 
     def test_list_templates(self, tmp_path):
         store = WorkflowStore(store_path=tmp_path / "wf.json")
-        t1 = WorkflowTemplate(id="t1", version=1, name="active", description="active", state=WorkflowState.ACTIVE,
-                              parameter_slots=[], step_descriptors=[])
-        t2 = WorkflowTemplate(id="t2", version=1, name="draft", description="draft", state=WorkflowState.DRAFT,
-                              parameter_slots=[], step_descriptors=[])
+        t1 = WorkflowTemplate(
+            id="t1",
+            version=1,
+            name="active",
+            description="active",
+            state=WorkflowState.ACTIVE,
+            parameter_slots=[],
+            step_descriptors=[],
+        )
+        t2 = WorkflowTemplate(
+            id="t2",
+            version=1,
+            name="draft",
+            description="draft",
+            state=WorkflowState.DRAFT,
+            parameter_slots=[],
+            step_descriptors=[],
+        )
         store.save_template(t1)
         store.save_template(t2)
 
@@ -103,8 +113,15 @@ class TestWorkflowStore:
 
     def test_delete_template(self, tmp_path):
         store = WorkflowStore(store_path=tmp_path / "wf.json")
-        t = WorkflowTemplate(id="del-tmpl", version=1, name="to delete", description="to delete",
-                             state=WorkflowState.DRAFT, parameter_slots=[], step_descriptors=[])
+        t = WorkflowTemplate(
+            id="del-tmpl",
+            version=1,
+            name="to delete",
+            description="to delete",
+            state=WorkflowState.DRAFT,
+            parameter_slots=[],
+            step_descriptors=[],
+        )
         store.save_template(t)
         assert store.delete_template("del-tmpl") is True
         assert store.get_template("del-tmpl") is None

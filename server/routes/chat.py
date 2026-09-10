@@ -194,11 +194,7 @@ class ChatHandlerWithRuntime:
                     step_dict["observation"] = {
                         "ok": obs.ok,
                         "kind": obs.kind.value,
-                        "content": (
-                            obs.content
-                            if obs.kind == ObservationKind.SUCCESS
-                            else None
-                        ),
+                        "content": (obs.content if obs.kind == ObservationKind.SUCCESS else None),
                         "error": obs.error,
                     }
                 if step.steering is not None:
@@ -237,11 +233,7 @@ class ChatHandlerWithRuntime:
                 "event": "agent_response",
                 "conversation_id": request.conversation_id or "conv_0",
                 "answer": answer,
-                "tool_calls": [
-                    {"tool_name": s["tool_name"]}
-                    for s in steps
-                    if s.get("tool_name")
-                ],
+                "tool_calls": [{"tool_name": s["tool_name"]} for s in steps if s.get("tool_name")],
                 "observations": observations,
                 "ok": run_result.get("ok", False),
             },

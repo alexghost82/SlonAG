@@ -14,18 +14,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-DEFAULT_KEYS_PATH: Final[Path] = (
-    Path(__file__).resolve().parent / "api_keys.json"
-)
+DEFAULT_KEYS_PATH: Final[Path] = Path(__file__).resolve().parent / "api_keys.json"
 
 
 @dataclass(frozen=True)
 class TrackingStatus:
     """Immutable status of a secret file."""
+
     path: Path
     exists: bool
     is_tracked_by_git: bool
-    mode_octal: str           # e.g. "0600"  (empty when file does not exist)
+    mode_octal: str  # e.g. "0600"  (empty when file does not exist)
     has_read_permissions: bool  # owner can read
 
 
@@ -73,7 +72,10 @@ def _resolve_git_root(cwd: Path) -> Path | None:
     try:
         result = subprocess.run(
             ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, check=True, timeout=10,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
         )
         return Path(result.stdout.strip())
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -90,7 +92,10 @@ def _git_is_tracked(repo_root: Path, file_path: Path) -> bool:
     try:
         result = subprocess.run(
             ["git", "-C", str(repo_root), "ls-files", "--cached", str(rel)],
-            capture_output=True, text=True, check=True, timeout=10,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
         )
         return bool(result.stdout.strip())
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -101,7 +106,4 @@ def require_not_tracked(path: Path | None = None) -> None:
     """Raise ``RuntimeError`` if the secret file is tracked by git."""
     st = check(path)
     if st.is_tracked_by_git:
-        raise RuntimeError(
-            f"{st.path} must NOT be tracked by git. "
-            "It is listed in .gitignore, but git has cached it."
-        )
+        raise RuntimeError(f"{st.path} must NOT be tracked by git. It is listed in .gitignore, but git has cached it.")

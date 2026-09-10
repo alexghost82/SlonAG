@@ -19,15 +19,14 @@ Covers all 17 acceptance criteria:
 16. concurrent execution limits
 17. clean shutdown
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -36,15 +35,15 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from acta.automation.engine import (
+from acta.automation.engine import (  # noqa: E402
     AutomationEngine,
-    CronScheduler,
     CronParser,
+    CronScheduler,
     OneShotTrigger,
     RecurringTrigger,
     SimpleAutomationEngine,
 )
-from acta.automation.types import (
+from acta.automation.types import (  # noqa: E402
     AutomationJob,
     AutomationStatus,
     ConcurrencyPolicy,
@@ -52,6 +51,11 @@ from acta.automation.types import (
     RetryPolicy,
     TriggerType,
 )
+
+
+def _job(job: AutomationJob | None) -> AutomationJob:
+    assert job is not None
+    return job
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -98,7 +102,7 @@ class TestOneShot:
         time.sleep(0.3)
         engine.stop()
 
-        j = engine.get_job(job.id)
+        j = _job(engine.get_job(job.id))
         assert j.status == AutomationStatus.COMPLETED
         assert j.run_count == 1
         assert len(calls) == 1
@@ -109,7 +113,7 @@ class TestOneShot:
         time.sleep(0.3)
         time.sleep(0.3)
         sync_engine.stop()
-        j = sync_engine.get_job(job.id)
+        j = _job(sync_engine.get_job(job.id))
         assert j.status == AutomationStatus.COMPLETED
         assert j.run_count == 1
 
@@ -138,7 +142,7 @@ class TestInterval:
         time.sleep(0.5)
         engine.stop()
 
-        j = engine.get_job(job.id)
+        j = _job(engine.get_job(job.id))
         assert j.run_count >= 2  # at least 2 fires in 0.5s with 0.1s interval
 
     def test_interval_via_recurring(self, engine: AutomationEngine) -> None:
@@ -151,7 +155,7 @@ class TestInterval:
         )
         time.sleep(0.2)
         engine.stop()
-        j = engine.get_job(job.id)
+        j = _job(engine.get_job(job.id))
         assert j.run_count >= 1
 
 
@@ -219,7 +223,7 @@ class TestEnableDisable:
         engine.stop()
 
         assert len(calls) == 0
-        assert not engine.get_job(job.id).enabled
+        assert not _job(engine.get_job(job.id)).enabled
 
     def test_enable_resumes(self, engine: AutomationEngine) -> None:
         engine.start()
@@ -232,14 +236,14 @@ class TestEnableDisable:
         time.sleep(0.3)
         engine.stop()
 
-        assert engine.get_job(job.id).status == AutomationStatus.COMPLETED
+        assert _job(engine.get_job(job.id)).status == AutomationStatus.COMPLETED
 
     def test_cancel_is_separate(self, engine: AutomationEngine) -> None:
         engine.start()
         job = engine.create("cancel_test", TriggerType.ONE_SHOT, {"delay_seconds": 0.0}, goal="test")
         result = engine.cancel(job.id)
         assert result is True
-        assert engine.get_job(job.id).status == AutomationStatus.CANCELLED
+        assert _job(engine.get_job(job.id)).status == AutomationStatus.CANCELLED
 
 
 # ── 6. Cancellation ──────────────────────────────────────────────────
@@ -252,13 +256,13 @@ class TestCancellation:
         assert engine.cancel("nonexistent") is False
         job = engine.create("cancel", TriggerType.ONE_SHOT, {}, goal="test")
         assert engine.cancel(job.id) is True
-        assert engine.get_job(job.id).status == AutomationStatus.CANCELLED
+        assert _job(engine.get_job(job.id)).status == AutomationStatus.CANCELLED
 
     def test_cancel_while_running(self, engine: AutomationEngine) -> None:
         engine.start()
         job = engine.create("cancel_run", TriggerType.RECURRING, {"interval_seconds": 10.0}, goal="test")
         engine.cancel(job.id)
-        assert engine.get_job(job.id).status == AutomationStatus.CANCELLED
+        assert _job(engine.get_job(job.id)).status == AutomationStatus.CANCELLED
 
     def test_delete_removes(self, engine: AutomationEngine) -> None:
         job = engine.create("del_test", TriggerType.ONE_SHOT, {}, goal="test")
@@ -292,7 +296,7 @@ class TestPersistence:
         eng1.stop()
 
         eng2 = AutomationEngine(store_path=store_dir)
-        j = eng2.get_job(job.id)
+        j = _job(eng2.get_job(job.id))
         assert j is not None
         assert j.status == AutomationStatus.COMPLETED
         assert j.run_count >= 1
@@ -312,7 +316,7 @@ class TestRestartRecovery:
 
         eng1 = AutomationEngine(store_path=store_dir, executor=counter)
         eng1.start()
-        job = eng1.create("restart1", TriggerType.RECURRING, {"interval_seconds": 0.2}, goal="test")
+        eng1.create("restart1", TriggerType.RECURRING, {"interval_seconds": 0.2}, goal="test")
         time.sleep(0.6)  # let it fire 2-3 times
         eng1.stop()
 
@@ -329,6 +333,7 @@ class TestRestartRecovery:
 
     def test_running_job_resets_on_restart(self, store_dir: Path) -> None:
         """A RUNNING job at shutdown should be reset to PENDING."""
+
         async def block(_job: AutomationJob) -> None:
             await asyncio.sleep(10)
 
@@ -344,7 +349,7 @@ class TestRestartRecovery:
 
         # On restart, the engine should recover and reset the job
         eng2 = AutomationEngine(store_path=store_dir, executor=block)
-        j = eng2.get_job(job.id)
+        j = _job(eng2.get_job(job.id))
         assert j.status == AutomationStatus.PENDING, "RUNNING jobs reset to PENDING on restart"
         eng2.stop()
 
@@ -389,11 +394,16 @@ class TestFailureHistory:
         async def fail(_job: AutomationJob) -> None:
             raise RuntimeError("oops")
 
-        eng = AutomationEngine(store_path=store_dir, executor=fail, concurrency=ConcurrencyPolicy(
-            max_concurrent_per_job=1, max_concurrent_global=4,
-        ))
+        eng = AutomationEngine(
+            store_path=store_dir,
+            executor=fail,
+            concurrency=ConcurrencyPolicy(
+                max_concurrent_per_job=1,
+                max_concurrent_global=4,
+            ),
+        )
         eng.start()
-        job = eng.create("fail1", TriggerType.ONE_SHOT, {"delay_seconds": 0.0}, goal="test")
+        eng.create("fail1", TriggerType.ONE_SHOT, {"delay_seconds": 0.0}, goal="test")
         time.sleep(1.5)  # allow retries
         eng.stop()
 
@@ -411,7 +421,7 @@ class TestFailureHistory:
         time.sleep(2.0)  # allow retries to exhaust
         eng.stop()
 
-        j = eng.get_job(job.id)
+        j = _job(eng.get_job(job.id))
         assert j.failure_count >= 1
 
 
@@ -449,10 +459,8 @@ class TestTimezone:
 
     def test_cron_different_timezone(self, store_dir: Path) -> None:
         eng = AutomationEngine(store_path=store_dir)
-        job_utc = eng.create("tz_utc", TriggerType.CRON, {"expression": "0 12 * * *"},
-                             timezone_str="UTC")
-        job_ny = eng.create("tz_ny", TriggerType.CRON, {"expression": "0 12 * * *"},
-                            timezone_str="America/New_York")
+        job_utc = eng.create("tz_utc", TriggerType.CRON, {"expression": "0 12 * * *"}, timezone_str="UTC")
+        job_ny = eng.create("tz_ny", TriggerType.CRON, {"expression": "0 12 * * *"}, timezone_str="America/New_York")
 
         assert job_utc.next_run_at is not None
         assert job_ny.next_run_at is not None
@@ -460,8 +468,7 @@ class TestTimezone:
 
     def test_invalid_tz_falls_back(self, store_dir: Path) -> None:
         eng = AutomationEngine(store_path=store_dir)
-        job = eng.create("bad_tz", TriggerType.CRON, {"expression": "0 12 * * *"},
-                         timezone_str="Invalid/Zone")
+        job = eng.create("bad_tz", TriggerType.CRON, {"expression": "0 12 * * *"}, timezone_str="Invalid/Zone")
         assert job.next_run_at is not None
 
 
@@ -483,7 +490,7 @@ class TestMalformedCron:
         time.sleep(0.3)
         engine.stop()
 
-        j = engine.get_job(job.id)
+        j = _job(engine.get_job(job.id))
         assert j.status == AutomationStatus.FAILED or j.last_error is not None
 
 
@@ -541,7 +548,7 @@ class TestConcurrentExecution:
             concurrency=ConcurrencyPolicy(max_concurrent_per_job=1, max_concurrent_global=10),
         )
         eng.start()
-        job = eng.create("conc", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="test")
+        eng.create("conc", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="test")
         time.sleep(0.4)
         eng.stop()
 
@@ -567,9 +574,9 @@ class TestConcurrentExecution:
             concurrency=ConcurrencyPolicy(max_concurrent_per_job=5, max_concurrent_global=2),
         )
         eng.start()
-        j1 = eng.create("g1", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="a")
-        j2 = eng.create("g2", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="b")
-        j3 = eng.create("g3", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="c")
+        eng.create("g1", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="a")
+        eng.create("g2", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="b")
+        eng.create("g3", TriggerType.RECURRING, {"interval_seconds": 0.01}, goal="c")
         time.sleep(0.4)
         eng.stop()
 
@@ -594,6 +601,7 @@ class TestCleanShutdown:
 
     def test_running_jobs_stored_before_shutdown(self, store_dir: Path) -> None:
         import json
+
         eng = AutomationEngine(store_path=store_dir)
         eng.start()
         job = eng.create("shutdown_job", TriggerType.ONE_SHOT, {"delay_seconds": 0.0}, goal="test")
@@ -656,12 +664,17 @@ class TestRetryPolicy:
             concurrency=ConcurrencyPolicy(max_concurrent_per_job=1, max_concurrent_global=4),
         )
         eng.start()
-        job = eng.create("retry", TriggerType.ONE_SHOT, {"delay_seconds": 0.0},
-                         goal="retry test", retry_policy=RetryPolicy(max_attempts=3))
+        job = eng.create(
+            "retry",
+            TriggerType.ONE_SHOT,
+            {"delay_seconds": 0.0},
+            goal="retry test",
+            retry_policy=RetryPolicy(max_attempts=3),
+        )
         time.sleep(2.5)
         eng.stop()
 
-        j = eng.get_job(job.id)
+        j = _job(eng.get_job(job.id))
         assert j.run_count >= 1
 
     def test_exhaust_retries_marks_failed(self, store_dir: Path) -> None:
@@ -670,12 +683,17 @@ class TestRetryPolicy:
 
         eng = AutomationEngine(store_path=store_dir, executor=always_fail)
         eng.start()
-        job = eng.create("exhaust", TriggerType.ONE_SHOT, {"delay_seconds": 0.0},
-                         goal="exhaust test", retry_policy=RetryPolicy(max_attempts=2))
+        job = eng.create(
+            "exhaust",
+            TriggerType.ONE_SHOT,
+            {"delay_seconds": 0.0},
+            goal="exhaust test",
+            retry_policy=RetryPolicy(max_attempts=2),
+        )
         time.sleep(3.0)
         eng.stop()
 
-        j = eng.get_job(job.id)
+        j = _job(eng.get_job(job.id))
         assert j.failure_count >= 1
 
 
@@ -687,21 +705,61 @@ class TestE2ECompatibility:
 
     def test_engine_import(self) -> None:
         from acta.automation.engine import AutomationEngine
+
         eng = AutomationEngine()
         assert isinstance(eng, AutomationEngine)
 
     def test_rule_import(self) -> None:
         from acta.automation.types import AutomationRule
+
         rule = AutomationRule(name="test", trigger="manual", action="notify")
         assert rule.name == "test"
 
     def test_full_import(self) -> None:
         from acta.automation import (
             AutomationEngine,
-            AutomationJob,
-            AutomationStatus,
-            TriggerType,
-            SimpleAutomationEngine,
         )
+
         eng = AutomationEngine()
         assert isinstance(eng, AutomationEngine)
+
+
+class TestJobEngineFire:
+    """PR-024: each fire is a durable JobEngine job."""
+
+    def test_due_job_enqueues_and_recovers_once(self, store_dir: Path) -> None:
+        from runtime.jobs import JobEngine, JobState
+
+        calls: list[str] = []
+
+        def boom(job: AutomationJob) -> None:
+            calls.append(job.id)
+            raise RuntimeError("crash before complete")
+
+        jobs_path = store_dir / "slon_jobs.sqlite3"
+        engine = AutomationEngine(store_path=store_dir, executor=boom)
+        job = engine.create(
+            "oneshot",
+            TriggerType.ONE_SHOT,
+            {"delay_seconds": 0.0},
+            goal="fire",
+            side_effect_safe=False,
+        )
+        scheduled_ts = int(round(float(job.next_run_at or time.time()) * 1000))
+        engine.start()
+        time.sleep(0.4)
+        engine.stop()
+        assert len(calls) == 1
+
+        durable = JobEngine(jobs_path)
+        stored = durable.get_by_idempotency_key(f"{job.id}:{scheduled_ts}")
+        assert stored is not None
+        assert stored.state in (JobState.FAILED, JobState.RUNNING, JobState.RETRYING, JobState.COMPLETED)
+        durable.close()
+
+        restarted = AutomationEngine(store_path=store_dir, executor=lambda _j: calls.append("again"))
+        restarted.start()
+        time.sleep(0.4)
+        restarted.stop()
+        # Same scheduled fire must not run the executor again (idempotent key).
+        assert calls.count("again") == 0

@@ -61,10 +61,7 @@ class BaseLocalChatProvider:
         )
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}(base_url={self.base_url!r}, "
-            f"allow_remote={self.allow_remote})"
-        )
+        return f"{type(self).__name__}(base_url={self.base_url!r}, allow_remote={self.allow_remote})"
 
     async def validate(self) -> ProviderStatus:
         assert_endpoint_allowed(
@@ -139,9 +136,7 @@ class BaseLocalChatProvider:
         yield ChatEvent(type="done")
 
     def _chat_payload(self, request: ChatRequest, *, stream: bool) -> dict[str, object]:
-        messages = messages_payload(
-            request.messages, ollama=self.protocol == PROTOCOL_OLLAMA
-        )
+        messages = messages_payload(request.messages, ollama=self.protocol == PROTOCOL_OLLAMA)
         payload: dict[str, object] = {
             "model": request.model.model_id,
             "messages": messages,
@@ -204,9 +199,7 @@ class BaseLocalChatProvider:
             message = payload.get("message")
             if isinstance(message, dict):
                 content = message.get("content")
-                tool_calls = _ollama_tool_calls(
-                    message.get("tool_calls"), self.provider_id
-                )
+                tool_calls = _ollama_tool_calls(message.get("tool_calls"), self.provider_id)
                 if isinstance(content, str) and (content or tool_calls):
                     return content, tool_calls
             raise ProviderError(
@@ -242,9 +235,7 @@ class BaseLocalChatProvider:
         """Compatibility helper retained for text-only callers."""
         return self._parse_chat_message(payload)[0]
 
-    async def _iter_openai_stream(
-        self, response: TransportResponse
-    ) -> AsyncIterator[ChatEvent]:
+    async def _iter_openai_stream(self, response: TransportResponse) -> AsyncIterator[ChatEvent]:
         pending_calls: dict[int, dict[str, str]] = {}
 
         def completed_calls() -> tuple[ToolCall, ...]:
@@ -280,9 +271,7 @@ class BaseLocalChatProvider:
         for tool_call in completed_calls():
             yield ChatEvent(type="tool_call", tool_call=tool_call)
 
-    async def _iter_ollama_stream(
-        self, response: TransportResponse
-    ) -> AsyncIterator[ChatEvent]:
+    async def _iter_ollama_stream(self, response: TransportResponse) -> AsyncIterator[ChatEvent]:
         raw_tool_calls: list[object] = []
         for line in response.iter_lines():
             stripped = line.strip()
@@ -309,9 +298,7 @@ class BaseLocalChatProvider:
                 if isinstance(calls, list):
                     raw_tool_calls.extend(calls)
             if payload.get("done") is True:
-                for tool_call in _ollama_tool_calls(
-                    raw_tool_calls, self.provider_id
-                ):
+                for tool_call in _ollama_tool_calls(raw_tool_calls, self.provider_id):
                     yield ChatEvent(type="tool_call", tool_call=tool_call)
                 return
         for tool_call in _ollama_tool_calls(raw_tool_calls, self.provider_id):
@@ -320,9 +307,7 @@ class BaseLocalChatProvider:
     def _model_info(self, model_id: str, runtime_metadata: object) -> ModelInfo:
         metadata = runtime_metadata if isinstance(runtime_metadata, dict) else {}
         source = metadata.get("owned_by")
-        resolved_source = (
-            source if isinstance(source, str) and source else self.provider_id
-        )
+        resolved_source = source if isinstance(source, str) and source else self.provider_id
         capabilities = resolve_local_capabilities(
             self.provider_id,
             model_id,
@@ -442,22 +427,16 @@ def _openai_tool_calls(value: object, provider_id: str) -> tuple[ToolCall, ...]:
     if value is None:
         return ()
     if not isinstance(value, list):
-        raise ProviderError(
-            "chat payload has invalid tool calls", provider_id=provider_id
-        )
+        raise ProviderError("chat payload has invalid tool calls", provider_id=provider_id)
     calls: list[ToolCall] = []
     for index, item in enumerate(value):
         if not isinstance(item, dict) or not isinstance(item.get("function"), dict):
-            raise ProviderError(
-                "chat payload has invalid tool calls", provider_id=provider_id
-            )
+            raise ProviderError("chat payload has invalid tool calls", provider_id=provider_id)
         function = item["function"]
         name = function.get("name")
         arguments = _openai_arguments(function.get("arguments"), provider_id)
         if not isinstance(name, str) or not name:
-            raise ProviderError(
-                "chat payload has invalid tool calls", provider_id=provider_id
-            )
+            raise ProviderError("chat payload has invalid tool calls", provider_id=provider_id)
         call_id = item.get("id")
         if not isinstance(call_id, str) or not call_id:
             call_id = f"openai-call-{index}"
@@ -470,19 +449,13 @@ def _openai_arguments(value: object, provider_id: str) -> dict[str, object]:
     if isinstance(value, dict):
         return value
     if not isinstance(value, str):
-        raise ProviderError(
-            "chat payload has invalid tool call arguments", provider_id=provider_id
-        )
+        raise ProviderError("chat payload has invalid tool call arguments", provider_id=provider_id)
     try:
         arguments = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ProviderError(
-            "chat payload has invalid tool call arguments", provider_id=provider_id
-        ) from exc
+        raise ProviderError("chat payload has invalid tool call arguments", provider_id=provider_id) from exc
     if not isinstance(arguments, dict):
-        raise ProviderError(
-            "chat payload has invalid tool call arguments", provider_id=provider_id
-        )
+        raise ProviderError("chat payload has invalid tool call arguments", provider_id=provider_id)
     return arguments
 
 
@@ -522,9 +495,7 @@ def _accumulate_openai_tool_deltas(
                 call["arguments"] += arguments
 
 
-def _openai_stream_tool_calls(
-    pending: dict[int, dict[str, str]], provider_id: str
-) -> tuple[ToolCall, ...]:
+def _openai_stream_tool_calls(pending: dict[int, dict[str, str]], provider_id: str) -> tuple[ToolCall, ...]:
     calls: list[ToolCall] = []
     for index, fragments in sorted(pending.items()):
         name = fragments["name"]
@@ -548,26 +519,18 @@ def _ollama_tool_calls(value: object, provider_id: str) -> tuple[ToolCall, ...]:
     if value is None:
         return ()
     if not isinstance(value, list):
-        raise ProviderError(
-            "ollama chat payload has invalid tool calls", provider_id=provider_id
-        )
+        raise ProviderError("ollama chat payload has invalid tool calls", provider_id=provider_id)
     calls: list[ToolCall] = []
     for index, item in enumerate(value):
         if not isinstance(item, dict):
-            raise ProviderError(
-                "ollama chat payload has invalid tool calls", provider_id=provider_id
-            )
+            raise ProviderError("ollama chat payload has invalid tool calls", provider_id=provider_id)
         function = item.get("function")
         if not isinstance(function, dict):
-            raise ProviderError(
-                "ollama chat payload has invalid tool calls", provider_id=provider_id
-            )
+            raise ProviderError("ollama chat payload has invalid tool calls", provider_id=provider_id)
         name = function.get("name")
         arguments = function.get("arguments")
         if not isinstance(name, str) or not name or not isinstance(arguments, dict):
-            raise ProviderError(
-                "ollama chat payload has invalid tool calls", provider_id=provider_id
-            )
+            raise ProviderError("ollama chat payload has invalid tool calls", provider_id=provider_id)
         call_id = item.get("id")
         if not isinstance(call_id, str) or not call_id:
             call_id = f"ollama-call-{index}"

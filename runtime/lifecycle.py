@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import traceback
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import logging
+
 from runtime.events import RuntimeEventKind
 from i18n import t
+
+logger = logging.getLogger(__name__)
 
 
 class _SessionTaskEnded(Exception):
@@ -37,7 +40,7 @@ async def run_live_lifecycle(
     """Reconnect forever while giving each connection fresh owned tasks."""
     while not (should_stop is not None and should_stop()):
         try:
-            print("[SLON] 🔌 Connecting...")
+            logger.info("Connecting...")
             if emit_event is None:
                 ui.set_state("THINKING")
             else:
@@ -46,7 +49,7 @@ async def run_live_lifecycle(
             session = await asyncio.wait_for(connection.__aenter__(), connect_timeout)
             try:
                 on_connected(session, asyncio.get_running_loop())
-                print("[SLON] ✅ Connected.")
+                logger.info("Connected.")
                 if emit_event is None:
                     ui.set_state("LISTENING")
                 else:
@@ -64,8 +67,7 @@ async def run_live_lifecycle(
             on_disconnected()
             raise
         except Exception as exc:
-            print(f"[SLON] ⚠️ {exc}")
-            traceback.print_exc()
+            logger.warning("Live session error: %s", exc, exc_info=True)
             on_disconnected()
         else:
             on_disconnected()
@@ -76,7 +78,7 @@ async def run_live_lifecycle(
             ui.set_state("THINKING")
         else:
             emit_event(RuntimeEventKind.THINKING)
-        print(f"[SLON] 🔄 Reconnecting in {reconnect_delay:g}s...")
+        logger.info("Reconnecting in %gs...", reconnect_delay)
         await asyncio.sleep(reconnect_delay)
 
 

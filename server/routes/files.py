@@ -28,9 +28,7 @@ def _normalize_path(path: str) -> str:
     raw = path.strip() or "/"
     # Reject Windows drive roots and traversal early.
     lowered = raw.replace("\\", "/").lower()
-    if lowered in {"/", "/etc", "/system", "c:/", "c:/windows"} or lowered.startswith(
-        ("../", "/../")
-    ):
+    if lowered in {"/", "/etc", "/system", "c:/", "c:/windows"} or lowered.startswith(("../", "/../")):
         return raw
     # Collapse duplicate slashes for allowlist comparison.
     parts = [p for p in PurePosixPath(raw.replace("\\", "/")).parts if p not in ("", ".")]
@@ -50,9 +48,7 @@ def _is_allowed(path: str, allowlist: Collection[str] | None) -> bool:
         return True
     # Prefix allow: "/workspace" permits "/workspace/docs"
     for prefix in allowed:
-        if prefix != "/" and (
-            normalized == prefix or normalized.startswith(prefix.rstrip("/") + "/")
-        ):
+        if prefix != "/" and (normalized == prefix or normalized.startswith(prefix.rstrip("/") + "/")):
             return True
     return False
 

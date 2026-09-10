@@ -10,18 +10,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from config.schema import (
-    PROVIDER_IDS,
     DEFAULT_PROVIDER_ID,
-    Settings,
+    PROVIDER_IDS,
     ProviderBaseURL,
-    default_settings,
-    validate_settings,
+    Settings,
     SettingsValidationError,
+    validate_settings,
 )
 from config.settings import load_settings, save_settings
 
@@ -199,9 +197,7 @@ def test_e2e_provider_model_selection_flows_to_agent_loop(
 
     # Step 1: User selects "openrouter" with custom base_url in UI
     raw_ps = {
-        "openrouter": ProviderBaseURL(
-            base_url="http://my-openrouter:4431", remote_enabled=False
-        ),
+        "openrouter": ProviderBaseURL(base_url="http://my-openrouter:4431", remote_enabled=False),
     }
     save_settings(
         Settings(provider_id="openrouter", model_id="mistral-7b-instruct", provider_settings=raw_ps),
@@ -286,9 +282,7 @@ def test_e2e_openai_compat_custom_endpoint(
             provider_id="openai_compat",
             model_id="my-custom-model",
             provider_settings={
-                "openai_compat": ProviderBaseURL(
-                    base_url="http://local-inference-server:8000/v1", remote_enabled=True
-                )
+                "openai_compat": ProviderBaseURL(base_url="http://local-inference-server:8000/v1", remote_enabled=True)
             },
         ),
         path=settings_file,

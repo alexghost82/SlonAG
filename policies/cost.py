@@ -76,9 +76,7 @@ class CostLedger:
         if input_tokens < 0 or output_tokens < 0:
             raise ValueError("token counts must be non-negative")
         cost = (
-            float(estimated_cost)
-            if estimated_cost is not None
-            else estimate_cost(input_tokens, output_tokens, model)
+            float(estimated_cost) if estimated_cost is not None else estimate_cost(input_tokens, output_tokens, model)
         )
         if cost < 0:
             raise ValueError("estimated_cost must be non-negative")

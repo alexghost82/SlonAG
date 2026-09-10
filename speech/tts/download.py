@@ -18,10 +18,7 @@ from pathlib import Path
 from speech.tts.piper import DEFAULT_PIPER_VOICE
 
 DEFAULT_VOICE = DEFAULT_PIPER_VOICE
-HF_VOICE_BASE = (
-    "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
-    "ru/ru_RU/dmitri/medium"
-)
+HF_VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/dmitri/medium"
 VOICE_FILES: tuple[str, str] = (
     f"{DEFAULT_VOICE}.onnx",
     f"{DEFAULT_VOICE}.onnx.json",
@@ -59,8 +56,7 @@ def voice_urls(voice: str = DEFAULT_VOICE) -> dict[str, str]:
     """Return filename → URL map for the known default voice family."""
     if voice != DEFAULT_VOICE:
         raise PiperDownloadError(
-            f"Unsupported voice for download helper: {voice!r}. "
-            f"Only {DEFAULT_VOICE!r} is wired in Wave 13."
+            f"Unsupported voice for download helper: {voice!r}. Only {DEFAULT_VOICE!r} is wired in Wave 13."
         )
     return {
         VOICE_FILES[0]: f"{HF_VOICE_BASE}/{VOICE_FILES[0]}",
@@ -96,15 +92,10 @@ def download_piper_voice(
     """
     if not consent:
         raise PiperDownloadConsentError(
-            "Piper voice download requires explicit consent=True "
-            "(or CLI --consent). Refusing network access."
+            "Piper voice download requires explicit consent=True (or CLI --consent). Refusing network access."
         )
 
-    target = (
-        Path(dest_dir).expanduser().resolve()
-        if dest_dir is not None
-        else default_piper_model_dir(repo_root)
-    )
+    target = Path(dest_dir).expanduser().resolve() if dest_dir is not None else default_piper_model_dir(repo_root)
     urls = voice_urls(voice)
     model_name, config_name = VOICE_FILES
     model_path = target / model_name

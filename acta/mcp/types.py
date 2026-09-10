@@ -65,7 +65,7 @@ class McpServerConfig:
     name: str
     transport: McpTransportKind = McpTransportKind.STDIO
     command: str = ""
-    args: tuple[str, ...] = ()
+    args: tuple[str, ...] | list[str] = ()
     url: str = ""
     env: dict[str, str] = field(default_factory=dict)
     tool_timeout_seconds: float = 60.0
@@ -76,9 +76,7 @@ class McpServerConfig:
 
     def __post_init__(self) -> None:
         if self.command and self.transport != McpTransportKind.STDIO:
-            raise ValueError(
-                f"Command requires stdio transport; got {self.transport.value}"
-            )
+            raise ValueError(f"Command requires stdio transport; got {self.transport.value}")
         if self.max_concurrent < 1:
             raise ValueError("max_concurrent должен быть >= 1")
         if self.transport == McpTransportKind.STREAMABLE_HTTP and not self.url:

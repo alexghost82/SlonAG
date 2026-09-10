@@ -1,4 +1,5 @@
 """Session engine for isolation tests."""
+
 from __future__ import annotations
 
 import uuid
@@ -18,8 +19,10 @@ class SessionContext:
     memory: dict[str, Any] = field(default_factory=dict)
     isolation_key: str = ""
 
+
 class SessionEngine:
     """Manages isolated sessions for workspace and session isolation tests."""
+
     def __init__(self) -> None:
         self.sessions: dict[str, SessionContext] = {}
         self._workspace_map: dict[str, str] = {}
@@ -48,9 +51,7 @@ class SessionEngine:
         self._workspace_map[session_id] = workspace or workspace_id
         return ctx
 
-    def get(
-        self, session_id: str, workspace_id: str = ""
-    ) -> SessionContext | None:
+    def get(self, session_id: str, workspace_id: str = "") -> SessionContext | None:
         ctx = self.sessions.get(session_id)
         if ctx is None:
             return None

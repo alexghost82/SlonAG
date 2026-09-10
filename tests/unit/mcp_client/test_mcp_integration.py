@@ -7,15 +7,16 @@ Tests the full chain:
 from __future__ import annotations
 
 import sys
+
 import pytest
 
 from acta.mcp.integration import McpIntegration
 from acta.mcp.types import McpServerConfig, McpTransportKind
 from acta.safety.policy import SafetyPolicy
+from acta.tools.builtin import build_builtin_registry
 from acta.tools.contracts import ToolResult
 from acta.tools.executor import ToolExecutor
 from acta.tools.registry import ToolRegistry
-from acta.tools.builtin import build_builtin_registry
 
 
 def _make_test_config(**overrides: object) -> McpServerConfig:
@@ -72,7 +73,7 @@ class TestMcpIntegrationLifecycle:
         assert echo_spec.handler is not None
 
         # Invoke through the handler
-        result = await echo_spec.handler(message="hello from integration test")
+        result = await echo_spec.handler(message="hello from integration test")  # type: ignore[misc]
         assert isinstance(result, ToolResult)
         assert result.ok
         assert "hello from integration test" in str(result.message)
@@ -156,7 +157,7 @@ class TestMcpIntegrationWithSafety:
         assert echo_spec is not None
         assert echo_spec.handler is not None
 
-        result = await echo_spec.handler(message="safety test")
+        result = await echo_spec.handler(message="safety test")  # type: ignore[misc]
         assert isinstance(result, ToolResult)
         assert result.ok
 

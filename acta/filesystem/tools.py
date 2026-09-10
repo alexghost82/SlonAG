@@ -9,6 +9,7 @@ Each spec provides:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any, cast
 
 from acta.filesystem.operations import (
     FileSystemResult,
@@ -113,14 +114,28 @@ _UNIFIED_SCHEMA: dict[str, object] = {
             "type": "string",
             "description": "Operation: read, write, create_file, create_directory, create_folder, list, list_directory, search, find, metadata, info, disk_usage, copy, move, rename, delete, trash, organize_desktop, largest, undo.",
             "enum": [
-                "read", "write", "create_file", "create_folder", "create_directory",
-                "list", "list_directory", "search", "find",
-                "metadata", "info", "stat",
+                "read",
+                "write",
+                "create_file",
+                "create_folder",
+                "create_directory",
+                "list",
+                "list_directory",
+                "search",
+                "find",
+                "metadata",
+                "info",
+                "stat",
                 "disk_usage",
-                "copy", "move", "rename",
-                "delete", "trash", "remove",
+                "copy",
+                "move",
+                "rename",
+                "delete",
+                "trash",
+                "remove",
                 "organize_desktop",
-                "largest", "undo",
+                "largest",
+                "undo",
             ],
         },
         "path": _PATH_SCHEMA,
@@ -147,13 +162,26 @@ def _filesystem_handler(args: Mapping[str, object]) -> FileSystemResult:
     """Unified handler that dispatches to filesystem_operation."""
     action = str(args.get("action", "")).strip().lower()
     kwargs: dict[str, object] = {}
-    for key in ("path", "path_raw", "content", "destination", "name", "new_name",
-                "show_hidden", "extension", "name_pattern", "max_chars",
-                "max_results", "append", "recursive", "count"):
+    for key in (
+        "path",
+        "path_raw",
+        "content",
+        "destination",
+        "name",
+        "new_name",
+        "show_hidden",
+        "extension",
+        "name_pattern",
+        "max_chars",
+        "max_results",
+        "append",
+        "recursive",
+        "count",
+    ):
         if key in args and args[key] is not None:
             kwargs[key] = args[key]
     kwargs["roots"] = ()  # Uses default allowlist at runtime
-    return filesystem_operation(action, **kwargs)
+    return filesystem_operation(action, **cast(Any, kwargs))
 
 
 UNIFIED_FILESYSTEM_TOOL = ToolSpec(
@@ -192,7 +220,8 @@ UNIFIED_FILESYSTEM_TOOL = ToolSpec(
 def _read_file_handler(args: Mapping[str, object]) -> FileSystemResult:
     """Legacy read_file: narrow text read."""
     path = str(args.get("path", ""))
-    max_chars = int(args.get("max_chars", 2097152))
+    raw_max = args.get("max_chars", 2097152)
+    max_chars = int(raw_max) if isinstance(raw_max, (int, float, str)) else 2097152
     return read(path, max_chars=max_chars)
 
 
@@ -200,13 +229,26 @@ def _file_controller_handler(args: Mapping[str, object]) -> FileSystemResult:
     """Legacy file_controller: action-based interface."""
     action = str(args.get("action", "")).strip().lower()
     kwargs: dict[str, object] = {}
-    for key in ("path", "path_raw", "content", "destination", "name", "new_name",
-                "show_hidden", "extension", "name_pattern", "max_chars",
-                "max_results", "append", "recursive", "count"):
+    for key in (
+        "path",
+        "path_raw",
+        "content",
+        "destination",
+        "name",
+        "new_name",
+        "show_hidden",
+        "extension",
+        "name_pattern",
+        "max_chars",
+        "max_results",
+        "append",
+        "recursive",
+        "count",
+    ):
         if key in args and args[key] is not None:
             kwargs[key] = args[key]
     kwargs["roots"] = ()
-    return filesystem_operation(action, **kwargs)
+    return filesystem_operation(action, **cast(Any, kwargs))
 
 
 READ_FILE_TOOL = ToolSpec(
@@ -244,9 +286,21 @@ FILE_CONTROLLER_TOOL = ToolSpec(
                 "type": "string",
                 "description": "Action: list, read, write, create_file, create_folder, delete, move, copy, rename, find, info, disk_usage, organize_desktop, largest, undo.",
                 "enum": [
-                    "list", "read", "write", "create_file", "create_folder",
-                    "delete", "move", "copy", "rename", "find",
-                    "info", "disk_usage", "organize_desktop", "largest", "undo",
+                    "list",
+                    "read",
+                    "write",
+                    "create_file",
+                    "create_folder",
+                    "delete",
+                    "move",
+                    "copy",
+                    "rename",
+                    "find",
+                    "info",
+                    "disk_usage",
+                    "organize_desktop",
+                    "largest",
+                    "undo",
                 ],
             },
             "path": _PATH_SCHEMA,

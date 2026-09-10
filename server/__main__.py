@@ -98,9 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     tls_cert: Path | None = None
     tls_key: Path | None = None
-    if args.gateway_lan and (
-        not args.allow_non_loopback or not args.tls or args.host == DEFAULT_BIND_HOST
-    ):
+    if args.gateway_lan and (not args.allow_non_loopback or not args.tls or args.host == DEFAULT_BIND_HOST):
         print(
             "gateway LAN rejected: require --allow-non-loopback --tls and an explicit private --host",
             file=sys.stderr,
@@ -135,12 +133,13 @@ def main(argv: list[str] | None = None) -> int:
 
             root = (args.repo_root or Path.cwd()).resolve()
             stack = build_runtime_stack(repo_root=root, key_provider=get_secret)
-            gateway = build_gateway(
-                repo_root=root, runtime_stack=stack, key_provider=get_secret
-            )
+            gateway = build_gateway(repo_root=root, runtime_stack=stack, key_provider=get_secret)
             gateway.store.update_runtime_status(
-                instance_id=gateway_instance_id, state="starting",
-                heartbeat_at=time.time(), bind_host=args.host, tls_active=True,
+                instance_id=gateway_instance_id,
+                state="starting",
+                heartbeat_at=time.time(),
+                bind_host=args.host,
+                tls_active=True,
             )
         listener = DesktopControlListener(
             bind_host=args.host,
@@ -156,8 +155,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"bind rejected: {exc}", file=sys.stderr)
         if gateway is not None:
             gateway.store.update_runtime_status(
-                instance_id=gateway_instance_id, state="error",
-                heartbeat_at=time.time(), bind_host=args.host,
+                instance_id=gateway_instance_id,
+                state="error",
+                heartbeat_at=time.time(),
+                bind_host=args.host,
                 tls_active=bool(tls_cert and tls_key),
                 error_code=type(exc).__name__,
             )
@@ -167,8 +168,11 @@ def main(argv: list[str] | None = None) -> int:
     host, port = listener.start()
     if gateway is not None:
         gateway.store.update_runtime_status(
-            instance_id=gateway_instance_id, state="running",
-            heartbeat_at=time.time(), bind_host=host, tls_active=listener.tls_enabled,
+            instance_id=gateway_instance_id,
+            state="running",
+            heartbeat_at=time.time(),
+            bind_host=host,
+            tls_active=listener.tls_enabled,
         )
     print(
         f"Desktop Control API listening on {listener.scheme}://{host}:{port}/v1 "
@@ -178,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.gateway_lan:
         print("WARNING: TLS-only LAN/iOS Gateway ENABLED (opt-in; no internet publication).")
-        if args.gateway_pair:
+        if args.gateway_pair and gateway is not None:
             pairing = gateway.auth.start_pairing()
             print(f"Gateway pairing code (local display only): {pairing.code}")
 
@@ -194,8 +198,10 @@ def main(argv: list[str] | None = None) -> int:
         while not stop and listener.listening:
             if gateway is not None:
                 gateway.store.update_runtime_status(
-                    instance_id=gateway_instance_id, state="running",
-                    heartbeat_at=time.time(), bind_host=host,
+                    instance_id=gateway_instance_id,
+                    state="running",
+                    heartbeat_at=time.time(),
+                    bind_host=host,
                     tls_active=listener.tls_enabled,
                 )
             time.sleep(0.25)
@@ -203,8 +209,10 @@ def main(argv: list[str] | None = None) -> int:
         listener.stop()
         if gateway is not None:
             gateway.store.update_runtime_status(
-                instance_id=gateway_instance_id, state="stopped",
-                heartbeat_at=time.time(), bind_host=host,
+                instance_id=gateway_instance_id,
+                state="stopped",
+                heartbeat_at=time.time(),
+                bind_host=host,
                 tls_active=listener.tls_enabled,
             )
             gateway.close()

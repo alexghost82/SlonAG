@@ -15,12 +15,14 @@ from typing import Any
 from providers.capabilities import require_capability, require_provider_match
 from providers.contracts import (
     ChatEvent,
+    ChatMessage,
     ChatRequest,
     ChatResponse,
     ConversationMessage,
     ModelInfo,
     ProviderStatus,
     ToolCall,
+    ToolResultMessage,
 )
 from providers.errors import CapabilityError, ProviderAuthError, ProviderError
 from providers.gemini.catalog import GEMINI_MODELS, PROVIDER_ID
@@ -64,15 +66,13 @@ def _contents_and_config(
         if message.role == "system":
             system_parts.append(message.content)
             continue
-        if message.role == "tool":
-            response = (
-                {"error": message.error}
-                if message.error is not None
-                else {"result": message.result}
+        if isinstance(message, (ToolResultMessage, ChatMessage)) and message.role == "tool":
+            response: dict[str, object] = (
+                {"error": message.error} if message.error is not None else {"result": message.result}
             )
             if message.artifacts:
                 response["artifacts"] = [
-                    asdict(item) if is_dataclass(item) else item
+                    asdict(item) if is_dataclass(item) and not isinstance(item, type) else item
                     for item in message.artifacts
                 ]
             contents.append(
@@ -105,9 +105,7 @@ def _contents_and_config(
             for call in getattr(message, "tool_calls", ())
         )
         contents.append({"role": gemini_role, "parts": parts})
-    config = (
-        {"system_instruction": "\n\n".join(system_parts)} if system_parts else None
-    )
+    config = {"system_instruction": "\n\n".join(system_parts)} if system_parts else None
     return contents, config
 
 
@@ -139,9 +137,7 @@ def _next_or_end(iterator: Iterator[Any]) -> Any:
     return next(iterator, _END)
 
 
-def _tool_calls_of(
-    response: object, *, fallback_prefix: str = "call"
-) -> tuple[ToolCall, ...]:
+def _tool_calls_of(response: object, *, fallback_prefix: str = "call") -> tuple[ToolCall, ...]:
     raw_calls = getattr(response, "function_calls", None)
     if raw_calls is None:
         return ()
@@ -244,9 +240,7 @@ class GeminiChatProvider:
                     text = _text_of(chunk)
                     if text:
                         yield ChatEvent(type="delta", text=text)
-                    for call in _tool_calls_of(
-                        chunk, fallback_prefix=f"stream_{chunk_index}"
-                    ):
+                    for call in _tool_calls_of(chunk, fallback_prefix=f"stream_{chunk_index}"):
                         if call.id in seen_call_ids:
                             raise ProviderError(
                                 "Поток Gemini вернул повторяющийся идентификатор вызова функции",
@@ -263,9 +257,7 @@ class GeminiChatProvider:
                     text = _text_of(chunk)
                     if text:
                         yield ChatEvent(type="delta", text=text)
-                    for call in _tool_calls_of(
-                        chunk, fallback_prefix=f"stream_{chunk_index}"
-                    ):
+                    for call in _tool_calls_of(chunk, fallback_prefix=f"stream_{chunk_index}"):
                         if call.id in seen_call_ids:
                             raise ProviderError(
                                 "Поток Gemini вернул повторяющийся идентификатор вызова функции",
